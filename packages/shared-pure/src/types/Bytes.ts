@@ -50,7 +50,7 @@ export class Bytes {
   }
 
   toNumber() {
-    return parseInt(this.value || '0', 16)
+    return Number.parseInt(this.value || '0', 16)
   }
 
   toByteArray() {
@@ -74,7 +74,7 @@ export class Bytes {
       throw new Error('Index out of bounds')
     }
     const value = this.value[index * 2] + this.value[index * 2 + 1]
-    return parseInt(value, 16)
+    return Number.parseInt(value, 16)
   }
 
   get length() {
@@ -114,7 +114,7 @@ function numberToString(value: number) {
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
 function isByte(value: unknown): value is number {

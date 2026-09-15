@@ -1,14 +1,16 @@
-import { assert } from '@l2beat/backend-tools'
-import { ProxyDetails } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
-
-import { IProvider } from '../../provider/IProvider'
+import {
+  assert,
+  ChainSpecificAddress,
+  type EthereumAddress,
+} from '@l2beat/shared-pure'
+import type { IProvider } from '../../provider/IProvider'
 import { getModules } from '../../utils/getSafeModules'
+import type { ProxyDetails } from '../types'
 
 async function getMasterCopy(
   provider: IProvider,
-  address: EthereumAddress,
-): Promise<EthereumAddress | undefined> {
+  address: ChainSpecificAddress,
+): Promise<ChainSpecificAddress | undefined> {
   const [callResult, slot0] = await Promise.all([
     provider.callMethod<EthereumAddress>(
       address,
@@ -17,27 +19,30 @@ async function getMasterCopy(
     ),
     provider.getStorageAsAddress(address, 0),
   ])
-  if (slot0 === callResult) {
+  if (
+    callResult !== undefined &&
+    slot0 === ChainSpecificAddress.fromLong(provider.chain, callResult)
+  ) {
     return slot0
   }
 }
 
 async function getOwners(
   provider: IProvider,
-  address: EthereumAddress,
-): Promise<EthereumAddress[]> {
+  address: ChainSpecificAddress,
+): Promise<ChainSpecificAddress[]> {
   const owners = await provider.callMethod<EthereumAddress[]>(
     address,
     'function getOwners() view returns (address[])',
     [],
   )
   assert(owners !== undefined, 'Cannot retrieve owners')
-  return owners
+  return owners.map((o) => ChainSpecificAddress.fromLong(provider.chain, o))
 }
 
 async function getThreshold(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<number | undefined> {
   // TODO: (sz-piotr) Shouldn't this be BigNumber!?
   return await provider.callMethod<number>(
@@ -49,15 +54,15 @@ async function getThreshold(
 
 export async function detectGnosisSafe(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<ProxyDetails | undefined> {
   const masterCopy = await getMasterCopy(provider, address)
-  if (!masterCopy) {
+  if (!masterCopy || masterCopy === ChainSpecificAddress.ZERO(provider.chain)) {
     return
   }
 
   const modules = await getModules(provider, address)
-  assert(modules, 'Could not find modules for GnosisSafe')
+  assert(modules, 'Could not find modules for GnosisSafe at address ' + address)
 
   const owners = await getOwners(provider, address)
   const ownerCount = owners.length
@@ -65,8 +70,7 @@ export async function detectGnosisSafe(
   assert(threshold !== undefined, 'Cannot retrieve threshold')
 
   const thresholdString = `${threshold} of ${ownerCount} (${(
-    (threshold / ownerCount) *
-    100
+    (threshold / ownerCount) * 100
   ).toFixed()}%)`
 
   return {
@@ -74,12 +78,12 @@ export async function detectGnosisSafe(
     values: {
       // TODO: (sz-piotr) Is it always the case for safes?
       $immutable: false,
-      $implementation: masterCopy,
+      $implementation: masterCopy.toString(),
       // TODO: (sz-piotr) Why here, and not in the template?
       multisigThreshold: thresholdString,
       $threshold: Number(threshold),
-      $members: owners,
-      GnosisSafe_modules: modules,
+      $members: owners.map((o) => o.toString()),
+      GnosisSafe_modules: modules.map((m) => m.toString()),
     },
   }
 }

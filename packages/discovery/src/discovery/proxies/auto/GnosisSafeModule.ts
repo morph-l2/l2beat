@@ -1,8 +1,11 @@
-import { ProxyDetails } from '@l2beat/discovery-types'
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
-
-import { IProvider } from '../../provider/IProvider'
+import {
+  Bytes,
+  ChainSpecificAddress,
+  type EthereumAddress,
+} from '@l2beat/shared-pure'
+import type { IProvider } from '../../provider/IProvider'
 import { getModules } from '../../utils/getSafeModules'
+import type { ProxyDetails } from '../types'
 
 // TODO: (sz-piotr) Is this simply equivalent to 0x66 and 0x67?
 const AVATAR_SLOT = Bytes.fromHex(
@@ -14,18 +17,24 @@ const TARGET_SLOT = Bytes.fromHex(
 
 async function getGuard(
   provider: IProvider,
-  address: EthereumAddress,
-): Promise<EthereumAddress | undefined> {
-  return await provider.callMethod<EthereumAddress>(
+  address: ChainSpecificAddress,
+): Promise<ChainSpecificAddress | undefined> {
+  const rawAddress = await provider.callMethod<EthereumAddress>(
     address,
     'function getGuard() external view returns (address)',
     [],
   )
+
+  if (rawAddress === undefined) {
+    return
+  }
+
+  return ChainSpecificAddress.fromLong(provider.chain, rawAddress)
 }
 
 export async function detectGnosisSafeZodiacModule(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<ProxyDetails | undefined> {
   const [guard, avatar, target] = await Promise.all([
     getGuard(provider, address),
@@ -35,8 +44,8 @@ export async function detectGnosisSafeZodiacModule(
 
   if (
     guard === undefined ||
-    avatar === EthereumAddress.ZERO ||
-    target === EthereumAddress.ZERO
+    avatar === ChainSpecificAddress.ZERO(provider.chain) ||
+    target === ChainSpecificAddress.ZERO(provider.chain)
   ) {
     return
   }
@@ -48,13 +57,13 @@ export async function detectGnosisSafeZodiacModule(
     values: {
       // TODO: (sz-piotr) is this correct?
       $immutable: false,
-      ZodiacModule_modules: modules ?? [],
+      ZodiacModule_modules: (modules ?? []).map((m) => m.toString()),
       // TODO: (sz-piotr) ignore relative
-      ZodiacModule_avatar: avatar,
+      ZodiacModule_avatar: avatar.toString(),
       // TODO: (sz-piotr) ignore relative
-      ZodiacModule_target: target,
+      ZodiacModule_target: target.toString(),
       // TODO: (sz-piotr) ignore relative
-      ZodiacModule_guard: guard,
+      ZodiacModule_guard: guard.toString(),
     },
   }
 }

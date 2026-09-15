@@ -1,13 +1,12 @@
-import { ProxyDetails } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
-
-import { get$Implementations } from '@l2beat/discovery-types'
-import { IProvider } from '../../provider/IProvider'
+import type { ChainSpecificAddress } from '@l2beat/shared-pure'
+import type { IProvider } from '../../provider/IProvider'
+import { get$Implementations } from '../../utils/extractors'
 import { detectPolygonProxy } from '../auto/PolygonProxy'
+import type { ProxyDetails } from '../types'
 
 export async function getPolygonExtensionProxy(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<ProxyDetails | undefined> {
   const detection = await detectPolygonProxy(provider, address)
   if (!detection || detection.type !== 'Polygon proxy') {
@@ -19,7 +18,9 @@ export async function getPolygonExtensionProxy(
     type: 'Polygon Extension proxy',
     values: {
       $admin: detection.values.$admin,
-      $implementation: get$Implementations(detection.values).concat(extension),
+      $implementation: get$Implementations(detection.values)
+        .concat(extension)
+        .map((i) => i.toString()),
     },
   }
 }

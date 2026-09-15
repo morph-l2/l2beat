@@ -1,21 +1,32 @@
-import { readFileSync } from 'fs'
-import { EthereumAddress, ProjectId, UnixTime } from '@l2beat/shared-pure'
-import { expect, mockFn, mockObject } from 'earl'
-
-import { BigQueryClient } from '../../peripherals/bigquery/BigQueryClient'
-import { TrackedTxsClient } from './TrackedTxsClient'
-
-import {
+import { Logger } from '@l2beat/backend-tools'
+import type {
+  DuneQueryService,
   TrackedTxConfigEntry,
   TrackedTxFunctionCallConfig,
+  TrackedTxSharedBridgeConfig,
   TrackedTxSharpSubmissionConfig,
   TrackedTxTransferConfig,
 } from '@l2beat/shared'
-import { Configuration } from '../../tools/uif/multi/types'
+import { EthereumAddress, ProjectId, UnixTime } from '@l2beat/shared-pure'
+import { expect, mockFn, mockObject } from 'earl'
+import { readFileSync } from 'fs'
 import {
-  BigQueryFunctionCallResult,
-  BigQueryTransferResult,
-} from './types/model'
+  agglayerSharedBridgeChainId,
+  agglayerSharedBridgeVerifyBatchesInput,
+  agglayerSharedBridgeVerifyBatchesSelector,
+  agglayerSharedBridgeVerifyBatchesSignature,
+  elasticChainSharedBridgeChainId,
+  elasticChainSharedBridgeCommitBatchesInput,
+  elasticChainSharedBridgeCommitBatchesSelector,
+  elasticChainSharedBridgeCommitBatchesSignature,
+  elasticChainSharedBridgeExecuteBatchesPost29Input,
+  elasticChainSharedBridgeExecuteBatchesPost29Selector,
+  elasticChainSharedBridgeExecuteBatchesPost29Signature,
+  gatewaySharedBridgeChainAddress,
+} from '../../test/sharedBridge'
+import type { Configuration } from '../../tools/uif/multi/types'
+import { TrackedTxsClient } from './TrackedTxsClient'
+import type { DuneFunctionCallResult, DuneTransferResult } from './types/model'
 import { getFunctionCallQuery, getTransferQuery } from './utils/sql'
 import { transformFunctionCallsQueryResult } from './utils/transformFunctionCallsQueryResult'
 import { transformTransfersQueryResult } from './utils/transformTransfersQueryResult'
@@ -25,9 +36,15 @@ const TO = UnixTime.fromDate(new Date('2022-01-01T02:00:00Z'))
 
 describe(TrackedTxsClient.name, () => {
   describe(TrackedTxsClient.prototype.getData.name, () => {
-    it('filters configurations and calls big query, parses results', async () => {
-      const bigquery = getMockBiqQuery([TRANSFERS_RESPONSE, FUNCTIONS_RESPONSE])
-      const trackedTxsClient = new TrackedTxsClient(bigquery)
+    it('calls dune query service, parses results', async () => {
+      const duneQueryService = getMockDuneQueryService([
+        TRANSFERS_RESPONSE,
+        FUNCTIONS_RESPONSE,
+      ])
+      const trackedTxsClient = new TrackedTxsClient(
+        duneQueryService,
+        Logger.SILENT,
+      )
 
       const data = await trackedTxsClient.getData(
         CONFIGURATIONS as unknown as Configuration<TrackedTxConfigEntry>[],
@@ -36,9 +53,19 @@ describe(TrackedTxsClient.name, () => {
       )
 
       // calls both internal methods
-      expect(bigquery.query).toHaveBeenCalledTimes(2)
-      expect(bigquery.query).toHaveBeenNthCalledWith(1, TRANSFERS_SQL)
-      expect(bigquery.query).toHaveBeenNthCalledWith(2, FUNCTIONS_SQL)
+      expect(duneQueryService.query).toHaveBeenCalledTimes(2)
+      expect(duneQueryService.query).toHaveBeenNthCalledWith(
+        1,
+        TRANSFERS_SQL,
+        'large',
+        expect.anything(),
+      )
+      expect(duneQueryService.query).toHaveBeenNthCalledWith(
+        2,
+        FUNCTIONS_SQL,
+        'large',
+        expect.anything(),
+      )
 
       // returns parsed data returned from internal methods
       expect(data).toEqual([...TRANSFERS_RESULT, ...FUNCTIONS_RESULT])
@@ -47,23 +74,77 @@ describe(TrackedTxsClient.name, () => {
 
   describe(TrackedTxsClient.prototype.getTransfers.name, () => {
     it('does not call query when empty config', async () => {
-      const bigquery = getMockBiqQuery([])
-      const trackedTxsClient = new TrackedTxsClient(bigquery)
+      const duneQueryService = getMockDuneQueryService([])
+      const trackedTxsClient = new TrackedTxsClient(
+        duneQueryService,
+        Logger.SILENT,
+      )
 
       await trackedTxsClient.getTransfers([], FROM, TO)
 
-      expect(bigquery.query).not.toHaveBeenCalled()
+      expect(duneQueryService.query).not.toHaveBeenCalled()
     })
   })
 
   describe(TrackedTxsClient.prototype.getFunctionCalls.name, () => {
     it('does not call query when empty config', async () => {
-      const bigquery = getMockBiqQuery([])
-      const trackedTxsClient = new TrackedTxsClient(bigquery)
+      const duneQueryService = getMockDuneQueryService([])
+      const trackedTxsClient = new TrackedTxsClient(
+        duneQueryService,
+        Logger.SILENT,
+      )
 
-      await trackedTxsClient.getFunctionCalls([], [], FROM, TO)
+      await trackedTxsClient.getFunctionCalls([], [], [], FROM, TO)
 
-      expect(bigquery.query).not.toHaveBeenCalled()
+      expect(duneQueryService.query).not.toHaveBeenCalled()
+    })
+
+    it('requests a calldata prefix for grouped liveness calls', async () => {
+      const duneQueryService = getMockDuneQueryService([[]])
+      const trackedTxsClient = new TrackedTxsClient(
+        duneQueryService,
+        Logger.SILENT,
+      )
+      const address = EthereumAddress.random()
+      const config: Configuration<
+        TrackedTxConfigEntry & { params: TrackedTxFunctionCallConfig }
+      > = {
+        id: 'grouped',
+        minHeight: FROM,
+        maxHeight: null,
+        properties: {
+          id: 'grouped',
+          projectId: ProjectId('project'),
+          type: 'liveness',
+          subtype: 'stateUpdates',
+          sinceTimestamp: FROM,
+          groupBy: { type: 'functionCallParameter', path: [0, 0] },
+          params: {
+            formula: 'functionCall',
+            address,
+            selector: '0x12345678',
+            signature: 'function submit((uint256,uint256))',
+          },
+        },
+      }
+
+      await trackedTxsClient.getFunctionCalls([config], [], [], FROM, TO)
+
+      expect(duneQueryService.query).toHaveBeenCalledWith(
+        getFunctionCallQuery(
+          [
+            {
+              ...config.properties.params,
+              // 4 selector bytes + the first member of the static tuple
+              inputBytes: 36,
+            },
+          ],
+          FROM,
+          TO,
+        ),
+        'large',
+        expect.anything(),
+      )
     })
   })
 })
@@ -75,7 +156,7 @@ const ADDRESS_3 = EthereumAddress.random()
 const TX_HASH = '0x123456'
 const BLOCK = 1
 
-const inputFile = `src/test/sharpVerifierInput.txt`
+const inputFile = 'src/test/sharpVerifierInput.txt'
 const sharpInput = readFileSync(inputFile, 'utf-8')
 const paradexProgramHash =
   '3258367057337572248818716706664617507069572185152472699066582725377748079373'
@@ -92,7 +173,7 @@ const CONFIGURATIONS = [
       type: 'l2costs',
       subtype: 'batchSubmissions',
       sinceTimestamp: FROM,
-      untilTimestamp: FROM.add(2, 'days'),
+      untilTimestamp: FROM + 2 * UnixTime.DAY,
       params: {
         formula: 'transfer',
         from: ADDRESS_1,
@@ -117,6 +198,7 @@ const CONFIGURATIONS = [
         formula: 'functionCall',
         address: ADDRESS_3,
         selector: '0x9aaab648',
+        signature: 'function foo()',
       },
     },
   } as Configuration<
@@ -143,68 +225,163 @@ const CONFIGURATIONS = [
   } as Configuration<
     TrackedTxConfigEntry & { params: TrackedTxSharpSubmissionConfig }
   >,
+  {
+    id: '4',
+    hasData: true,
+    minHeight: 1,
+    maxHeight: 100,
+    properties: {
+      id: '4',
+      projectId: ProjectId('project1'),
+      type: 'l2costs',
+      subtype: 'batchSubmissions',
+      sinceTimestamp: FROM,
+      params: {
+        formula: 'sharedBridge',
+        address: EthereumAddress.random(),
+        selector: elasticChainSharedBridgeCommitBatchesSelector,
+        firstParameter: elasticChainSharedBridgeChainId,
+        signature: elasticChainSharedBridgeCommitBatchesSignature,
+      },
+    },
+  } as Configuration<
+    TrackedTxConfigEntry & { params: TrackedTxSharedBridgeConfig }
+  >,
+  {
+    id: '5',
+    hasData: true,
+    minHeight: 1,
+    maxHeight: 100,
+    properties: {
+      id: '5',
+      projectId: ProjectId('project1'),
+      type: 'l2costs',
+      subtype: 'batchSubmissions',
+      sinceTimestamp: FROM,
+      params: {
+        formula: 'sharedBridge',
+        address: EthereumAddress.random(),
+        selector: agglayerSharedBridgeVerifyBatchesSelector,
+        firstParameter: agglayerSharedBridgeChainId,
+        signature: agglayerSharedBridgeVerifyBatchesSignature,
+      },
+    },
+  } as Configuration<
+    TrackedTxConfigEntry & { params: TrackedTxSharedBridgeConfig }
+  >,
+  {
+    id: '6',
+    hasData: true,
+    minHeight: 1,
+    maxHeight: 100,
+    properties: {
+      id: '6',
+      projectId: ProjectId('project1'),
+      type: 'l2costs',
+      subtype: 'stateUpdates',
+      sinceTimestamp: FROM,
+      params: {
+        formula: 'sharedBridge',
+        address: EthereumAddress.random(),
+        selector: elasticChainSharedBridgeExecuteBatchesPost29Selector,
+        firstParameter: EthereumAddress(gatewaySharedBridgeChainAddress),
+        signature: elasticChainSharedBridgeExecuteBatchesPost29Signature,
+      },
+    },
+  } as Configuration<
+    TrackedTxConfigEntry & { params: TrackedTxSharedBridgeConfig }
+  >,
 ] as const
 
-const TRANSFERS_RESPONSE = [
+const TRANSFERS_RESPONSE: DuneTransferResult[] = [
   {
     hash: TX_HASH,
-    from_address: CONFIGURATIONS[0].properties.params.from,
-    to_address: CONFIGURATIONS[0].properties.params.to,
-    block_timestamp: toBigQueryDate(FROM),
+    from: CONFIGURATIONS[0].properties.params.from!,
+    to: CONFIGURATIONS[0].properties.params.to,
+    block_time: FROM,
     block_number: BLOCK,
-    gas_price: 25,
-    receipt_gas_used: 100,
-    transaction_type: 2,
-    calldata_gas_used: 100,
+    gas_price: 25n,
+    gas_used: 100,
     data_length: 100,
-    receipt_blob_gas_used: 300,
-    receipt_blob_gas_price: 3,
+    non_zero_bytes: 60,
+    blob_versioned_hashes: ['0x1'],
   },
 ]
 
-const parsedTransfers = BigQueryTransferResult.array().parse(TRANSFERS_RESPONSE)
 const TRANSFERS_RESULT = transformTransfersQueryResult(
   [CONFIGURATIONS[0]],
-  parsedTransfers,
+  TRANSFERS_RESPONSE,
 )
 
-const FUNCTIONS_RESPONSE = [
+const FUNCTIONS_RESPONSE: DuneFunctionCallResult[] = [
   {
     hash: TX_HASH,
     block_number: BLOCK,
-    block_timestamp: toBigQueryDate(FROM),
-    to_address: CONFIGURATIONS[1].properties.params.address,
-    gas_price: 1000,
-    receipt_gas_used: 200000,
+    block_time: FROM,
+    to: CONFIGURATIONS[1].properties.params.address,
+    gas_price: 1000n,
+    gas_used: 200000,
     input: CONFIGURATIONS[1].properties.params.selector,
-    transaction_type: 2,
-    calldata_gas_used: 100,
     data_length: 100,
-    receipt_blob_gas_used: 300,
-    receipt_blob_gas_price: 3,
+    non_zero_bytes: 60,
+    blob_versioned_hashes: ['0x1'],
   },
   {
     hash: TX_HASH,
     block_number: BLOCK,
-    block_timestamp: toBigQueryDate(FROM),
-    to_address: CONFIGURATIONS[2].properties.params.address,
-    gas_price: 1500,
-    receipt_gas_used: 200000,
+    block_time: FROM,
+    to: CONFIGURATIONS[2].properties.params.address,
+    gas_price: 1500n,
+    gas_used: 200000,
     input: sharpInput,
-    transaction_type: 3,
-    calldata_gas_used: 0,
     data_length: 0,
-    receipt_blob_gas_used: 300,
-    receipt_blob_gas_price: 3,
+    non_zero_bytes: 0,
+    blob_versioned_hashes: ['0x1'],
+  },
+  {
+    hash: TX_HASH,
+    block_number: BLOCK,
+    block_time: FROM,
+    to: CONFIGURATIONS[3].properties.params.address,
+    gas_price: 1500n,
+    gas_used: 200000,
+    input: elasticChainSharedBridgeCommitBatchesInput,
+    data_length: 0,
+    non_zero_bytes: 0,
+    blob_versioned_hashes: ['0x1'],
+  },
+  {
+    hash: TX_HASH,
+    block_number: BLOCK,
+    block_time: FROM,
+    to: CONFIGURATIONS[4].properties.params.address,
+    gas_price: 1500n,
+    gas_used: 200000,
+    input: agglayerSharedBridgeVerifyBatchesInput,
+    data_length: 0,
+    non_zero_bytes: 0,
+    blob_versioned_hashes: ['0x1'],
+  },
+  {
+    hash: TX_HASH,
+    block_number: BLOCK,
+    block_time: FROM,
+    to: CONFIGURATIONS[5].properties.params.address,
+    gas_price: 1500n,
+    gas_used: 200000,
+    input: elasticChainSharedBridgeExecuteBatchesPost29Input,
+    data_length: 0,
+    non_zero_bytes: 0,
+    blob_versioned_hashes: ['0x1'],
   },
 ]
 
-const parsedFunctionCalls =
-  BigQueryFunctionCallResult.array().parse(FUNCTIONS_RESPONSE)
 const FUNCTIONS_RESULT = transformFunctionCallsQueryResult(
   [CONFIGURATIONS[1]],
   [CONFIGURATIONS[2]],
-  parsedFunctionCalls,
+  [CONFIGURATIONS[3], CONFIGURATIONS[4], CONFIGURATIONS[5]],
+  FUNCTIONS_RESPONSE,
+  Logger.SILENT,
 )
 
 const TRANSFERS_SQL = getTransferQuery(
@@ -216,30 +393,33 @@ const FUNCTIONS_SQL = getFunctionCallQuery(
   (
     CONFIGURATIONS.slice(1) as Configuration<
       TrackedTxConfigEntry & {
-        params: TrackedTxSharpSubmissionConfig | TrackedTxFunctionCallConfig
+        params:
+          | TrackedTxSharpSubmissionConfig
+          | TrackedTxFunctionCallConfig
+          | TrackedTxSharedBridgeConfig
       }
     >[]
   ).map((c) => ({
     address: c.properties.params.address,
     selector: c.properties.params.selector,
-    getFullInput: c.properties.params.formula === 'sharpSubmission',
+    inputBytes:
+      c.properties.params.formula === 'sharpSubmission' ||
+      c.properties.params.formula === 'sharedBridge'
+        ? ('full' as const)
+        : 4,
   })),
   FROM,
   TO,
 )
 
-function toBigQueryDate(timestamp: UnixTime) {
-  return { value: timestamp.toDate().toISOString() }
-}
-
-function getMockBiqQuery(responses: unknown[][]) {
-  const client = mockObject<BigQueryClient>({
+function getMockDuneQueryService(responses: unknown[][]) {
+  const service = mockObject<DuneQueryService>({
     query: mockFn(),
   })
 
   for (const response of responses) {
-    client.query.resolvesToOnce(response)
+    service.query.resolvesToOnce(response)
   }
 
-  return client
+  return service
 }

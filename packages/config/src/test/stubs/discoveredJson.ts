@@ -1,14 +1,29 @@
-import { ContractParameters, DiscoveryOutput } from '@l2beat/discovery-types'
-import { EthereumAddress, Hash256 } from '@l2beat/shared-pure'
-
-export const contractStub: ContractParameters = {
+import type { DiscoveryOutput, EntryParameters } from '@l2beat/discovery'
+import {
+  ChainSpecificAddress,
+  EthereumAddress,
+  Hash256,
+} from '@l2beat/shared-pure'
+export const contractStub: EntryParameters = {
+  type: 'Contract',
   name: 'MockedContract',
-  address: EthereumAddress('0x0D4C1222f5e839a911e2053860e45F18921D72ac'),
+  address: ChainSpecificAddress(
+    'eth:0x0D4C1222f5e839a911e2053860e45F18921D72ac',
+  ),
   proxyType: 'StarkWare diamond',
-  roles: ['Sequencer'],
+  receivedPermissions: [
+    {
+      permission: 'interact',
+      from: ChainSpecificAddress(
+        'eth:0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3',
+      ),
+      description:
+        'Allowed to commit transactions from the current layer to the host chain.',
+    },
+  ],
   values: {
     $immutable: false,
-    $implementation: EthereumAddress.random(),
+    $implementation: EthereumAddress.random().toString(),
     StarkWareDiamond_upgradeDelay: 0,
     authority: '0x22405c1782913fb676bc74Ef54a60727B0e1026F',
     CHILD_BLOCK_INTERVAL: 1000,
@@ -27,13 +42,15 @@ export const contractStub: ContractParameters = {
 
 export const discoveredJsonStub: DiscoveryOutput = {
   name: 'mockedproject',
-  chain: 'ethereum',
-  blockNumber: 16154924,
-  contracts: [
+  timestamp: 1670682767,
+  entries: [
     contractStub,
     {
+      type: 'Contract',
       name: 'DuplicatedNameContractMock',
-      address: EthereumAddress('0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3'),
+      address: ChainSpecificAddress(
+        'eth:0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3',
+      ),
       values: {
         $immutable: true,
         BOND_LOWER_BOUND_DIVISOR: 2,
@@ -47,8 +64,11 @@ export const discoveredJsonStub: DiscoveryOutput = {
       },
     },
     {
+      type: 'Contract',
       name: 'DuplicatedNameContractMock',
-      address: EthereumAddress('0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3'),
+      address: ChainSpecificAddress(
+        'arb1:0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3',
+      ),
       values: {
         $immutable: true,
         BOND_LOWER_BOUND_DIVISOR: 2,
@@ -61,99 +81,38 @@ export const discoveredJsonStub: DiscoveryOutput = {
         startStandardExitBondSize: '14000000000000000',
       },
     },
-  ],
-  eoas: [
     {
-      address: EthereumAddress.from('0xaa11'),
-      roles: ['Validator'],
+      type: 'EOA',
+      address: ChainSpecificAddress.from('eth', EthereumAddress.from('0xaa11')),
+      receivedPermissions: [
+        {
+          permission: 'interact',
+          from: ChainSpecificAddress(
+            'eth:0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3',
+          ),
+          description:
+            'Orbit stack specific Proposer and Challenger role. Can propose new state roots (called nodes) and challenge state roots on the host chain.',
+        },
+      ],
     },
     {
-      address: EthereumAddress.from('0xbb22'),
-      roles: ['Sequencer'],
+      type: 'EOA',
+      address: ChainSpecificAddress.from('eth', EthereumAddress.from('0xbb22')),
+      receivedPermissions: [
+        {
+          permission: 'interact',
+          from: ChainSpecificAddress(
+            'eth:0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3',
+          ),
+          description:
+            'Allowed to commit transactions from the current layer to the host chain.',
+        },
+      ],
     },
   ],
   abis: {},
   configHash: Hash256.random(),
-  version: 123,
   usedTemplates: {},
-  shapeFilesHash: Hash256.random(),
-}
-
-export const discoveredOpStackJsonStub: DiscoveryOutput = {
-  name: 'mockedopstackproject',
-  chain: 'optimism',
-  blockNumber: 16154924,
-  contracts: [
-    {
-      name: 'ProxyAdmin',
-      address: EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-      values: {
-        $immutable: true,
-      },
-    },
-    {
-      name: 'MockPortal',
-      address: EthereumAddress('0x0a2CCDbBD00f61724C485518B940Ab25abe832aA'),
-      proxyType: 'EIP1967 proxy',
-      values: {
-        $implementation: EthereumAddress(
-          '0x1b927019071A2a9C2b852Fd36f7238D2376B82FA',
-        ),
-        $admin: EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-      },
-    },
-    {
-      name: 'L2OutputOracle',
-      address: EthereumAddress('0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3'),
-      proxyType: 'EIP1967 proxy',
-      values: {
-        $implementation: EthereumAddress(
-          '0x29510c3ac0248bBE92FDb57bd2cBAF7216cC217a',
-        ),
-        $admin: EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-      },
-    },
-    {
-      name: 'L1CrossDomainMessenger',
-      address: EthereumAddress('0x17bFa0561d9Ae73e05EcEAEB6663aDc85fA1d3E2'),
-      proxyType: 'resolved delegate proxy',
-      values: {
-        ResolvedDelegateProxy_addressManager: EthereumAddress(
-          '0xdE1FCfB0851916CA5101820A69b13a4E276bd81F',
-        ),
-        ResolvedDelegateProxy_implementationName: 'OVM_L1CrossDomainMessenger',
-        $implementation: EthereumAddress(
-          '0x2150Bc3c64cbfDDbaC9815EF615D6AB8671bfe43',
-        ),
-      },
-    },
-    {
-      name: 'SystemConfig',
-      address: EthereumAddress('0x6Dda3a70B9946fA8C015904d9E2BEC86ecE4E745'),
-      proxyType: 'EIP1967 proxy',
-      values: {
-        $implementation: EthereumAddress(
-          '0xeba2dc4CC210e885F60b5feA41FDEab0C6527fdc',
-        ),
-        $admin: EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-      },
-    },
-    {
-      name: 'L1StandardBridge',
-      address: EthereumAddress('0xeBec795c9c8bBD61FFc14A6662944748F299cAcf'),
-      proxyType: 'EIP1967 proxy',
-      values: {
-        $implementation: EthereumAddress(
-          '0xC70dcb11c0673b0BBE2F415105fA2B15Ac58339f',
-        ),
-        $admin: EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-      },
-    },
-  ],
-  eoas: [],
-  abis: {},
-  configHash: Hash256.random(),
-  version: 123,
-  usedTemplates: {},
-  shapeFilesHash: Hash256.random(),
+  modelledAgainst: {},
+  usedBlockNumbers: {},
 }

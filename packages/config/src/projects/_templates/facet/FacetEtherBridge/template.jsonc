@@ -1,0 +1,25 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "displayName": "FacetEtherBridge",
+  "description": "A Facet implementation of the ETH Bridge. This bridge is also called \"fast bridge\" as it uses a permissioned EOA as operator for faster withdrawal processing.",
+  "fields": {
+    "getAdmin": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "can withdraw all funds from the bridge."
+        }
+      ]
+    },
+    "getSigner": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "can sign arbitrary withdrawals for users."
+        }
+      ]
+    }
+  },
+  "ignoreMethods": ["initCodeHash", "getAdmin", "getDumbContract", "getSigner"],
+  "category": "bridge-external"
+}

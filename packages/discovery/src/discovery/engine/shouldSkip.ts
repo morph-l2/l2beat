@@ -1,25 +1,22 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
-import { DiscoveryConfig } from '../config/DiscoveryConfig'
+import type { ChainSpecificAddress } from '@l2beat/shared-pure'
+import type { StructureConfig } from '../config/StructureConfig'
+import { makeEntryStructureConfig } from '../config/structureUtils'
 
 export function shouldSkip(
-  address: EthereumAddress,
-  config: DiscoveryConfig,
+  address: ChainSpecificAddress,
+  config: StructureConfig,
   depth: number,
   counter: number,
 ): string | undefined {
-  if (config.overrides.get(address).ignoreDiscovery) {
-    return `Address ${address} ignored via "ignoreDiscovery"`
-  }
-
-  if (config.isInSharedModules(address)) {
-    return `Ignoring ${address} - it's part of a shared module`
+  if (makeEntryStructureConfig(config, address).ignoreDiscovery) {
+    return 'ignored'
   }
 
   if (depth > config.maxDepth) {
-    return `Error: Depth ${depth} exceeded max = ${config.maxDepth}`
+    return `depth ${depth} > MAX (${config.maxDepth})`
   }
 
   if (counter > config.maxAddresses) {
-    return `Error: Total addresses ${counter} exceeded max = ${config.maxAddresses}`
+    return `total ${counter} > MAX (${config.maxAddresses})`
   }
 }

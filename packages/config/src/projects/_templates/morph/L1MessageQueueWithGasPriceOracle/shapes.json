@@ -1,0 +1,12 @@
+{
+  "L1MessageQueueWithGasPriceOracle.sol": {
+    "hash": "0xf26c457a862d5b0c127c190c8461e3b4a241ec3a3bb1a6630a5fca54f777c981",
+    "address": "eth:0xa3b5bFB885FF92EB8445f262c289548e77c3c0aA",
+    "blockNumber": 24147273
+  },
+  "L1MessageQueueWithGasPriceOracle_enqueueTime.sol": {
+    "hash": "0x50d6f9c37241492993e369b6496118b33438cd7d17915003ca6a471686fa5229",
+    "address": "eth:0xf3b7724334cb0aDBC49CAC90e166Af99C07Be6aa",
+    "blockNumber": 24583163
+  }
+}

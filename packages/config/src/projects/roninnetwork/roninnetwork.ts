@@ -1,0 +1,262 @@
+import {
+  ChainSpecificAddress,
+  EthereumAddress,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import { CONTRACTS, REASON_FOR_BEING_OTHER } from '../../common'
+import { BADGES } from '../../common/badges'
+import { getAltDaStage } from '../../common/stages/getAltDaStage'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import type { ScalingProject } from '../../internalTypes'
+import { EIGENDA_DA_PROVIDER, opStackL2 } from '../../templates/opStack'
+
+const discovery = new ProjectDiscovery('roninnetwork')
+
+// L2Migration hardfork activates at Ronin block 55,577,490 on 2026-05-12 ~15:16 UTC
+const genesisTimestamp = UnixTime(1778598960)
+
+// 2026-09-07 (block 25924899, tx 0x7f1b7013…cded482): the RoninConduitOwner
+// Safe (Guardian) called setRespectedGameType(1) on the AnchorStateRegistry,
+// moving the respected game from KailuaGame (1337) to the
+// PermissionedDisputeGame (1). game1337 stays registered but is not respected.
+// The type-1 game commits to the op-program v1.3.1 prestate (gameArgs(1)),
+// whose registry snapshot has no chain 2020, so the program cannot execute
+// for Ronin (verified by reproducible build + boot test, 2026-09-11):
+// NO_PROOFS + NO_DA_ORACLE, no Kailua badge/verifiers/program hashes.
+
+const proofSystemReferences = [
+  {
+    title: 'setRespectedGameType(1) - Etherscan',
+    url: 'https://etherscan.io/tx/0x7f1b70133a82bfc754095412ea556b3582bc2be189f1dbe26f1718827cded482',
+  },
+  {
+    title:
+      'absolutePrestate hash registered in superchain-registry as op-program v1.3.1',
+    url: 'https://github.com/ethereum-optimism/superchain-registry/blob/main/validation/standard/standard-prestates.toml',
+  },
+  {
+    title: 'op-program v1.3.1 release (commit e3c2f04, 2024-08-23)',
+    url: 'https://github.com/ethereum-optimism/optimism/releases/tag/op-program%2Fv1.3.1',
+  },
+  {
+    title:
+      'superchain-registry snapshot pinned at op-program v1.3.1 build (42bd03ba8313)',
+    url: 'https://github.com/ethereum-optimism/superchain-registry/blob/42bd03ba8313/chainList.json',
+  },
+]
+
+const roninTemplate = opStackL2({
+  capability: 'universal',
+  addedAt: UnixTime(1754639625),
+  discovery,
+  genesisTimestamp,
+  // No DA certificate verification on the live proof path: op-program v1.3.1
+  // predates EigenDA support; the DACert verifier only ran in the Kailua guest.
+  daProvider: EIGENDA_DA_PROVIDER(false),
+  additionalBadges: [BADGES.RaaS.Conduit, BADGES.Other.MigratedFromL1],
+  associatedTokens: ['RON'],
+  reasonsForBeingOther: [
+    REASON_FOR_BEING_OTHER.NO_PROOFS,
+    REASON_FOR_BEING_OTHER.NO_DA_ORACLE,
+  ],
+  stateValidationImage: 'opfp',
+  display: {
+    name: 'Ronin',
+    warning:
+      'Since 2026-09-07 withdrawals settle against the PermissionedDisputeGame instead of the Kailua ZK game. The fault proof system is deployed but is not functional: the permissioned dispute game commits to the op-program v1.3.1 prestate, whose embedded superchain registry snapshot does not include Ronin (chain ID 2020), so no dispute can be resolved correctly by execution. Security relies entirely on the honesty of the permissioned proposer.',
+    aliases: ['Sky Mavis', 'Axie Infinity'],
+    slug: 'ronin-network',
+    description:
+      'Ronin is an Ethereum Optimium based on the OP Stack, optimized for gaming and NFT applications. It migrated from an independent sidechain to a Layer 2 in May 2026, using EigenDA for data availability and keeping RON as the custom gas token.',
+    links: {
+      websites: ['https://roninchain.com/'],
+      bridges: ['https://app.roninchain.com/bridge'],
+      documentation: ['https://docs.roninchain.com/'],
+      repositories: [
+        'https://github.com/ronin-chain/ronin',
+        'https://github.com/axieinfinity',
+      ],
+      explorers: ['https://app.roninchain.com/explorer'],
+      socialMedia: [
+        'https://twitter.com/Ronin_Network',
+        'https://discord.gg/roninnetwork',
+        'https://blog.roninchain.com/',
+      ],
+    },
+  },
+  stage: getAltDaStage(
+    {
+      stage0: {
+        callsItselfValidiumOrOptimium: true,
+        stateRootsPostedToL1: true,
+        stateVerificationOnL1: false,
+        daAttestedByIndependentParty: false,
+        nodeSourceAvailable: true,
+        fraudProofSystemAtLeast5Outsiders: false,
+      },
+      stage1: {
+        principle: false,
+        usersCanExitWithoutCooperation: false,
+        usersHave7DaysToExit: false,
+        securityCouncilProperlySetUp: false,
+        daVerifierSecureOnL1: false,
+        daVerifier7DayExitWindow: false,
+        daCommitteeDecentralized: false,
+        noRedTrustedSetups: null,
+        proverSourcePublished: null,
+        verifierContractsReproducible: null,
+        programHashesReproducible: null,
+      },
+      stage2: {
+        fraudProofSystemIsPermissionless: false,
+        delayWith30DExitWindow: false,
+        proofSystemOverriddenOnlyInCaseOfABug: false,
+        daVerifier30DayExitWindow: false,
+        daMechanismEconomicSecurity: false,
+      },
+    },
+    {
+      nodeSourceLink:
+        'https://github.com/conduitxyz/ronin-migration-reth-docker',
+    },
+  ),
+  chainConfig: {
+    name: 'roninnetwork',
+    chainId: 2020,
+    explorerUrl: 'https://app.roninchain.com/explorer',
+    coingeckoPlatform: 'ronin',
+    sinceTimestamp: genesisTimestamp,
+    gasTokens: ['RON'],
+    multicallContracts: [
+      {
+        address: EthereumAddress('0xcA11bde05977b3631167028862bE2a173976CA11'),
+        batchSize: 150,
+        sinceBlock: 1,
+        version: '3',
+      },
+    ],
+    apis: [
+      {
+        type: 'rpc',
+        url: 'https://api.roninchain.com/rpc',
+        callsPerMinute: 100,
+      },
+      {
+        type: 'blockscout',
+        url: 'https://explorer.roninchain.com/api',
+      },
+    ],
+  },
+  milestones: [
+    {
+      title: 'Ronin migrates to an Ethereum L2',
+      url: 'https://blog.roninchain.com/p/ronin-is-coming-home-to-ethereum',
+      date: '2026-05-12T00:00:00.00Z',
+      description:
+        'Ronin hard-forks at block 55,577,490 to become an OP Stack Optimium using EigenDA.',
+      type: 'general',
+    },
+    {
+      title: 'Kailua ZK proofs enabled',
+      url: 'https://etherscan.io/tx/0x07bf7a192a2ea3b5324ef5cef339715fc6b972b261463e751f39a3f7bb2ae72d',
+      date: '2026-07-01T00:00:00.00Z',
+      description:
+        'Respected game type moves from the PermissionedDisputeGame to the Kailua ZK game (type 1337).',
+      type: 'general',
+    },
+    {
+      title: 'Withdrawals fall back to the permissioned game',
+      url: 'https://etherscan.io/tx/0x7f1b70133a82bfc754095412ea556b3582bc2be189f1dbe26f1718827cded482',
+      date: '2026-09-07T00:00:00.00Z',
+      description:
+        'Guardian moves the respected game type back to the PermissionedDisputeGame; Kailua proposals stop.',
+      type: 'general',
+    },
+  ],
+  nonTemplateEscrows: [
+    // Legacy multi-sig bridge — residual escrow, drained over time as users
+    // migrated to the CCIP-routed path. Still holds residual ETH plus dust of
+    // USDC/AXS/WETH. WETH is excluded here because L2 totalSupply on Ronin is
+    // historically over-issued vs L1 backing (legacy of the 2022 hack era).
+    // Chainlink CCIP pools are NOT tracked as Ronin escrows; the CCIP-bridged
+    // tokens are listed under `roninnetwork` in tokens.jsonc as source:external,
+    // matching the L2BEAT pattern used by Arbitrum/Base/BOB/Soneium etc.
+    discovery.getEscrowDetails({
+      address: ChainSpecificAddress(
+        'eth:0x64192819Ac13Ef72bF6b5AE239AC672B43a9AF08',
+      ),
+      name: 'MainchainGateway',
+      description:
+        'Legacy multi-sig-secured Ronin bridge (pre-CCIP). Holds residual ETH and ERC-20 deposits. Withdrawals authorised by the Ronin BridgeOperator threshold-signature set.',
+      tokens: '*',
+      // Tokens excluded to avoid double-counting with tokens.jsonc:
+      //   AXS, USDC, WBTC, YGG → tracked via L2 totalSupply (Chainlink CCIP)
+      //   WETH → L2 supply historically over-issued vs L1 backing, no clean
+      //          attribution possible (see project description).
+      excludedTokens: ['AXS', 'USDC', 'WBTC', 'YGG', 'WETH'],
+      source: 'external',
+      bridgedUsing: {
+        bridges: [{ name: 'Ronin Bridge (legacy multi-sig)' }],
+      },
+    }),
+  ],
+  nonTemplateTechnology: {
+    otherConsiderations: [
+      {
+        name: 'EVM compatible smart contracts are supported',
+        description:
+          'OP stack chains are pursuing the EVM Equivalence model. No changes to smart contracts are required regardless of the language they are written in, i.e. anything deployed on L1 can be deployed on L2.',
+        risks: [],
+        references: [
+          {
+            title: 'Introducing EVM Equivalence',
+            url: 'https://medium.com/ethereum-optimism/introducing-evm-equivalence-5c2021deb306',
+          },
+        ],
+      },
+      {
+        name: 'External bridge architecture',
+        description:
+          'The May 2026 L2 migration deployed the OP Stack canonical bridge (OptimismPortal2 and L1StandardBridge) but did not migrate user funds into it; it is currently empty. User assets are custodied on two separate L1 paths, neither of which is the canonical bridge analyzed on this page: (1) Chainlink CCIP TokenPools, the active bridge since April 2025, securing 12 tokens including AXS, USDC, WETH, WBTC (new contract), YGG, PIXEL and SLP via Chainlink DON attestations and the Risk Management Network; (2) the legacy MainchainGateway, deprecated in April 2025 but still holding residual balances (legacy WBTC, ETH backing of legacy WETH, dust), withdrawable through the Ronin BridgeOperator stake-weighted multisig. Sky Mavis has not announced a plan to migrate liquidity into the OP Stack bridge.',
+        risks: [],
+        references: [
+          {
+            title: 'MainchainGateway - Etherscan',
+            url: 'https://etherscan.io/address/0x64192819Ac13Ef72bF6b5AE239AC672B43a9AF08',
+          },
+          {
+            title: 'Ronin Bridge to Chainlink CCIP migration - Ronin Blog',
+            url: 'https://blog.roninchain.com/p/the-ronin-bridge-chainlink-ccip-migration',
+          },
+        ],
+      },
+    ],
+  },
+  nonTemplateContractRisks: CONTRACTS.UPGRADE_NO_DELAY_RISK,
+  activityConfig: {
+    type: 'block',
+    startBlock: 55577490,
+    adjustCount: { type: 'SubtractOne' },
+  },
+  isNodeAvailable: 'UnderReview',
+})
+
+export const roninNetwork: ScalingProject = {
+  ...roninTemplate,
+  stateValidation: roninTemplate.stateValidation && {
+    ...roninTemplate.stateValidation,
+    categories: roninTemplate.stateValidation.categories.map((category) =>
+      category.title === 'Challenges'
+        ? {
+            ...category,
+            references: [
+              ...(category.references ?? []),
+              ...proofSystemReferences,
+            ],
+          }
+        : category,
+    ),
+    description:
+      'Since 2026-09-07 withdrawals are settled against the PermissionedDisputeGame (game type 1). Only the permissioned proposer can create state root proposals and only the permissioned proposer and challenger can dispute them. The game commits to the op-program v1.3.1 absolute prestate, whose embedded superchain-registry snapshot does not include chain ID 2020, so the fault proof program cannot execute the Ronin state transition and no dispute can be resolved correctly by execution. The Kailua ZK game (game type 1337) remains deployed and registered in the DisputeGameFactory but is not the respected game type, so its proposals are not used for withdrawals.',
+  },
+}

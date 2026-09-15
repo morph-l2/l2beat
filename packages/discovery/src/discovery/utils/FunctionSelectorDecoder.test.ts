@@ -1,9 +1,13 @@
-import { assert } from '@l2beat/backend-tools'
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
+import {
+  assert,
+  Bytes,
+  ChainSpecificAddress,
+  EthereumAddress,
+} from '@l2beat/shared-pure'
 import { expect, mockFn, mockObject } from 'earl'
 import { utils } from 'ethers'
 
-import { IProvider } from '../provider/IProvider'
+import type { IProvider } from '../provider/IProvider'
 import { FunctionSelectorDecoder } from './FunctionSelectorDecoder'
 
 describe(FunctionSelectorDecoder.name, () => {
@@ -14,7 +18,7 @@ describe(FunctionSelectorDecoder.name, () => {
   )
 
   const callMethodStub = async <T>(
-    _address: EthereumAddress,
+    _address: ChainSpecificAddress,
     abi: string | utils.FunctionFragment,
   ) => {
     const coder = new utils.Interface([abi])
@@ -33,9 +37,14 @@ describe(FunctionSelectorDecoder.name, () => {
 
   describe(FunctionSelectorDecoder.prototype.fetchTargets.name, () => {
     it('can fetch a single target address that is not a proxy', async () => {
-      const target = EthereumAddress.random()
+      const target = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
-        getStorageAsAddress: mockFn().resolvesTo(EthereumAddress.ZERO),
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
+        getStorageAsAddress: mockFn().resolvesTo(
+          ChainSpecificAddress.ZERO('ethereum'),
+        ),
         callMethod: mockFn().executes(callMethodStub),
         getSource: mockFn().resolvesTo({
           name: 'name',
@@ -53,10 +62,15 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('can fetch a two target addresses that are not a proxy', async () => {
-      const target1 = EthereumAddress.random()
-      const target2 = EthereumAddress.random()
+      const target1 = ChainSpecificAddress.random()
+      const target2 = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
-        getStorageAsAddress: mockFn().resolvesTo(EthereumAddress.ZERO),
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
+        getStorageAsAddress: mockFn().resolvesTo(
+          ChainSpecificAddress.ZERO('ethereum'),
+        ),
         callMethod: mockFn().executes(callMethodStub),
         getSource: mockFn().resolvesTo({
           name: 'name',
@@ -75,14 +89,18 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('can fetch a single target address that is an eip1967 proxy', async () => {
-      const target = EthereumAddress.random()
-      const implementation = EthereumAddress.random()
+      const target = ChainSpecificAddress.random()
+      const implementation = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
         getStorageAsAddress: mockFn()
           .given(target, EIP1967_IMPLEMENTATION_SLOT)
           .returnsOnce(implementation)
-          .returns(EthereumAddress.ZERO),
+          .returns(ChainSpecificAddress.ZERO('ethereum')),
         callMethod: mockFn().executes(callMethodStub),
+        getLogs: mockFn().returns([]),
         getSource: mockFn().resolvesTo({
           name: 'name',
           isVerified: true,
@@ -100,11 +118,16 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('can fetch a single target address that is an eip2535 proxy', async () => {
-      const target = EthereumAddress.random()
+      const target = ChainSpecificAddress.random()
       const implementation1 = EthereumAddress.random()
       const implementation2 = EthereumAddress.random()
       const provider = mockObject<IProvider>({
-        getStorageAsAddress: mockFn().returns(EthereumAddress.ZERO),
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
+        getStorageAsAddress: mockFn().returns(
+          ChainSpecificAddress.ZERO('ethereum'),
+        ),
         callMethod: mockFn()
           .given(target, EIP2535_METHOD, [])
           .resolvesToOnce([implementation1, implementation2])
@@ -115,6 +138,7 @@ describe(FunctionSelectorDecoder.name, () => {
           abi: [],
           source: 'name',
         }),
+        getLogs: mockFn().resolvesTo([]),
       })
       const decoder = new FunctionSelectorDecoder(provider)
 
@@ -122,23 +146,33 @@ describe(FunctionSelectorDecoder.name, () => {
 
       expect(provider.getSource).toHaveBeenCalledTimes(3)
       expect(provider.getSource).toHaveBeenNthCalledWith(1, target)
-      expect(provider.getSource).toHaveBeenNthCalledWith(2, implementation1)
-      expect(provider.getSource).toHaveBeenNthCalledWith(3, implementation2)
+      expect(provider.getSource).toHaveBeenNthCalledWith(
+        2,
+        ChainSpecificAddress.from('eth', implementation1),
+      )
+      expect(provider.getSource).toHaveBeenNthCalledWith(
+        3,
+        ChainSpecificAddress.from('eth', implementation2),
+      )
     })
 
     it('can fetch a two target addresses that are both a eip1967 proxy', async () => {
-      const target1 = EthereumAddress.random()
-      const target2 = EthereumAddress.random()
-      const implementation1 = EthereumAddress.random()
-      const implementation2 = EthereumAddress.random()
+      const target1 = ChainSpecificAddress.random()
+      const target2 = ChainSpecificAddress.random()
+      const implementation1 = ChainSpecificAddress.random()
+      const implementation2 = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
         getStorageAsAddress: mockFn()
           .given(target1, EIP1967_IMPLEMENTATION_SLOT)
           .returnsOnce(implementation1)
           .given(target2, EIP1967_IMPLEMENTATION_SLOT)
           .returnsOnce(implementation2)
-          .resolvesTo(EthereumAddress.ZERO),
+          .resolvesTo(ChainSpecificAddress.ZERO('ethereum')),
         callMethod: mockFn().executes(callMethodStub),
+        getLogs: mockFn().returns([]),
         getSource: mockFn().resolvesTo({
           name: 'name',
           isVerified: true,
@@ -158,19 +192,28 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('can fetch a two target addresses that are both a eip2535 proxy', async () => {
-      const target1 = EthereumAddress.random()
-      const target2 = EthereumAddress.random()
-      const implementation1 = EthereumAddress.random()
-      const implementation2 = EthereumAddress.random()
-      const implementation3 = EthereumAddress.random()
-      const implementation4 = EthereumAddress.random()
+      const target1 = ChainSpecificAddress.random()
+      const target2 = ChainSpecificAddress.random()
+      const implementation1 = ChainSpecificAddress.random()
+      const implementation2 = ChainSpecificAddress.random()
+      const implementation3 = ChainSpecificAddress.random()
+      const implementation4 = ChainSpecificAddress.random()
+      const implementation1_r = ChainSpecificAddress.address(implementation1)
+      const implementation2_r = ChainSpecificAddress.address(implementation2)
+      const implementation3_r = ChainSpecificAddress.address(implementation3)
+      const implementation4_r = ChainSpecificAddress.address(implementation4)
       const provider = mockObject<IProvider>({
-        getStorageAsAddress: mockFn().returns(EthereumAddress.ZERO),
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
+        getStorageAsAddress: mockFn().returns(
+          ChainSpecificAddress.ZERO('ethereum'),
+        ),
         callMethod: mockFn()
           .given(target1, EIP2535_METHOD, [])
-          .resolvesToOnce([implementation1, implementation2])
+          .resolvesToOnce([implementation1_r, implementation2_r])
           .given(target2, EIP2535_METHOD, [])
-          .resolvesToOnce([implementation3, implementation4])
+          .resolvesToOnce([implementation3_r, implementation4_r])
           .executes(callMethodStub),
         getSource: mockFn().resolvesTo({
           name: 'name',
@@ -178,6 +221,7 @@ describe(FunctionSelectorDecoder.name, () => {
           abi: [],
           source: 'name',
         }),
+        getLogs: mockFn().resolvesTo([]),
       })
       const decoder = new FunctionSelectorDecoder(provider)
 
@@ -193,20 +237,26 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('can fetch a two target addresses that are an eip1967 and an eip2535', async () => {
-      const target1 = EthereumAddress.random()
-      const target2 = EthereumAddress.random()
-      const implementation1 = EthereumAddress.random()
-      const implementation2 = EthereumAddress.random()
-      const implementation3 = EthereumAddress.random()
+      const target1 = ChainSpecificAddress.random()
+      const target2 = ChainSpecificAddress.random()
+      const implementation1 = ChainSpecificAddress.random()
+      const implementation2 = ChainSpecificAddress.random()
+      const implementation3 = ChainSpecificAddress.random()
+      const implementation2_r = ChainSpecificAddress.address(implementation2)
+      const implementation3_r = ChainSpecificAddress.address(implementation3)
       const provider = mockObject<IProvider>({
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
         getStorageAsAddress: mockFn()
           .given(target1, EIP1967_IMPLEMENTATION_SLOT)
           .returnsOnce(implementation1)
-          .returns(EthereumAddress.ZERO),
+          .returns(ChainSpecificAddress.ZERO('ethereum')),
         callMethod: mockFn()
           .given(target2, EIP2535_METHOD, [])
-          .resolvesToOnce([implementation2, implementation3])
+          .resolvesToOnce([implementation2_r, implementation3_r])
           .executes(callMethodStub),
+        getLogs: mockFn().returns([]),
         getSource: mockFn().resolvesTo({
           name: 'name',
           isVerified: true,
@@ -221,9 +271,9 @@ describe(FunctionSelectorDecoder.name, () => {
       expect(provider.getSource).toHaveBeenCalledTimes(5)
       expect(provider.getSource).toHaveBeenNthCalledWith(1, target1)
       expect(provider.getSource).toHaveBeenNthCalledWith(2, target2)
-      expect(provider.getSource).toHaveBeenNthCalledWith(3, implementation2)
-      expect(provider.getSource).toHaveBeenNthCalledWith(4, implementation3)
-      expect(provider.getSource).toHaveBeenNthCalledWith(5, implementation1)
+      expect(provider.getSource).toHaveBeenNthCalledWith(3, implementation1)
+      expect(provider.getSource).toHaveBeenNthCalledWith(4, implementation2)
+      expect(provider.getSource).toHaveBeenNthCalledWith(5, implementation3)
     })
   })
 
@@ -239,9 +289,14 @@ describe(FunctionSelectorDecoder.name, () => {
     const FunctionSigC = getFunctionSelector(FunctionDeclC)
 
     it('can decode a single selector that is already known', async () => {
-      const target = EthereumAddress.random()
+      const target = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
-        getStorageAsAddress: mockFn().resolvesTo(EthereumAddress.ZERO),
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
+        getStorageAsAddress: mockFn().resolvesTo(
+          ChainSpecificAddress.ZERO('ethereum'),
+        ),
         callMethod: mockFn().executes(callMethodStub),
         getSource: mockFn().resolvesTo({
           name: 'name',
@@ -261,9 +316,14 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('handles decoding a wrong selector in a contract that is already known', async () => {
-      const target = EthereumAddress.random()
+      const target = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
-        getStorageAsAddress: mockFn().resolvesTo(EthereumAddress.ZERO),
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
+        getStorageAsAddress: mockFn().resolvesTo(
+          ChainSpecificAddress.ZERO('ethereum'),
+        ),
         callMethod: mockFn().executes(callMethodStub),
         getSource: mockFn().resolvesTo({
           name: 'name',
@@ -283,9 +343,14 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('can decode a single selector that is not known', async () => {
-      const target = EthereumAddress.random()
+      const target = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
-        getStorageAsAddress: mockFn().resolvesTo(EthereumAddress.ZERO),
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
+        getStorageAsAddress: mockFn().resolvesTo(
+          ChainSpecificAddress.ZERO('ethereum'),
+        ),
         callMethod: mockFn().executes(callMethodStub),
         getSource: mockFn().resolvesTo({
           name: 'name',
@@ -304,9 +369,14 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('handles decoding a wrong selector in a contract that is not known', async () => {
-      const target = EthereumAddress.random()
+      const target = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
-        getStorageAsAddress: mockFn().resolvesTo(EthereumAddress.ZERO),
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
+        getStorageAsAddress: mockFn().resolvesTo(
+          ChainSpecificAddress.ZERO('ethereum'),
+        ),
         callMethod: mockFn().executes(callMethodStub),
         getSource: mockFn().resolvesTo({
           name: 'name',
@@ -325,20 +395,26 @@ describe(FunctionSelectorDecoder.name, () => {
     })
 
     it('can decoder selectors of two target addresses that are an eip1967 and an eip2535', async () => {
-      const target1 = EthereumAddress.random()
-      const target2 = EthereumAddress.random()
-      const implementation1 = EthereumAddress.random()
-      const implementation2 = EthereumAddress.random()
-      const implementation3 = EthereumAddress.random()
+      const target1 = ChainSpecificAddress.random()
+      const target2 = ChainSpecificAddress.random()
+      const implementation1 = ChainSpecificAddress.random()
+      const implementation2 = ChainSpecificAddress.random()
+      const implementation3 = ChainSpecificAddress.random()
+      const implementation2_r = ChainSpecificAddress.address(implementation2)
+      const implementation3_r = ChainSpecificAddress.address(implementation3)
       const provider = mockObject<IProvider>({
+        chain: 'ethereum',
+        getBytecode: mockFn().resolvesTo(Bytes.fromHex('0xdeadbeef')),
+        getDeployment: mockFn().resolvesTo(undefined),
         getStorageAsAddress: mockFn()
           .given(target1, EIP1967_IMPLEMENTATION_SLOT)
           .returnsOnce(implementation1)
-          .returns(EthereumAddress.ZERO),
+          .returns(ChainSpecificAddress.ZERO('ethereum')),
         callMethod: mockFn()
           .given(target2, EIP2535_METHOD, [])
-          .resolvesToOnce([implementation2, implementation3])
+          .resolvesToOnce([implementation2_r, implementation3_r])
           .executes(callMethodStub),
+        getLogs: mockFn().returns([]),
         getSource: mockFn()
           .given(target1)
           .resolvesToOnce({

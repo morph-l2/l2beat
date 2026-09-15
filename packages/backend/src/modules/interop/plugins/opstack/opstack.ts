@@ -1,0 +1,455 @@
+import {
+  Address32,
+  ChainSpecificAddress,
+  EthereumAddress,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import {
+  createEventParser,
+  createInteropEventType,
+  type DataRequest,
+  defineNetworks,
+  type InteropEvent,
+  type InteropEventDb,
+  type InteropPluginResyncable,
+  type LogToCapture,
+  type MatchResult,
+  Result,
+  type TxToCapture,
+  txFromEvent,
+} from '../types'
+import { derivePortalDeposit } from './derivePortalDeposit'
+
+// == Event signatures ==
+
+const messagePassedLog =
+  'event MessagePassed(uint256 indexed nonce, address indexed sender, address indexed target, uint256 value, uint256 gasLimit, bytes data, bytes32 withdrawalHash)'
+const transactionDepositedLog =
+  'event TransactionDeposited(address indexed from, address indexed to, uint256 indexed version, bytes opaqueData)'
+const withdrawalFinalizedLog =
+  'event WithdrawalFinalized(bytes32 indexed withdrawalHash, bool success)'
+const sentMessageLog =
+  'event SentMessage(address indexed target, address sender, bytes message, uint256 messageNonce, uint256 gasLimit)'
+
+// == L2->L1 messages, all of them. ==
+
+// L2 event
+export const MessagePassed = createInteropEventType<{
+  chain: string
+  withdrawalHash: string
+  value: bigint
+}>('opstack.MessagePassed', { ttl: 30 * UnixTime.DAY }) // needs to go through the challenge period
+
+export const parseMessagePassed = createEventParser(messagePassedLog)
+
+// L1 event
+export const WithdrawalFinalized = createInteropEventType<{
+  chain: string
+  withdrawalHash: string
+}>('opstack.WithdrawalFinalized')
+
+export const parseWithdrawalFinalized = createEventParser(
+  withdrawalFinalizedLog,
+)
+
+// == L1->L2 direct portal deposits: source-side log, destination tx hash derived from the log. ==
+
+export const TransactionDeposited = createInteropEventType<{
+  chain: string
+  from: Address32
+  to?: Address32
+  sourceHash: `0x${string}`
+  l2TxHash: `0x${string}`
+  mint: bigint
+  value: bigint
+  gasLimit: bigint
+  data: string
+}>('opstack.TransactionDeposited')
+
+export const PortalDepositFinalized = createInteropEventType<{
+  chain: string
+  from: Address32
+  to?: Address32
+  value: bigint
+  sourceHash: `0x${string}`
+}>('opstack.PortalDepositFinalized')
+
+export const parseTransactionDeposited = createEventParser(
+  transactionDepositedLog,
+)
+
+export const parseSentMessage = createEventParser(sentMessageLog)
+
+interface OpStackNetwork {
+  chain: string
+  // L2 contracts
+  l2ToL1MessagePasser: ChainSpecificAddress
+  l2CrossDomainMessenger: ChainSpecificAddress
+  l2StandardBridge: ChainSpecificAddress
+  // L1 contracts
+  optimismPortal: ChainSpecificAddress
+  l1CrossDomainMessenger: ChainSpecificAddress
+  l1StandardBridge: ChainSpecificAddress
+  // Custom gas token on L1 (for chains like Celo that don't use ETH as native token)
+  l1CustomGasToken?: Address32
+}
+
+export const OPSTACK_NETWORKS = defineNetworks<OpStackNetwork>('opstack', [
+  {
+    chain: 'base',
+    l2ToL1MessagePasser: ChainSpecificAddress(
+      'base:0x4200000000000000000000000000000000000016',
+    ),
+    l2CrossDomainMessenger: ChainSpecificAddress(
+      'base:0x4200000000000000000000000000000000000007',
+    ),
+    l2StandardBridge: ChainSpecificAddress(
+      'base:0x4200000000000000000000000000000000000010',
+    ),
+    optimismPortal: ChainSpecificAddress(
+      'eth:0x49048044d57e1c92a77f79988d21fa8faf74e97e',
+    ),
+    l1CrossDomainMessenger: ChainSpecificAddress(
+      'eth:0x866E82a600A1414e583f7F13623F1aC5d58b0Afa',
+    ),
+    l1StandardBridge: ChainSpecificAddress(
+      'eth:0x3154Cf16ccdb4C6d922629664174b904d80F2C35',
+    ),
+  },
+  {
+    chain: 'optimism',
+    l2ToL1MessagePasser: ChainSpecificAddress(
+      'oeth:0x4200000000000000000000000000000000000016',
+    ),
+    l2CrossDomainMessenger: ChainSpecificAddress(
+      'oeth:0x4200000000000000000000000000000000000007',
+    ),
+    l2StandardBridge: ChainSpecificAddress(
+      'oeth:0x4200000000000000000000000000000000000010',
+    ),
+    optimismPortal: ChainSpecificAddress(
+      'eth:0xbEb5Fc579115071764c7423A4f12eDde41f106Ed',
+    ),
+    l1CrossDomainMessenger: ChainSpecificAddress(
+      'eth:0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1',
+    ),
+    l1StandardBridge: ChainSpecificAddress(
+      'eth:0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1',
+    ),
+  },
+  {
+    chain: 'ink',
+    l2ToL1MessagePasser: ChainSpecificAddress(
+      'ink:0x4200000000000000000000000000000000000016',
+    ),
+    l2CrossDomainMessenger: ChainSpecificAddress(
+      'ink:0x4200000000000000000000000000000000000007',
+    ),
+    l2StandardBridge: ChainSpecificAddress(
+      'ink:0x4200000000000000000000000000000000000010',
+    ),
+    optimismPortal: ChainSpecificAddress(
+      'eth:0x5d66C1782664115999C47c9fA5cd031f495D3e4F',
+    ),
+    l1CrossDomainMessenger: ChainSpecificAddress(
+      'eth:0x69d3Cf86B2Bf1a9e99875B7e2D9B6a84426c171f',
+    ),
+    l1StandardBridge: ChainSpecificAddress(
+      'eth:0x88FF1e5b602916615391F55854588EFcBB7663f0',
+    ),
+  },
+  {
+    chain: 'worldchain',
+    l2ToL1MessagePasser: ChainSpecificAddress(
+      'wc:0x4200000000000000000000000000000000000016',
+    ),
+    l2CrossDomainMessenger: ChainSpecificAddress(
+      'wc:0x4200000000000000000000000000000000000007',
+    ),
+    l2StandardBridge: ChainSpecificAddress(
+      'wc:0x4200000000000000000000000000000000000010',
+    ),
+    optimismPortal: ChainSpecificAddress(
+      'eth:0xd5ec14a83B7d95BE1E2Ac12523e2dEE12Cbeea6C',
+    ),
+    l1CrossDomainMessenger: ChainSpecificAddress(
+      'eth:0xf931a81D18B1766d15695ffc7c1920a62b7e710a',
+    ),
+    l1StandardBridge: ChainSpecificAddress(
+      'eth:0x470458C91978D2d929704489Ad730DC3E3001113',
+    ),
+  },
+  {
+    chain: 'unichain',
+    l2ToL1MessagePasser: ChainSpecificAddress(
+      'unichain:0x4200000000000000000000000000000000000016',
+    ),
+    l2CrossDomainMessenger: ChainSpecificAddress(
+      'unichain:0x4200000000000000000000000000000000000007',
+    ),
+    l2StandardBridge: ChainSpecificAddress(
+      'unichain:0x4200000000000000000000000000000000000010',
+    ),
+    optimismPortal: ChainSpecificAddress(
+      'eth:0x0bd48f6B86a26D3a217d0Fa6FfE2B491B956A7a2',
+    ),
+    l1CrossDomainMessenger: ChainSpecificAddress(
+      'eth:0x9A3D64E386C18Cb1d6d5179a9596A4B5736e98A6',
+    ),
+    l1StandardBridge: ChainSpecificAddress(
+      'eth:0x81014F44b0a345033bB2b3B21C7a1A308B35fEeA',
+    ),
+  },
+  {
+    chain: 'megaeth',
+    l2ToL1MessagePasser: ChainSpecificAddress(
+      'megaeth:0x4200000000000000000000000000000000000016',
+    ),
+    l2CrossDomainMessenger: ChainSpecificAddress(
+      'megaeth:0x4200000000000000000000000000000000000007',
+    ),
+    l2StandardBridge: ChainSpecificAddress(
+      'megaeth:0x4200000000000000000000000000000000000010',
+    ),
+    optimismPortal: ChainSpecificAddress(
+      'eth:0x7f82f57F0Dd546519324392e408b01fcC7D709e8',
+    ),
+    l1CrossDomainMessenger: ChainSpecificAddress(
+      'eth:0x6C7198250087B29A8040eC63903Bc130f4831Cc9',
+    ),
+    l1StandardBridge: ChainSpecificAddress(
+      'eth:0x0CA3A2FBC3D770b578223FBB6b062fa875a2eE75',
+    ),
+  },
+  {
+    chain: 'celo',
+    l2ToL1MessagePasser: ChainSpecificAddress(
+      'celo:0x4200000000000000000000000000000000000016',
+    ),
+    l2CrossDomainMessenger: ChainSpecificAddress(
+      'celo:0x4200000000000000000000000000000000000007',
+    ),
+    l2StandardBridge: ChainSpecificAddress(
+      'celo:0x4200000000000000000000000000000000000010',
+    ),
+    optimismPortal: ChainSpecificAddress(
+      'eth:0xc5c5D157928BDBD2ACf6d0777626b6C75a9EAEDC',
+    ),
+    l1CrossDomainMessenger: ChainSpecificAddress(
+      'eth:0x1AC1181fc4e4F877963680587AEAa2C90D7EbB95',
+    ),
+    l1StandardBridge: ChainSpecificAddress(
+      'eth:0x9C4955b92F34148dbcfDCD82e9c9eCe5CF2badfe',
+    ),
+    l1CustomGasToken: Address32.from(
+      '0x057898f3c43f129a17517b9056d23851f124b19f',
+    ),
+  },
+])
+
+export class OpStackPlugin implements InteropPluginResyncable {
+  readonly name = 'opstack'
+
+  getDataRequests(): DataRequest[] {
+    return [
+      // L1: TransactionDeposited from OptimismPortal
+      {
+        type: 'event',
+        signature: transactionDepositedLog,
+        addresses: OPSTACK_NETWORKS.map((n) => n.optimismPortal),
+      },
+      // L1: WithdrawalFinalized from OptimismPortal
+      {
+        type: 'event',
+        signature: withdrawalFinalizedLog,
+        addresses: OPSTACK_NETWORKS.map((n) => n.optimismPortal),
+      },
+      // L2: MessagePassed from L2ToL1MessagePasser
+      {
+        type: 'event',
+        signature: messagePassedLog,
+        addresses: OPSTACK_NETWORKS.map((n) => n.l2ToL1MessagePasser),
+      },
+      // Derive L2 tx hash from TransactionDeposited and fetch the L2 tx
+      txFromEvent({
+        creatorEvent: TransactionDeposited,
+        txHashArg: 'l2TxHash',
+        chainArg: 'chain',
+      }),
+    ]
+  }
+
+  captureTx(input: TxToCapture, creatorEvents?: InteropEvent[]) {
+    for (const creatorEvent of creatorEvents ?? []) {
+      if (!TransactionDeposited.checkType(creatorEvent)) {
+        continue
+      }
+
+      return [
+        PortalDepositFinalized.createTx(input, {
+          chain: creatorEvent.args.chain,
+          from: creatorEvent.args.from,
+          ...(creatorEvent.args.to ? { to: creatorEvent.args.to } : {}),
+          value: creatorEvent.args.value,
+          sourceHash: creatorEvent.args.sourceHash,
+        }),
+      ]
+    }
+  }
+
+  capture(input: LogToCapture) {
+    // get L1 side events
+    if (input.chain === 'ethereum') {
+      const logAddress = EthereumAddress(input.log.address)
+      const network = OPSTACK_NETWORKS.find(
+        (n) => ChainSpecificAddress.address(n.optimismPortal) === logAddress,
+      )
+      if (!network) return
+
+      const transactionDeposited = parseTransactionDeposited(input.log, [
+        ChainSpecificAddress.address(network.optimismPortal),
+      ])
+      if (transactionDeposited) {
+        const blockHash = input.log.blockHash
+        const logIndex = input.log.logIndex
+        if (!blockHash || logIndex === null) {
+          return
+        }
+
+        const derivedDeposit = derivePortalDeposit({
+          ...transactionDeposited,
+          blockHash,
+          logIndex,
+        })
+        if (!derivedDeposit) return
+
+        return [
+          TransactionDeposited.create(input, {
+            chain: network.chain,
+            from: Address32.from(transactionDeposited.from),
+            ...(derivedDeposit.isCreation
+              ? {}
+              : { to: Address32.from(transactionDeposited.to) }),
+            sourceHash: derivedDeposit.sourceHash,
+            l2TxHash: derivedDeposit.l2TxHash,
+            mint: derivedDeposit.mint,
+            value: derivedDeposit.value,
+            gasLimit: derivedDeposit.gasLimit,
+            data: derivedDeposit.data,
+          }),
+        ]
+      }
+
+      // check if this is an L2->*L1* message
+      const withdrawalFinalized = parseWithdrawalFinalized(input.log, [
+        ChainSpecificAddress.address(network.optimismPortal),
+      ])
+      if (withdrawalFinalized) {
+        return [
+          WithdrawalFinalized.create(input, {
+            chain: network.chain,
+            withdrawalHash: withdrawalFinalized.withdrawalHash,
+          }),
+        ]
+      }
+    } else {
+      // get L2 side events
+      const network = OPSTACK_NETWORKS.find((n) => n.chain === input.chain)
+      if (!network) return
+      // check if this is an *L2*->L1 message
+      const messagePassed = parseMessagePassed(input.log, [
+        ChainSpecificAddress.address(network.l2ToL1MessagePasser),
+      ])
+      if (messagePassed) {
+        return [
+          MessagePassed.create(input, {
+            chain: network.chain,
+            withdrawalHash: messagePassed.withdrawalHash,
+            value: messagePassed.value,
+          }),
+        ]
+      }
+    }
+  }
+
+  matchTypes = [WithdrawalFinalized, PortalDepositFinalized]
+
+  match(event: InteropEvent, db: InteropEventDb): MatchResult | undefined {
+    // Match L2->L1 withdrawals
+    if (WithdrawalFinalized.checkType(event)) {
+      const messagePassed = db.find(MessagePassed, {
+        withdrawalHash: event.args.withdrawalHash,
+        chain: event.args.chain,
+      })
+      if (!messagePassed) return
+
+      const results: MatchResult = [
+        Result.Message('opstack.L2ToL1Message', {
+          app: 'unknown',
+          srcEvent: messagePassed,
+          dstEvent: event,
+        }),
+      ]
+
+      // If native token was sent via L2ToL1MessagePasser, also create a Transfer
+      if (messagePassed.args.value > 0n) {
+        const network = OPSTACK_NETWORKS.find(
+          (n) => n.chain === event.args.chain,
+        )
+        const dstTokenAddress = network?.l1CustomGasToken ?? Address32.NATIVE
+        results.push(
+          Result.Transfer('opstack.L2ToL1Transfer', {
+            srcEvent: messagePassed,
+            srcAmount: messagePassed.args.value,
+            srcTokenAddress: Address32.NATIVE,
+            srcWasBurned: true,
+            dstEvent: event,
+            dstAmount: messagePassed.args.value,
+            dstTokenAddress: dstTokenAddress,
+            dstWasMinted: false,
+          }),
+        )
+      }
+
+      return results
+    }
+
+    // Match L1->L2 deposits via TransactionDeposited/PortalDepositFinalized
+    if (PortalDepositFinalized.checkType(event)) {
+      const transactionDeposited = db.find(TransactionDeposited, {
+        sourceHash: event.args.sourceHash,
+        chain: event.args.chain,
+      })
+      if (!transactionDeposited) return
+
+      const results: MatchResult = [
+        Result.Message('opstack.L1ToL2Message', {
+          app: 'unknown',
+          srcEvent: transactionDeposited,
+          dstEvent: event,
+        }),
+      ]
+
+      if (transactionDeposited.args.mint > 0n) {
+        const network = OPSTACK_NETWORKS.find(
+          (n) => n.chain === event.args.chain,
+        )
+        const srcTokenAddress = network?.l1CustomGasToken ?? Address32.NATIVE
+        results.push(
+          Result.Transfer('opstack.L1ToL2Transfer', {
+            srcEvent: transactionDeposited,
+            srcAmount: transactionDeposited.args.mint,
+            srcTokenAddress,
+            srcWasBurned: false,
+            dstEvent: event,
+            dstAmount: transactionDeposited.args.mint,
+            dstTokenAddress: Address32.NATIVE,
+            dstWasMinted: true,
+          }),
+        )
+      }
+
+      return results
+    }
+  }
+}

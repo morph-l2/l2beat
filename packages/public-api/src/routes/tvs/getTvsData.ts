@@ -1,0 +1,106 @@
+import type {
+  Database,
+  SummedByTimestampTokenValueRecord,
+} from '@l2beat/database'
+import { type ProjectId, UnixTime } from '@l2beat/shared-pure'
+import keyBy from 'lodash/keyBy'
+import { generateTimestamps } from '../../utils/generateTimestamps'
+import { getTimestampedValuesRange } from '../../utils/getTimestampedValuesRange'
+import { rangeToResolution } from '../../utils/range'
+import type { TvsRange, TvsResultItem } from './types'
+
+export async function getTvsData(
+  db: Database,
+  range: TvsRange,
+  projectIds: ProjectId[],
+): Promise<TvsResultItem[]> {
+  const resolution = rangeToResolution(range)
+  const [from, to] = getTimestampedValuesRange(range, resolution, {
+    offset: -UnixTime.HOUR - 15 * UnixTime.MINUTE,
+  })
+
+  const forSummary = projectIds.length !== 1
+
+  const records = await db.tvsTokenValue.getSummedByTimestampByProjects(
+    projectIds,
+    from,
+    to,
+    {
+      forSummary,
+      excludeAssociatedTokens: false,
+      excludeRwaRestrictedTokens: false,
+    },
+  )
+
+  if (records.length === 0) {
+    return []
+  }
+
+  const timestamps = records.map((r) => r.timestamp)
+  const fromTimestamp = Math.min(...timestamps)
+  const maxTimestamp = Math.max(...timestamps)
+  const groupedByTimestamp = keyBy(records, (r) => r.timestamp)
+
+  return generateTimestamps([fromTimestamp, maxTimestamp], resolution).flatMap(
+    (timestamp: UnixTime) => {
+      const record = groupedByTimestamp[timestamp]
+      if (!record) {
+        return createEmptyRecord(timestamp)
+      }
+      return mapRecord(record)
+    },
+  )
+}
+
+function createEmptyRecord(timestamp: UnixTime): TvsResultItem {
+  return {
+    timestamp: timestamp,
+    totalTvs: 0,
+    bySource: {
+      native: 0,
+      canonical: 0,
+      external: 0,
+    },
+    byCategory: {
+      stablecoins: 0,
+      eth: 0,
+      btc: 0,
+      other: 0,
+      publicRwa: 0,
+      restrictedRwa: 0,
+    },
+  }
+}
+
+function mapRecord({
+  timestamp,
+  value,
+  canonical,
+  customCanonical,
+  external,
+  native,
+  ether,
+  stablecoin,
+  btc,
+  rwaRestricted,
+  rwaPublic,
+  other,
+}: SummedByTimestampTokenValueRecord): TvsResultItem {
+  return {
+    timestamp,
+    totalTvs: value,
+    bySource: {
+      native,
+      canonical: canonical + customCanonical,
+      external,
+    },
+    byCategory: {
+      stablecoins: stablecoin,
+      eth: ether,
+      btc,
+      other,
+      publicRwa: rwaPublic,
+      restrictedRwa: rwaRestricted,
+    },
+  }
+}

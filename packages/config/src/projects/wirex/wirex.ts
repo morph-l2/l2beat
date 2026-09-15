@@ -1,0 +1,82 @@
+import { UnixTime } from '@l2beat/shared-pure'
+import { REASON_FOR_BEING_OTHER } from '../../common'
+import { BADGES } from '../../common/badges'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import type { ScalingProject } from '../../internalTypes'
+import { agglayer } from '../../templates/agglayer'
+
+const discovery = new ProjectDiscovery('wirex')
+const bridge = discovery.getContract('AgglayerBridge')
+
+export const wirex: ScalingProject = agglayer({
+  addedAt: UnixTime(1720180654), // 2024-07-05T11:57:34Z
+  additionalBadges: [BADGES.RaaS.Zeeve],
+  additionalPurposes: ['Payments'],
+  reasonsForBeingOther: [REASON_FOR_BEING_OTHER.SMALL_DAC],
+  display: {
+    name: 'Wirex Pay Chain',
+    slug: 'wirex',
+    description:
+      'Pay Chain is a Validium built on the Polygon CDK stack. It is used as the infrastructure for the Wirex non-custodial debit cards and financial services.',
+    links: {
+      websites: ['https://wirexpaychain.com/'],
+      documentation: [
+        'https://partner.wirexpaychain.com/docs/getting-started',
+        'https://docs.wirexpaychain.com/tech/wirex-pay-chain',
+      ],
+      explorers: ['https://blockscout.wirexpaychain.com'],
+      bridges: ['https://bridge.wirexpaychain.com/'],
+      socialMedia: [
+        'https://x.com/wirexpaychain',
+        'https://linkedin.com/company/wirex-limited/',
+        'https://wirexpaychain.com/blog',
+        'https://t.me/wirexpaychain',
+        'https://discord.gg/f8UGp4dH6g',
+      ],
+    },
+  },
+  chainConfig: {
+    name: 'wirex',
+    chainId: 31415,
+    explorerUrl: 'https://blockscout.wirexpaychain.com',
+    sinceTimestamp: UnixTime(1720089623),
+    apis: [
+      {
+        type: 'rpc',
+        url: 'https://rpc.wirexpaychain.com',
+        callsPerMinute: 300,
+      },
+    ],
+  },
+  // associatedTokens: ['WPAY'], // not launched yet
+  discovery,
+  nonTemplateEscrows: [
+    discovery.getEscrowDetails({
+      address: bridge.address,
+      tokens: '*',
+      sharedEscrow: {
+        type: 'AggLayer',
+        nativeAsset: 'etherPreminted',
+        premintedAmount: '340282366920938463463374607431768211455',
+      },
+    }),
+  ],
+  milestones: [
+    {
+      title: 'Wirex Pay Relaunch',
+      url: 'https://x.com/wirexpaychain/status/1894387229209895058',
+      date: '2025-02-24',
+      description:
+        'Wirex Pay Chain relaunches via Zeeve, integrated with Polygon Agglayer.',
+      type: 'general',
+    },
+    {
+      title: 'Wirex Pay Chain Protocol Launch',
+      url: 'https://x.com/wirexpaychain/status/1828779629051793710',
+      date: '2024-08-28',
+      description:
+        'Wirex Pay Chain launches officially, integrated with Polygon Agglayer.',
+      type: 'general',
+    },
+  ],
+})

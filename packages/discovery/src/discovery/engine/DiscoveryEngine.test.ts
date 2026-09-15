@@ -1,45 +1,48 @@
-import { EthereumAddress, UnixTime } from '@l2beat/shared-pure'
+import { Logger } from '@l2beat/backend-tools'
+import { ChainSpecificAddress, UnixTime } from '@l2beat/shared-pure'
 import { expect, mockFn, mockObject } from 'earl'
-
-import { DiscoveryLogger } from '../DiscoveryLogger'
-import { AddressAnalyzer } from '../analysis/AddressAnalyzer'
-import { DiscoveryConfig } from '../config/DiscoveryConfig'
-import { RawDiscoveryConfig } from '../config/RawDiscoveryConfig'
-import { IProvider } from '../provider/IProvider'
+import type { AddressAnalyzer } from '../analysis/AddressAnalyzer'
+import { ConfigRegistry } from '../config/ConfigRegistry'
+import {
+  type StructureConfig,
+  StructureContract,
+} from '../config/StructureConfig'
+import type { AllProviders } from '../provider/AllProviders'
+import type { IProvider } from '../provider/IProvider'
 import { EMPTY_ANALYZED_CONTRACT } from '../utils/testUtils'
 import { DiscoveryEngine } from './DiscoveryEngine'
 
 const base = {
   ...EMPTY_ANALYZED_CONTRACT,
-  derivedName: undefined,
   isVerified: true,
-  deploymentTimestamp: new UnixTime(1234),
+  deploymentTimestamp: UnixTime(1234),
   deploymentBlockNumber: 9876,
   selfMeta: undefined,
   targetsMeta: undefined,
   combinedMeta: undefined,
 }
 
+type Thenable<T> = PromiseLike<T> | T
+
 describe(DiscoveryEngine.name, () => {
-  const A = EthereumAddress.from('0xA')
-  const B = EthereumAddress.from('0xB')
-  const C = EthereumAddress.from('0xC')
-  const D = EthereumAddress.from('0xD')
+  const A = ChainSpecificAddress.random()
+  const B = ChainSpecificAddress.random()
+  const C = ChainSpecificAddress.random()
+  const D = ChainSpecificAddress.random()
   const strB = B.toString()
   const strC = C.toString()
   const strD = D.toString()
-  const provider = mockObject<IProvider>({})
+  const provider = mockObject<AllProviders>({
+    get: mockFn().resolvesTo(
+      mockObject<Thenable<IProvider>>({
+        then: undefined,
+      }),
+    ),
+  })
 
   it('can perform a discovery', async () => {
     const config = generateFakeConfig([A], {
-      [B.toString()]: { ignoreDiscovery: true },
-    })
-
-    const discoveryLogger = mockObject<DiscoveryLogger>({
-      flushServer: () => {},
-      log: () => {},
-      logSkip: () => {},
-      logRelatives: () => {},
+      [B.toString()]: StructureContract.parse({ ignoreDiscovery: true }),
     })
 
     const addressAnalyzer = mockObject<AddressAnalyzer>({
@@ -68,10 +71,10 @@ describe(DiscoveryEngine.name, () => {
         relatives: {},
       })
 
-    const engine = new DiscoveryEngine(addressAnalyzer, discoveryLogger)
-    const result = await engine.discover(provider, config)
+    const engine = new DiscoveryEngine(addressAnalyzer, Logger.SILENT)
+    const { analyses } = await engine.discover(provider, config.structure, 1234)
 
-    expect(result).toEqual([
+    expect(analyses).toEqual([
       {
         ...base,
         type: 'Contract',
@@ -88,18 +91,14 @@ describe(DiscoveryEngine.name, () => {
       },
       { ...base, type: 'Contract', name: 'D', address: D },
     ])
-
-    expect(discoveryLogger.log).toHaveBeenCalledTimes(5)
-    expect(discoveryLogger.logRelatives).toHaveBeenCalledTimes(0)
-    expect(discoveryLogger.flushServer).toHaveBeenCalledTimes(1)
   })
 })
 
 const generateFakeConfig = (
-  initialAddresses: EthereumAddress[],
-  overrides: RawDiscoveryConfig['overrides'],
-): DiscoveryConfig => {
-  return new DiscoveryConfig({
+  initialAddresses: ChainSpecificAddress[],
+  overrides: StructureConfig['overrides'],
+): ConfigRegistry => {
+  return new ConfigRegistry({
     name: 'test',
     chain: 'ethereum',
     initialAddresses,

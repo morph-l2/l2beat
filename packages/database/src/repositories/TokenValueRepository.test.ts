@@ -1,0 +1,2387 @@
+import { assert, type TokenId, UnixTime } from '@l2beat/shared-pure'
+import { expect } from 'earl'
+import { describeDatabase } from '../test/database'
+import { testDeletingArchivedRecords } from '../utils/deleteArchivedRecords.test'
+import { TokenValueRepository } from './TokenValueRepository'
+
+describeDatabase(TokenValueRepository.name, (db) => {
+  const repository = db.tvsTokenValue
+
+  describe(TokenValueRepository.prototype.upsertMany.name, () => {
+    it('inserts new records', async () => {
+      const records = [
+        tokenValue('a', 'ethereum', UnixTime(100), 10, 10000, 8000, 5000, 10),
+        tokenValue('b', 'arbitrum', UnixTime(100), 1000, 1000, 800, 500, 20),
+      ]
+
+      const inserted = await repository.upsertMany(records)
+      expect(inserted).toEqual(2)
+
+      const result = await repository.getAll()
+      expect(result).toEqualUnsorted(records)
+    })
+
+    it('handles empty array', async () => {
+      const inserted = await repository.upsertMany([])
+      expect(inserted).toEqual(0)
+    })
+
+    it('performs batch insert when more than 1000 records', async () => {
+      const records = []
+      for (let i = 0; i < 1500; i++) {
+        records.push(
+          tokenValue(
+            'a',
+            'ethereum',
+            UnixTime(i),
+            i + 10,
+            (i + 10) * 1000,
+            (i + 10) * 800,
+            (i + 10) * 500,
+            10,
+          ),
+        )
+      }
+
+      const inserted = await repository.upsertMany(records)
+      expect(inserted).toEqual(1500)
+
+      const result = await repository.getAll()
+      expect(result.length).toEqual(1500)
+    })
+
+    it('updates existing records on conflict', async () => {
+      const initialRecords = [
+        tokenValue('a', 'ethereum', UnixTime(100), 10, 10000, 8000, 5000, 10),
+        tokenValue('b', 'arbitrum', UnixTime(100), 1000, 1000, 800, 500, 20),
+      ]
+
+      await repository.upsertMany(initialRecords)
+
+      const updatedRecords = [
+        tokenValue('a', 'ethereum', UnixTime(100), 20, 20000, 16000, 10000, 15),
+        tokenValue('b', 'arbitrum', UnixTime(100), 2000, 2000, 1600, 1000, 25),
+      ]
+
+      const inserted = await repository.upsertMany(updatedRecords)
+      expect(inserted).toEqual(2)
+
+      const result = await repository.getAll()
+      expect(result).toEqualUnsorted(updatedRecords)
+    })
+  })
+
+  describe(
+    TokenValueRepository.prototype.getMaxTimestampAtOrBeforeForProjects.name,
+    () => {
+      it('returns latest timestamp for provided projects', async () => {
+        await repository.upsertMany([
+          tokenValue('a', 'ethereum', UnixTime(100), 10, 10000, 8000, 5000, 10),
+          tokenValue('b', 'arbitrum', UnixTime(300), 10, 10000, 8000, 5000, 10),
+          tokenValue('c', 'base', UnixTime(200), 10, 10000, 8000, 5000, 10),
+        ])
+
+        const result = await repository.getMaxTimestampAtOrBeforeForProjects(
+          UnixTime(300),
+          ['ethereum', 'base'],
+        )
+
+        expect(result).toEqual(UnixTime(200))
+      })
+
+      it('returns undefined for empty project list', async () => {
+        await repository.upsertMany([
+          tokenValue('a', 'ethereum', UnixTime(100), 10, 10000, 8000, 5000, 10),
+        ])
+
+        const result = await repository.getMaxTimestampAtOrBeforeForProjects(
+          UnixTime(100),
+          [],
+        )
+
+        expect(result).toEqual(undefined)
+      })
+    },
+  )
+
+  describe(TokenValueRepository.prototype.getByProject.name, () => {
+    beforeEach(async () => {
+      await repository.upsertMany([
+        tokenValue('a', 'ethereum', UnixTime(50), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 10),
+        tokenValue('a', 'ethereum', UnixTime(150), 3, 3000, 2400, 1500, 10),
+        tokenValue('a', 'ethereum', UnixTime(200), 4, 4000, 3200, 2000, 10),
+        tokenValue('a', 'ethereum', UnixTime(250), 5, 5000, 4000, 2500, 10),
+        tokenValue('b', 'arbitrum', UnixTime(100), 10, 10000, 8000, 5000, 20),
+        tokenValue('b', 'arbitrum', UnixTime(200), 20, 20000, 16000, 10000, 20),
+        tokenValue('c', 'ethereum', UnixTime(150), 30, 30000, 24000, 15000, 30),
+      ])
+    })
+
+    it('returns records for a project within the specified time range (inclusive)', async () => {
+      const result = await repository.getByProject(
+        'ethereum',
+        UnixTime(100),
+        UnixTime(200),
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 10),
+        tokenValue('a', 'ethereum', UnixTime(150), 3, 3000, 2400, 1500, 10),
+        tokenValue('a', 'ethereum', UnixTime(200), 4, 4000, 3200, 2000, 10),
+        tokenValue('c', 'ethereum', UnixTime(150), 30, 30000, 24000, 15000, 30),
+      ])
+    })
+
+    it('returns empty array when no records match the time range', async () => {
+      const result = await repository.getByProject(
+        'ethereum',
+        UnixTime(300),
+        UnixTime(400),
+      )
+
+      expect(result).toEqual([])
+    })
+
+    it('returns empty array when project does not exist', async () => {
+      const result = await repository.getByProject(
+        'non-existent',
+        UnixTime(100),
+        UnixTime(200),
+      )
+
+      expect(result).toEqual([])
+    })
+
+    it('handles single-point time range (from = to)', async () => {
+      const result = await repository.getByProject(
+        'ethereum',
+        UnixTime(150),
+        UnixTime(150),
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(150), 3, 3000, 2400, 1500, 10),
+        tokenValue('c', 'ethereum', UnixTime(150), 30, 30000, 24000, 15000, 30),
+      ])
+    })
+
+    it('returns records from multiple configurations for the same project', async () => {
+      const result = await repository.getByProject(
+        'ethereum',
+        UnixTime(150),
+        UnixTime(150),
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(150), 3, 3000, 2400, 1500, 10),
+        tokenValue('c', 'ethereum', UnixTime(150), 30, 30000, 24000, 15000, 30),
+      ])
+    })
+
+    it('respects time boundaries exactly', async () => {
+      const result = await repository.getByProject(
+        'ethereum',
+        UnixTime(100),
+        UnixTime(150),
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 10),
+        tokenValue('a', 'ethereum', UnixTime(150), 3, 3000, 2400, 1500, 10),
+        tokenValue('c', 'ethereum', UnixTime(150), 30, 30000, 24000, 15000, 30),
+      ])
+    })
+  })
+
+  describe(TokenValueRepository.prototype.getByTokenIdInTimeRange.name, () => {
+    beforeEach(async () => {
+      await repository.upsertMany([
+        tokenValue('a', 'ethereum', UnixTime(105), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(110), 2, 2000, 1600, 1000, 10),
+        tokenValue('a', 'ethereum', UnixTime(115), 3, 3000, 2400, 1500, 10),
+        tokenValue('a', 'ethereum', UnixTime(120), 4, 4000, 3200, 2000, 10),
+        tokenValue('a', 'ethereum', UnixTime(125), 5, 5000, 4000, 2500, 10),
+        tokenValue('b', 'ethereum', UnixTime(110), 10, 10000, 8000, 5000, 20),
+        tokenValue('b', 'ethereum', UnixTime(120), 20, 20000, 16000, 10000, 20),
+        tokenValue('c', 'ethereum', UnixTime(115), 30, 30000, 24000, 15000, 30),
+      ])
+    })
+
+    it('returns record for a project and token within the specified time range (inclusive) in ascending time order', async () => {
+      const result = await repository.getByTokenIdInTimeRange(
+        'a' as TokenId,
+        UnixTime(105),
+        UnixTime(125),
+      )
+
+      expect(result).toEqual([
+        tokenValue('a', 'ethereum', UnixTime(105), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(110), 2, 2000, 1600, 1000, 10),
+        tokenValue('a', 'ethereum', UnixTime(115), 3, 3000, 2400, 1500, 10),
+        tokenValue('a', 'ethereum', UnixTime(120), 4, 4000, 3200, 2000, 10),
+        tokenValue('a', 'ethereum', UnixTime(125), 5, 5000, 4000, 2500, 10),
+      ])
+    })
+
+    it('returns all records for a token when both time ranges are null', async () => {
+      const result = await repository.getByTokenIdInTimeRange(
+        'a' as TokenId,
+        null,
+        null,
+      )
+
+      expect(result).toEqual([
+        tokenValue('a', 'ethereum', UnixTime(105), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(110), 2, 2000, 1600, 1000, 10),
+        tokenValue('a', 'ethereum', UnixTime(115), 3, 3000, 2400, 1500, 10),
+        tokenValue('a', 'ethereum', UnixTime(120), 4, 4000, 3200, 2000, 10),
+        tokenValue('a', 'ethereum', UnixTime(125), 5, 5000, 4000, 2500, 10),
+      ])
+    })
+
+    it('returns records from specified time when only fromInclusive is provided', async () => {
+      const result = await repository.getByTokenIdInTimeRange(
+        'a' as TokenId,
+        UnixTime(115),
+        null,
+      )
+
+      expect(result).toEqual([
+        tokenValue('a', 'ethereum', UnixTime(115), 3, 3000, 2400, 1500, 10),
+        tokenValue('a', 'ethereum', UnixTime(120), 4, 4000, 3200, 2000, 10),
+        tokenValue('a', 'ethereum', UnixTime(125), 5, 5000, 4000, 2500, 10),
+      ])
+    })
+
+    it('returns records up to specified time when only toInclusive is provided', async () => {
+      const result = await repository.getByTokenIdInTimeRange(
+        'a' as TokenId,
+        null,
+        UnixTime(115),
+      )
+
+      expect(result).toEqual([
+        tokenValue('a', 'ethereum', UnixTime(105), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(110), 2, 2000, 1600, 1000, 10),
+        tokenValue('a', 'ethereum', UnixTime(115), 3, 3000, 2400, 1500, 10),
+      ])
+    })
+
+    it('returns empty array when no records match the time range', async () => {
+      const result = await repository.getByTokenIdInTimeRange(
+        'a' as TokenId,
+        UnixTime(130),
+        UnixTime(140),
+      )
+
+      expect(result).toEqual([])
+    })
+
+    it('returns empty array when token does not exist', async () => {
+      const result = await repository.getByTokenIdInTimeRange(
+        'non-existent' as TokenId,
+        UnixTime(110),
+        UnixTime(120),
+      )
+
+      expect(result).toEqual([])
+    })
+
+    it('handles single-point time range (from = to)', async () => {
+      const result = await repository.getByTokenIdInTimeRange(
+        'a' as TokenId,
+        UnixTime(115),
+        UnixTime(115),
+      )
+
+      expect(result).toEqual([
+        tokenValue('a', 'ethereum', UnixTime(115), 3, 3000, 2400, 1500, 10),
+      ])
+    })
+  })
+
+  describe(TokenValueRepository.prototype.getByProjectAtOrBefore.name, () => {
+    beforeEach(async () => {
+      await repository.upsertMany([
+        // Token A with multiple timestamps
+        tokenValue('a', 'ethereum', UnixTime(100), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(150), 5, 5000, 4000, 2500, 10),
+        tokenValue('a', 'ethereum', UnixTime(200), 10, 10000, 8000, 5000, 10),
+
+        // Token B with multiple timestamps
+        tokenValue('b', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 10),
+        tokenValue('b', 'ethereum', UnixTime(180), 8, 8000, 6400, 4000, 10),
+
+        // Token C with a single timestamp
+        tokenValue('c', 'ethereum', UnixTime(100), 3, 3000, 2400, 1500, 10),
+
+        // Different project
+        tokenValue('d', 'arbitrum', UnixTime(100), 10, 10000, 8000, 5000, 10),
+        tokenValue('d', 'arbitrum', UnixTime(200), 20, 20000, 16000, 10000, 10),
+      ])
+    })
+
+    it('returns latest record for each token at or before timestamp', async () => {
+      const result = await repository.getByProjectAtOrBefore(
+        'ethereum',
+        UnixTime(180),
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(150), 5, 5000, 4000, 2500, 10),
+        tokenValue('b', 'ethereum', UnixTime(180), 8, 8000, 6400, 4000, 10),
+        tokenValue('c', 'ethereum', UnixTime(100), 3, 3000, 2400, 1500, 10),
+      ])
+    })
+
+    it('returns records exactly at the timestamp when available', async () => {
+      const result = await repository.getByProjectAtOrBefore(
+        'ethereum',
+        UnixTime(100),
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(100), 1, 1000, 800, 500, 10),
+        tokenValue('b', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 10),
+        tokenValue('c', 'ethereum', UnixTime(100), 3, 3000, 2400, 1500, 10),
+      ])
+    })
+
+    it('returns records before the timestamp when no exact match', async () => {
+      const result = await repository.getByProjectAtOrBefore(
+        'ethereum',
+        UnixTime(170),
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(150), 5, 5000, 4000, 2500, 10),
+        tokenValue('b', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 10),
+        tokenValue('c', 'ethereum', UnixTime(100), 3, 3000, 2400, 1500, 10),
+      ])
+    })
+
+    it('returns empty array when no records before or at timestamp', async () => {
+      const result = await repository.getByProjectAtOrBefore(
+        'ethereum',
+        UnixTime(50),
+      )
+
+      expect(result).toEqual([])
+    })
+
+    it('returns records up to the latest timestamp for each token', async () => {
+      const result = await repository.getByProjectAtOrBefore(
+        'ethereum',
+        UnixTime(250),
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(200), 10, 10000, 8000, 5000, 10),
+        tokenValue('b', 'ethereum', UnixTime(180), 8, 8000, 6400, 4000, 10),
+        tokenValue('c', 'ethereum', UnixTime(100), 3, 3000, 2400, 1500, 10),
+      ])
+    })
+  })
+
+  describe(TokenValueRepository.prototype.getLastNonZeroValue.name, () => {
+    beforeEach(async () => {
+      await repository.upsertMany([
+        // Token A with multiple timestamps
+        tokenValue('a', 'ethereum', UnixTime(100), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(150), 5, 5000, 4000, 2500, 10),
+        tokenValue('a', 'ethereum', UnixTime(200), 10, 10000, 8000, 5000, 10),
+
+        // Token B with zero value at some timestamps
+        tokenValue('b', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 20),
+        tokenValue('b', 'ethereum', UnixTime(130), 0, 0, 0, 0, 20), // zero value
+
+        // Token C with a single timestamp
+        tokenValue('c', 'arbitrum', UnixTime(100), 3, 3000, 2400, 1500, 30),
+      ])
+    })
+
+    it('returns latest non-zero record for each token at or before timestamp', async () => {
+      const result = await repository.getLastNonZeroValue(UnixTime(150))
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(150), 5, 5000, 4000, 2500, 10),
+        tokenValue('b', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 20),
+        tokenValue('c', 'arbitrum', UnixTime(100), 3, 3000, 2400, 1500, 30),
+      ])
+    })
+
+    it('returns latest non-zero record for each token of given project at or before timestamp', async () => {
+      const result = await repository.getLastNonZeroValue(
+        UnixTime(150),
+        'ethereum',
+      )
+
+      expect(result).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(150), 5, 5000, 4000, 2500, 10),
+        tokenValue('b', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 20),
+      ])
+    })
+  })
+
+  describe(TokenValueRepository.prototype.deleteByConfigIds.name, () => {
+    it('deletes all rows for given configuration ids', async () => {
+      await repository.upsertMany([
+        tokenValue('a', 'ethereum', UnixTime(1), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(2), 2, 2000, 1600, 1000, 20),
+        tokenValue('b', 'arbitrum', UnixTime(1), 1000, 1000, 800, 500, 30),
+        tokenValue('c', 'ethereum', UnixTime(1), 3, 3000, 2400, 1500, 40),
+      ])
+
+      const deleted = await repository.deleteByConfigIds([
+        'a'.repeat(12),
+        'b'.repeat(12),
+      ])
+
+      expect(deleted).toEqual(3)
+
+      const results = await repository.getAll()
+      expect(results).toEqualUnsorted([
+        tokenValue('c', 'ethereum', UnixTime(1), 3, 3000, 2400, 1500, 40),
+      ])
+    })
+
+    it('returns 0 for empty ids', async () => {
+      await repository.upsertMany([
+        tokenValue('a', 'ethereum', UnixTime(1), 1, 1000, 800, 500, 10),
+      ])
+
+      const deleted = await repository.deleteByConfigIds([])
+      expect(deleted).toEqual(0)
+
+      const results = await repository.getAll()
+      expect(results).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(1), 1, 1000, 800, 500, 10),
+      ])
+    })
+
+    it('returns 0 when no matching config found', async () => {
+      await repository.upsertMany([
+        tokenValue('a', 'ethereum', UnixTime(1), 1, 1000, 800, 500, 10),
+      ])
+
+      const deleted = await repository.deleteByConfigIds(['b'.repeat(12)])
+      expect(deleted).toEqual(0)
+
+      const results = await repository.getAll()
+      expect(results).toEqualUnsorted([
+        tokenValue('a', 'ethereum', UnixTime(1), 1, 1000, 800, 500, 10),
+      ])
+    })
+  })
+
+  describe(
+    TokenValueRepository.prototype.getLastNonZeroValueByProjects.name,
+    () => {
+      beforeEach(async () => {
+        await repository.upsertMany([
+          // ethereum: token a has values at 100, 150, 200
+          tokenValue('a', 'ethereum', UnixTime(100), 1, 1000, 800, 500, 10),
+          tokenValue('a', 'ethereum', UnixTime(150), 5, 5000, 4000, 2500, 10),
+          tokenValue('a', 'ethereum', UnixTime(200), 10, 10000, 8000, 5000, 10),
+
+          // ethereum: token b has zero value at 130
+          tokenValue('b', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 20),
+          tokenValue('b', 'ethereum', UnixTime(130), 0, 0, 0, 0, 20),
+
+          // arbitrum: token c has a single non-zero value
+          tokenValue('c', 'arbitrum', UnixTime(100), 3, 3000, 2400, 1500, 30),
+
+          // optimism: token d should not be included
+          tokenValue('d', 'optimism', UnixTime(100), 4, 4000, 3200, 2000, 40),
+        ])
+      })
+
+      it('returns latest non-zero record per (project, token) for given projects', async () => {
+        const result = await repository.getLastNonZeroValueByProjects(
+          UnixTime(150),
+          ['ethereum', 'arbitrum'],
+        )
+
+        expect(result).toEqualUnsorted([
+          tokenValue('a', 'ethereum', UnixTime(150), 5, 5000, 4000, 2500, 10),
+          tokenValue('b', 'ethereum', UnixTime(100), 2, 2000, 1600, 1000, 20),
+          tokenValue('c', 'arbitrum', UnixTime(100), 3, 3000, 2400, 1500, 30),
+        ])
+      })
+
+      it('returns empty array when no projects are provided', async () => {
+        const result = await repository.getLastNonZeroValueByProjects(
+          UnixTime(150),
+          [],
+        )
+
+        expect(result).toEqual([])
+      })
+    },
+  )
+
+  describe(
+    TokenValueRepository.prototype.deleteByConfigInTimeRange.name,
+    () => {
+      it('deletes data in range for matching config', async () => {
+        await repository.upsertMany([
+          tokenValue('b', 'ethereum', UnixTime(1), 1, 1000, 800, 500, 10),
+          tokenValue('b', 'ethereum', UnixTime(2), 2, 2000, 1600, 1000, 20),
+          tokenValue('b', 'ethereum', UnixTime(3), 3, 3000, 2400, 1500, 30),
+          tokenValue('c', 'arbitrum', UnixTime(2), 1000, 1000, 800, 500, 40),
+        ])
+
+        const deleted = await repository.deleteByConfigInTimeRange(
+          'b'.repeat(12),
+          UnixTime(1),
+          UnixTime(2),
+        )
+
+        expect(deleted).toEqual(2)
+
+        const results = await repository.getAll()
+        expect(results).toEqualUnsorted([
+          tokenValue('b', 'ethereum', UnixTime(3), 3, 3000, 2400, 1500, 30),
+          tokenValue('c', 'arbitrum', UnixTime(2), 1000, 1000, 800, 500, 40),
+        ])
+      })
+
+      it('returns 0 if no matching config found', async () => {
+        await repository.upsertMany([
+          tokenValue('b', 'ethereum', UnixTime(1), 1, 1000, 800, 500, 10),
+        ])
+
+        const deleted = await repository.deleteByConfigInTimeRange(
+          'c'.repeat(12),
+          UnixTime(1),
+          UnixTime(2),
+        )
+
+        expect(deleted).toEqual(0)
+
+        const results = await repository.getAll()
+        expect(results).toEqualUnsorted([
+          tokenValue('b', 'ethereum', UnixTime(1), 1, 1000, 800, 500, 10),
+        ])
+      })
+    },
+  )
+
+  describe('archived cleaning methods', () => {
+    testDeletingArchivedRecords(
+      {
+        deleteHourlyUntil: (dateRange) =>
+          repository.deleteHourlyUntil(dateRange),
+        deleteSixHourlyUntil: (dateRange) =>
+          repository.deleteSixHourlyUntil(dateRange),
+        insertMany: (records) => repository.upsertMany(records),
+        getAll: () => repository.getAll(),
+      },
+      (timestamp) =>
+        tokenValue('a', 'ethereum', timestamp, 1, 1000, 800, 500, 10),
+    )
+  })
+
+  describe(TokenValueRepository.prototype.checkIfExists.name, () => {
+    beforeEach(async () => {
+      await repository.upsertMany([
+        tokenValue('a', 'ethereum', UnixTime(100), 1, 1000, 800, 500, 10),
+        tokenValue('a', 'ethereum', UnixTime(200), 2, 2000, 1600, 1000, 10),
+        tokenValue('b', 'arbitrum', UnixTime(150), 10, 10000, 8000, 5000, 20),
+        tokenValue('c', 'optimism', UnixTime(300), 5, 5000, 4000, 2500, 30),
+      ])
+    })
+
+    it('returns true when project exists', async () => {
+      const exists = await repository.checkIfExists('ethereum')
+      expect(exists).toEqual(true)
+    })
+
+    it('returns false when project does not exist', async () => {
+      const exists = await repository.checkIfExists('non-existent')
+      expect(exists).toEqual(false)
+    })
+
+    it('returns true when project has records from specified timestamp', async () => {
+      const exists = await repository.checkIfExists('ethereum', UnixTime(200))
+      expect(exists).toEqual(true)
+    })
+
+    it('returns false when project has no records from specified timestamp', async () => {
+      const exists = await repository.checkIfExists('ethereum', UnixTime(250))
+      expect(exists).toEqual(false)
+    })
+  })
+
+  describe(
+    TokenValueRepository.prototype.getFirstTimestampByTokenId.name,
+    () => {
+      beforeEach(async () => {
+        await repository.upsertMany([
+          tokenValue('a', 'ethereum', UnixTime(100), 1, 1000, 800, 500, 10),
+          tokenValue('a', 'ethereum', UnixTime(50), 1, 1000, 800, 500, 10),
+          tokenValue('b', 'arbitrum', UnixTime(30), 1, 1000, 800, 500, 10),
+        ])
+      })
+
+      it('returns the earliest timestamp for a token', async () => {
+        const result = await repository.getFirstTimestampByTokenId('a')
+        expect(result).toEqual(UnixTime(50))
+      })
+
+      it('is scoped to the given token', async () => {
+        const result = await repository.getFirstTimestampByTokenId('b')
+        expect(result).toEqual(UnixTime(30))
+      })
+
+      it('returns undefined when the token has no records', async () => {
+        const result = await repository.getFirstTimestampByTokenId('missing')
+        expect(result).toEqual(undefined)
+      })
+    },
+  )
+
+  describe(
+    TokenValueRepository.prototype.getFirstTimestampByProjects.name,
+    () => {
+      beforeEach(async () => {
+        await repository.upsertMany([
+          tokenValue('a', 'ethereum', UnixTime(100), 1, 1000, 800, 500, 10),
+          tokenValue('b', 'ethereum', UnixTime(60), 1, 1000, 800, 500, 10),
+          tokenValue('c', 'arbitrum', UnixTime(30), 1, 1000, 800, 500, 10),
+        ])
+      })
+
+      it('returns the earliest timestamp across the given projects', async () => {
+        const result = await repository.getFirstTimestampByProjects([
+          'ethereum',
+          'arbitrum',
+        ])
+        expect(result).toEqual(UnixTime(30))
+      })
+
+      it('is scoped to the given projects', async () => {
+        const result = await repository.getFirstTimestampByProjects([
+          'ethereum',
+        ])
+        expect(result).toEqual(UnixTime(60))
+      })
+
+      it('returns undefined when there are no matching records', async () => {
+        const result = await repository.getFirstTimestampByProjects(['missing'])
+        expect(result).toEqual(undefined)
+      })
+
+      it('returns undefined for an empty project list', async () => {
+        const result = await repository.getFirstTimestampByProjects([])
+        expect(result).toEqual(undefined)
+      })
+    },
+  )
+
+  describe('dal tvs', () => {
+    const metadataRepository = db.tvsTokenMetadata
+
+    beforeEach(async () => {
+      // Insert token metadata with different sources and categories
+      await metadataRepository.insertMany([
+        // Ethereum tokens
+        {
+          projectId: 'ethereum',
+          tokenId: 'a', // eth-canonical-ether
+          source: 'canonical',
+          category: 'ether',
+          isAssociated: false,
+        },
+        {
+          projectId: 'ethereum',
+          tokenId: 'b', // eth-canonical-stablecoin
+          source: 'canonical',
+          category: 'stablecoin',
+          isAssociated: false,
+        },
+        {
+          projectId: 'ethereum',
+          tokenId: 'c', // eth-external-btc
+          source: 'external',
+          category: 'btc',
+          isAssociated: false,
+        },
+        {
+          projectId: 'ethereum',
+          tokenId: 'd', // eth-native-other
+          source: 'native',
+          category: 'other',
+          isAssociated: false,
+        },
+        {
+          projectId: 'ethereum',
+          tokenId: 'e', // eth-associated-token
+          source: 'canonical',
+          category: 'ether',
+          isAssociated: true,
+        },
+        {
+          projectId: 'ethereum',
+          tokenId: 'i', // eth-custom-canonical-stablecoin
+          source: 'custom-canonical',
+          category: 'stablecoin',
+          isAssociated: false,
+        },
+        // Arbitrum tokens
+        {
+          projectId: 'arbitrum',
+          tokenId: 'f', // arb-canonical-ether
+          source: 'canonical',
+          category: 'ether',
+          isAssociated: false,
+        },
+        {
+          projectId: 'arbitrum',
+          tokenId: 'g', // arb-external-rwa-restricted
+          source: 'external',
+          category: 'rwaRestricted',
+          isAssociated: false,
+        },
+        {
+          projectId: 'arbitrum',
+          tokenId: 'h', // arb-native-rwa-public
+          source: 'native',
+          category: 'rwaPublic',
+          isAssociated: false,
+        },
+      ])
+
+      // Insert token values at different timestamps
+      await repository.upsertMany([
+        // Timestamp 100
+        tokenValue(
+          'a', // eth-canonical-ether
+          'ethereum',
+          UnixTime(100),
+          100.5,
+          10000.5,
+          8000.5,
+          5000.25,
+          99.5,
+        ),
+        tokenValue(
+          'b', // eth-canonical-stablecoin
+          'ethereum',
+          UnixTime(100),
+          200.25,
+          20000.25,
+          16000.25,
+          10000.5,
+          100.25,
+        ),
+        tokenValue(
+          'c', // eth-external-btc
+          'ethereum',
+          UnixTime(100),
+          50.75,
+          5000.75,
+          4000.75,
+          2500.5,
+          98.75,
+        ),
+        tokenValue(
+          'd', // eth-native-other
+          'ethereum',
+          UnixTime(100),
+          30.5,
+          3000.5,
+          2400.5,
+          1500.75,
+          98.5,
+        ),
+        tokenValue(
+          'e', // eth-associated-token
+          'ethereum',
+          UnixTime(100),
+          10.25,
+          1000.25,
+          800.25,
+          500.5,
+          97.5,
+        ),
+        tokenValue(
+          'i', // eth-custom-canonical-stablecoin
+          'ethereum',
+          UnixTime(100),
+          50,
+          5000,
+          4000,
+          3000,
+          100,
+        ),
+        tokenValue(
+          'f', // arb-canonical-ether
+          'arbitrum',
+          UnixTime(100),
+          150.75,
+          15000.5,
+          12000.25,
+          7500.75,
+          99.75,
+        ),
+
+        // Timestamp 200
+        tokenValue(
+          'a', // eth-canonical-ether
+          'ethereum',
+          UnixTime(200),
+          200.5,
+          20000.25,
+          16000.25,
+          10000.5,
+          100.25,
+        ),
+        tokenValue(
+          'g', // arb-external-rwa-restricted
+          'arbitrum',
+          UnixTime(200),
+          100.25,
+          10000.5,
+          8000.5,
+          5000.25,
+          100.5,
+        ),
+        tokenValue(
+          'h', // arb-native-rwa-public
+          'arbitrum',
+          UnixTime(200),
+          80.75,
+          8000.5,
+          6400.5,
+          4000.5,
+          99.25,
+        ),
+
+        // Timestamp 300
+        tokenValue(
+          'a', // eth-canonical-ether
+          'ethereum',
+          UnixTime(300),
+          300.5,
+          30000.25,
+          24000.25,
+          15000.5,
+          100.5,
+        ),
+        tokenValue(
+          'f', // arb-canonical-ether
+          'arbitrum',
+          UnixTime(300),
+          250.75,
+          25000.5,
+          20000.25,
+          12500.75,
+          99.75,
+        ),
+      ])
+    })
+
+    describe(
+      TokenValueRepository.prototype.getSummedByTimestampByProjects.name,
+      () => {
+        it('sums values by timestamp for multiple projects using valueForProject', async () => {
+          const result = await repository.getSummedByTimestampByProjects(
+            ['ethereum', 'arbitrum'],
+            null,
+            null,
+            {
+              forSummary: false,
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          expect(result).toEqualUnsorted([
+            {
+              timestamp: UnixTime(100),
+              value:
+                8000.5 + 16000.25 + 4000.75 + 2400.5 + 800.25 + 4000 + 12000.25,
+              canonical: 8000.5 + 16000.25 + 800.25 + 12000.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5 + 800.25 + 12000.25,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+            },
+            {
+              timestamp: UnixTime(200),
+              value: 16000.25 + 8000.5 + 6400.5,
+              canonical: 16000.25,
+              customCanonical: 0,
+              external: 8000.5,
+              native: 6400.5,
+              ether: 16000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 8000.5,
+              rwaPublic: 6400.5,
+              other: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              value: 24000.25 + 20000.25,
+              canonical: 24000.25 + 20000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 24000.25 + 20000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+          ])
+        })
+
+        it('sums values by timestamp for multiple projects using valueForSummary', async () => {
+          const result = await repository.getSummedByTimestampByProjects(
+            ['ethereum', 'arbitrum'],
+            null,
+            null,
+            {
+              forSummary: true,
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          expect(result).toEqualUnsorted([
+            {
+              timestamp: UnixTime(100),
+              value:
+                5000.25 + 10000.5 + 2500.5 + 1500.75 + 500.5 + 3000 + 7500.75,
+              canonical: 5000.25 + 10000.5 + 500.5 + 7500.75,
+              customCanonical: 3000,
+              external: 2500.5,
+              native: 1500.75,
+              ether: 5000.25 + 500.5 + 7500.75,
+              stablecoin: 10000.5 + 3000,
+              btc: 2500.5,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 1500.75,
+            },
+            {
+              timestamp: UnixTime(200),
+              value: 10000.5 + 5000.25 + 4000.5,
+              canonical: 10000.5,
+              customCanonical: 0,
+              external: 5000.25,
+              native: 4000.5,
+              ether: 10000.5,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 5000.25,
+              rwaPublic: 4000.5,
+              other: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              value: 15000.5 + 12500.75,
+              canonical: 15000.5 + 12500.75,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 15000.5 + 12500.75,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+          ])
+        })
+
+        it('filters by time range with fromInclusive', async () => {
+          const result = await repository.getSummedByTimestampByProjects(
+            ['ethereum', 'arbitrum'],
+            UnixTime(200),
+            null,
+            {
+              forSummary: false,
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          expect(result).toEqualUnsorted([
+            {
+              timestamp: UnixTime(200),
+              value: 16000.25 + 8000.5 + 6400.5,
+              canonical: 16000.25,
+              customCanonical: 0,
+              external: 8000.5,
+              native: 6400.5,
+              ether: 16000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 8000.5,
+              rwaPublic: 6400.5,
+              other: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              value: 24000.25 + 20000.25,
+              canonical: 24000.25 + 20000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 24000.25 + 20000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+          ])
+        })
+
+        it('filters by time range with toInclusive', async () => {
+          const result = await repository.getSummedByTimestampByProjects(
+            ['ethereum', 'arbitrum'],
+            null,
+            UnixTime(200),
+            {
+              forSummary: false,
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          expect(result).toEqualUnsorted([
+            {
+              timestamp: UnixTime(100),
+              value:
+                8000.5 + 16000.25 + 4000.75 + 2400.5 + 800.25 + 4000 + 12000.25,
+              canonical: 8000.5 + 16000.25 + 800.25 + 12000.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5 + 800.25 + 12000.25,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+            },
+            {
+              timestamp: UnixTime(200),
+              value: 16000.25 + 8000.5 + 6400.5,
+              canonical: 16000.25,
+              customCanonical: 0,
+              external: 8000.5,
+              native: 6400.5,
+              ether: 16000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 8000.5,
+              rwaPublic: 6400.5,
+              other: 0,
+            },
+          ])
+        })
+
+        it('excludes associated tokens when excludeAssociated is true', async () => {
+          const result = await repository.getSummedByTimestampByProjects(
+            ['ethereum', 'arbitrum'],
+            UnixTime(100),
+            UnixTime(100),
+            {
+              forSummary: false,
+              excludeAssociatedTokens: true,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          expect(result).toEqualUnsorted([
+            {
+              timestamp: UnixTime(100),
+              value: 8000.5 + 16000.25 + 4000.75 + 2400.5 + 4000 + 12000.25,
+              canonical: 8000.5 + 16000.25 + 12000.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5 + 12000.25,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+            },
+          ])
+        })
+
+        it('returns empty array when projectIds is empty', async () => {
+          const result = await repository.getSummedByTimestampByProjects(
+            [],
+            null,
+            null,
+            {
+              forSummary: false,
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          expect(result).toEqual([])
+        })
+
+        it('returns empty array when no matching projects', async () => {
+          const result = await repository.getSummedByTimestampByProjects(
+            ['non-existent'],
+            null,
+            null,
+            {
+              forSummary: false,
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          expect(result).toEqual([])
+        })
+
+        it('excludes rwaRestricted tokens when includeRwaRestrictedTokens is false', async () => {
+          const result = await repository.getSummedByTimestampByProjects(
+            ['ethereum', 'arbitrum'],
+            UnixTime(200),
+            UnixTime(200),
+            {
+              forSummary: false,
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: true,
+            },
+          )
+
+          expect(result).toEqualUnsorted([
+            {
+              timestamp: UnixTime(200),
+              // Token 'a' (ethereum) + Token 'h' (arbitrum, rwaPublic)
+              // Token 'g' (arbitrum, rwaRestricted) should be excluded
+              value: 16000.25 + 6400.5, // 'a' + 'h'
+              canonical: 16000.25, // 'a'
+              customCanonical: 0,
+              external: 0, // 'g' was external but excluded
+              native: 6400.5, // 'h'
+              ether: 16000.25, // 'a'
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0, // excluded
+              rwaPublic: 6400.5, // 'h'
+              other: 0,
+            },
+          ])
+        })
+      },
+    )
+
+    afterEach(async () => {
+      await repository.deleteAll()
+      await metadataRepository.deleteAll()
+    })
+
+    describe(
+      TokenValueRepository.prototype
+        .getSummedByTimestampWithProjectsRangesPerProject.name,
+      () => {
+        it('sums values by timestamp respecting each project time range', async () => {
+          const result =
+            await repository.getSummedByTimestampWithProjectsRangesPerProject(
+              [
+                {
+                  projectId: 'ethereum',
+                  sinceTimestamp: UnixTime(100),
+                  untilTimestamp: UnixTime(200),
+                },
+                {
+                  projectId: 'arbitrum',
+                  sinceTimestamp: UnixTime(200),
+                  untilTimestamp: UnixTime(300),
+                },
+              ],
+              null,
+              null,
+              {
+                forSummary: false,
+                excludeAssociatedTokens: false,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(result).toEqualUnsorted([
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(100),
+              // Only ethereum tokens at timestamp 100
+              value: 8000.5 + 16000.25 + 4000.75 + 2400.5 + 800.25 + 4000,
+              canonical: 8000.5 + 16000.25 + 800.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5 + 800.25,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+            },
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(200),
+              value: 16000.25,
+              canonical: 16000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 16000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+            {
+              projectId: 'arbitrum',
+              timestamp: UnixTime(200),
+              value: 8000.5 + 6400.5,
+              canonical: 0,
+              customCanonical: 0,
+              external: 8000.5,
+              native: 6400.5,
+              ether: 0,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 8000.5,
+              rwaPublic: 6400.5,
+              other: 0,
+            },
+            {
+              projectId: 'arbitrum',
+              timestamp: UnixTime(300),
+              // Only arbitrum tokens at timestamp 300 (ethereum range ended at 200)
+              value: 20000.25,
+              canonical: 20000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 20000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+          ])
+        })
+
+        it('respects project ranges with no untilTimestamp', async () => {
+          const result =
+            await repository.getSummedByTimestampWithProjectsRangesPerProject(
+              [
+                {
+                  projectId: 'ethereum',
+                  sinceTimestamp: UnixTime(200),
+                  // No untilTimestamp - includes all future data
+                },
+                {
+                  projectId: 'arbitrum',
+                  sinceTimestamp: UnixTime(100),
+                  untilTimestamp: UnixTime(100),
+                },
+              ],
+              null,
+              null,
+              {
+                forSummary: false,
+                excludeAssociatedTokens: false,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(result).toEqualUnsorted([
+            {
+              projectId: 'arbitrum',
+              timestamp: UnixTime(100),
+              // Only arbitrum at timestamp 100
+              value: 12000.25,
+              canonical: 12000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 12000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(200),
+              // Only ethereum at timestamp 200 (arbitrum range ended at 100)
+              value: 16000.25,
+              canonical: 16000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 16000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(300),
+              // Only ethereum (no untilTimestamp)
+              value: 24000.25,
+              canonical: 24000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 24000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+          ])
+        })
+
+        it('filters by global time range with fromInclusive', async () => {
+          const result =
+            await repository.getSummedByTimestampWithProjectsRangesPerProject(
+              [
+                {
+                  projectId: 'ethereum',
+                  sinceTimestamp: UnixTime(100),
+                },
+                {
+                  projectId: 'arbitrum',
+                  sinceTimestamp: UnixTime(100),
+                },
+              ],
+              UnixTime(200), // Global fromInclusive
+              null,
+              {
+                forSummary: false,
+                excludeAssociatedTokens: false,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(result).toEqualUnsorted([
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(200),
+              value: 16000.25,
+              canonical: 16000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 16000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+            {
+              projectId: 'arbitrum',
+              timestamp: UnixTime(200),
+              value: 8000.5 + 6400.5,
+              canonical: 0,
+              customCanonical: 0,
+              external: 8000.5,
+              native: 6400.5,
+              ether: 0,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 8000.5,
+              rwaPublic: 6400.5,
+              other: 0,
+            },
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(300),
+              value: 24000.25,
+              canonical: 24000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 24000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+            {
+              projectId: 'arbitrum',
+              timestamp: UnixTime(300),
+              value: 20000.25,
+              canonical: 20000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 20000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+          ])
+        })
+
+        it('handles non-overlapping project ranges', async () => {
+          const result =
+            await repository.getSummedByTimestampWithProjectsRangesPerProject(
+              [
+                {
+                  projectId: 'ethereum',
+                  sinceTimestamp: UnixTime(100),
+                  untilTimestamp: UnixTime(100),
+                },
+                {
+                  projectId: 'arbitrum',
+                  sinceTimestamp: UnixTime(300),
+                  untilTimestamp: UnixTime(300),
+                },
+              ],
+              null,
+              null,
+              {
+                forSummary: false,
+                excludeAssociatedTokens: false,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(result).toEqualUnsorted([
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(100),
+              // Only ethereum
+              value: 8000.5 + 16000.25 + 4000.75 + 2400.5 + 800.25 + 4000,
+              canonical: 8000.5 + 16000.25 + 800.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5 + 800.25,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+            },
+            {
+              projectId: 'arbitrum',
+              timestamp: UnixTime(300),
+              // Only arbitrum
+              value: 20000.25,
+              canonical: 20000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 20000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+            },
+          ])
+        })
+
+        it('uses valueForSummary when forSummary is true', async () => {
+          const result =
+            await repository.getSummedByTimestampWithProjectsRangesPerProject(
+              [
+                {
+                  projectId: 'ethereum',
+                  sinceTimestamp: UnixTime(100),
+                  untilTimestamp: UnixTime(100),
+                },
+              ],
+              null,
+              null,
+              {
+                forSummary: true,
+                excludeAssociatedTokens: false,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(result).toEqualUnsorted([
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(100),
+              value: 5000.25 + 10000.5 + 2500.5 + 1500.75 + 500.5 + 3000,
+              canonical: 5000.25 + 10000.5 + 500.5,
+              customCanonical: 3000,
+              external: 2500.5,
+              native: 1500.75,
+              ether: 5000.25 + 500.5,
+              stablecoin: 10000.5 + 3000,
+              btc: 2500.5,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 1500.75,
+            },
+          ])
+        })
+
+        it('returns empty array when given empty projects array', async () => {
+          const result =
+            await repository.getSummedByTimestampWithProjectsRangesPerProject(
+              [],
+              null,
+              null,
+              {
+                forSummary: false,
+                excludeAssociatedTokens: false,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(result).toEqual([])
+        })
+
+        it('returns empty array when project ranges do not match any data', async () => {
+          const result =
+            await repository.getSummedByTimestampWithProjectsRangesPerProject(
+              [
+                {
+                  projectId: 'ethereum',
+                  sinceTimestamp: UnixTime(500),
+                  untilTimestamp: UnixTime(600),
+                },
+              ],
+              null,
+              null,
+              {
+                forSummary: false,
+                excludeAssociatedTokens: false,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(result).toEqual([])
+        })
+
+        it('excludes associated tokens when excludeAssociated is true', async () => {
+          const result =
+            await repository.getSummedByTimestampWithProjectsRangesPerProject(
+              [
+                {
+                  projectId: 'ethereum',
+                  sinceTimestamp: UnixTime(100),
+                  untilTimestamp: UnixTime(100),
+                },
+              ],
+              null,
+              null,
+              {
+                forSummary: false,
+                excludeAssociatedTokens: true,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(result).toEqualUnsorted([
+            {
+              projectId: 'ethereum',
+              timestamp: UnixTime(100),
+              // Excludes token 'e' (associated token with valueForProject 800.25)
+              value: 8000.5 + 16000.25 + 4000.75 + 2400.5 + 4000, // a + b + c + d + i
+              canonical: 8000.5 + 16000.25, // a + b
+              customCanonical: 4000, // i
+              external: 4000.75, // c
+              native: 2400.5, // d
+              ether: 8000.5, // a
+              stablecoin: 16000.25 + 4000, // b + i
+              btc: 4000.75, // c
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5, // d
+            },
+          ])
+        })
+      },
+    )
+
+    describe(
+      TokenValueRepository.prototype.getSummedByProjectForRanges.name,
+      () => {
+        it('returns per-project valueForProject sums ordered by timestamp within the inclusive range', async () => {
+          const result = await repository.getSummedByProjectForRanges(
+            ['ethereum', 'arbitrum'],
+            [[UnixTime(100), UnixTime(300)]],
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          const sorted = [...result].sort(
+            (a, b) =>
+              a.timestamp - b.timestamp || a.project.localeCompare(b.project),
+          )
+
+          expect(sorted).toEqual([
+            {
+              timestamp: UnixTime(100),
+              project: 'arbitrum',
+              value: 12000.25,
+              canonical: 12000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 12000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(100),
+              project: 'ethereum',
+              value: 8000.5 + 16000.25 + 4000 + 4000.75 + 2400.5 + 800.25,
+              canonical: 8000.5 + 16000.25 + 800.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5 + 800.25,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+              associated: 800.25,
+            },
+            {
+              timestamp: UnixTime(200),
+              project: 'arbitrum',
+              value: 8000.5 + 6400.5,
+              canonical: 0,
+              customCanonical: 0,
+              external: 8000.5,
+              native: 6400.5,
+              ether: 0,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 8000.5,
+              rwaPublic: 6400.5,
+              other: 0,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(200),
+              project: 'ethereum',
+              value: 16000.25,
+              canonical: 16000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 16000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              project: 'arbitrum',
+              value: 20000.25,
+              canonical: 20000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 20000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              project: 'ethereum',
+              value: 24000.25,
+              canonical: 24000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 24000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+          ])
+        })
+
+        it('applies no lower bound when range start is null', async () => {
+          const result = await repository.getSummedByProjectForRanges(
+            ['ethereum'],
+            [[null, UnixTime(150)]],
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+          expect(result).toEqual([
+            {
+              timestamp: UnixTime(100),
+              project: 'ethereum',
+              value: 8000.5 + 16000.25 + 4000 + 4000.75 + 2400.5 + 800.25,
+              canonical: 8000.5 + 16000.25 + 800.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5 + 800.25,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+              associated: 800.25,
+            },
+          ])
+        })
+
+        it('respects excludeAssociated and excludeRwaRestrictedTokens', async () => {
+          const associatedExcluded =
+            await repository.getSummedByProjectForRanges(
+              ['ethereum'],
+              [[UnixTime(100), UnixTime(100)]],
+              {
+                excludeAssociatedTokens: true,
+                excludeRwaRestrictedTokens: false,
+              },
+            )
+
+          expect(associatedExcluded).toEqual([
+            {
+              timestamp: UnixTime(100),
+              project: 'ethereum',
+              value: 8000.5 + 16000.25 + 4000 + 4000.75 + 2400.5,
+              canonical: 8000.5 + 16000.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+              associated: 0,
+            },
+          ])
+
+          const rwaExcluded = await repository.getSummedByProjectForRanges(
+            ['arbitrum'],
+            [[UnixTime(200), UnixTime(200)]],
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: true,
+            },
+          )
+
+          expect(rwaExcluded).toEqual([
+            {
+              timestamp: UnixTime(200),
+              project: 'arbitrum',
+              value: 6400.5,
+              canonical: 0,
+              customCanonical: 0,
+              external: 0,
+              native: 6400.5,
+              ether: 0,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 6400.5,
+              other: 0,
+              associated: 0,
+            },
+          ])
+        })
+
+        it('returns no rows when project ids are empty or unknown', async () => {
+          const emptyIds = await repository.getSummedByProjectForRanges(
+            [],
+            [[UnixTime(100), UnixTime(300)]],
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+          expect(emptyIds).toEqual([])
+
+          const unknownProject = await repository.getSummedByProjectForRanges(
+            ['non-existent'],
+            [[UnixTime(100), UnixTime(300)]],
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+          expect(unknownProject).toEqual([])
+        })
+
+        it('returns no rows when ranges array is empty', async () => {
+          const result = await repository.getSummedByProjectForRanges(
+            ['ethereum'],
+            [],
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+          expect(result).toEqual([])
+        })
+
+        it('supports dual point-in-time ranges with associated and rwaRestricted exclusions (monthly TVS leaderboard)', async () => {
+          const result = await repository.getSummedByProjectForRanges(
+            ['ethereum', 'arbitrum'],
+            [
+              [UnixTime(100), UnixTime(100)],
+              [UnixTime(300), UnixTime(300)],
+            ],
+            {
+              excludeAssociatedTokens: true,
+              excludeRwaRestrictedTokens: true,
+            },
+          )
+
+          const sorted = [...result].sort(
+            (a, b) =>
+              a.timestamp - b.timestamp || a.project.localeCompare(b.project),
+          )
+
+          expect(sorted).toEqual([
+            {
+              timestamp: UnixTime(100),
+              project: 'arbitrum',
+              value: 12000.25,
+              canonical: 12000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 12000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(100),
+              project: 'ethereum',
+              value: 8000.5 + 16000.25 + 4000 + 4000.75 + 2400.5,
+              canonical: 8000.5 + 16000.25,
+              customCanonical: 4000,
+              external: 4000.75,
+              native: 2400.5,
+              ether: 8000.5,
+              stablecoin: 16000.25 + 4000,
+              btc: 4000.75,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              project: 'arbitrum',
+              value: 20000.25,
+              canonical: 20000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 20000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              project: 'ethereum',
+              value: 24000.25,
+              canonical: 24000.25,
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 24000.25,
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+          ])
+        })
+      },
+    )
+
+    describe(
+      TokenValueRepository.prototype.getSummedAtTimestampsByProjects.name,
+      () => {
+        it('returns summed values at specific timestamps for projects', async () => {
+          const result = await repository.getSummedAtTimestampsByProjects(
+            100, // oldestTimestamp
+            300, // latestTimestamp
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+              cutOffTimestamp: 50,
+            },
+          )
+
+          expect(result).toEqualUnsorted([
+            {
+              timestamp: UnixTime(100),
+              project: 'ethereum',
+              value: 8000.5 + 16000.25 + 4000.75 + 2400.5 + 800.25 + 4000, // a + b + c + d + e + i valueForProject
+              canonical: 8000.5 + 16000.25 + 800.25, // a + b + e
+              customCanonical: 4000, // i
+              external: 4000.75, // c
+              native: 2400.5, // d
+              ether: 8000.5 + 800.25, // a + e
+              stablecoin: 16000.25 + 4000, // b + i
+              btc: 4000.75, // c
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5, // d
+              associated: 800.25, // e
+            },
+            {
+              timestamp: UnixTime(100),
+              project: 'arbitrum',
+              value: 12000.25, // f valueForProject
+              canonical: 12000.25, // f
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 12000.25, // f
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              project: 'ethereum',
+              value: 24000.25, // a valueForProject
+              canonical: 24000.25, // a
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 24000.25, // a
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+            {
+              timestamp: UnixTime(300),
+              project: 'arbitrum',
+              value: 20000.25, // f valueForProject
+              canonical: 20000.25, // f
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 20000.25, // f
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+          ])
+        })
+
+        it('excludes associated tokens when excludeAssociated is true', async () => {
+          const result = await repository.getSummedAtTimestampsByProjects(
+            100, // oldestTimestamp
+            100, // latestTimestamp (only timestamp 100)
+            {
+              excludeAssociatedTokens: true,
+              excludeRwaRestrictedTokens: false,
+              cutOffTimestamp: 50,
+            },
+          )
+
+          expect(result).toEqualUnsorted([
+            {
+              timestamp: UnixTime(100),
+              project: 'ethereum',
+              value: 8000.5 + 16000.25 + 4000.75 + 2400.5 + 4000, // a + b + c + d + i (excluding e)
+              canonical: 8000.5 + 16000.25, // a + b (excluding e)
+              customCanonical: 4000, // i
+              external: 4000.75, // c
+              native: 2400.5, // d
+              ether: 8000.5, // a (excluding e)
+              stablecoin: 16000.25 + 4000, // b + i
+              btc: 4000.75, // c
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 2400.5, // d
+              associated: 0, // excluded
+            },
+            {
+              timestamp: UnixTime(100),
+              project: 'arbitrum',
+              value: 12000.25, // f
+              canonical: 12000.25, // f
+              customCanonical: 0,
+              external: 0,
+              native: 0,
+              ether: 12000.25, // f
+              stablecoin: 0,
+              btc: 0,
+              rwaRestricted: 0,
+              rwaPublic: 0,
+              other: 0,
+              associated: 0,
+            },
+          ])
+        })
+
+        it('returns empty array when no timestamps match the range', async () => {
+          const result = await repository.getSummedAtTimestampsByProjects(
+            400, // oldestTimestamp - no data at this timestamp
+            500, // latestTimestamp - no data at this timestamp
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+              cutOffTimestamp: 50,
+            },
+          )
+
+          expect(result).toEqual([])
+        })
+
+        it('correctly categorizes tokens by source and category', async () => {
+          // Test specifically timestamp 200 which has different token types
+          const result = await repository.getSummedAtTimestampsByProjects(
+            200,
+            200,
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+              cutOffTimestamp: 50,
+            },
+          )
+
+          const arbitrumResult = result.find((r) => r.project === 'arbitrum')
+          assert(arbitrumResult)
+
+          // Check source breakdown
+          expect(arbitrumResult.canonical).toEqual(0)
+          expect(arbitrumResult.external).toEqual(8000.5) // g (rwaRestricted)
+          expect(arbitrumResult.native).toEqual(6400.5) // h (rwaPublic)
+
+          // Check category breakdown
+          expect(arbitrumResult.rwaRestricted).toEqual(8000.5) // g
+          expect(arbitrumResult.rwaPublic).toEqual(6400.5) // h
+          expect(arbitrumResult.ether).toEqual(0)
+          expect(arbitrumResult.stablecoin).toEqual(0)
+          expect(arbitrumResult.btc).toEqual(0)
+          expect(arbitrumResult.other).toEqual(0)
+        })
+
+        it('includes associated tokens in the associated field', async () => {
+          const result = await repository.getSummedAtTimestampsByProjects(
+            100,
+            100,
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+              cutOffTimestamp: 50,
+            },
+          )
+
+          const ethereumResult = result.find((r) => r.project === 'ethereum')
+          assert(ethereumResult)
+
+          expect(ethereumResult.associated).toEqual(800.25) // token e
+        })
+
+        it('excludes rwaRestricted tokens when includeRwaRestrictedTokens is false', async () => {
+          const result = await repository.getSummedAtTimestampsByProjects(
+            200, // timestamp where we have rwaRestricted token 'g'
+            200,
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: true,
+              cutOffTimestamp: 50,
+            },
+          )
+
+          const ethereumResult = result.find((r) => r.project === 'ethereum')
+          assert(ethereumResult)
+          expect(ethereumResult.value).toEqual(16000.25) // only token 'a'
+
+          const arbitrumResult = result.find((r) => r.project === 'arbitrum')
+          assert(arbitrumResult)
+
+          // Token 'g' (rwaRestricted) should be excluded, only 'h' (rwaPublic) should be included
+          expect(arbitrumResult.value).toEqual(6400.5) // only token 'h' (rwaPublic)
+          expect(arbitrumResult.external).toEqual(0) // token 'g' was external but excluded
+          expect(arbitrumResult.native).toEqual(6400.5) // token 'h' is native
+          expect(arbitrumResult.rwaRestricted).toEqual(0) // excluded
+          expect(arbitrumResult.rwaPublic).toEqual(6400.5) // token 'h'
+        })
+      },
+    )
+  })
+
+  describe(
+    TokenValueRepository.prototype.getSummedByProjectAtLatestAndSevenDaysBefore
+      .name,
+    () => {
+      const metadataRepository = db.tvsTokenMetadata
+      const DAY = UnixTime.DAY
+      const T0 = UnixTime(1_000_000)
+
+      beforeEach(async () => {
+        await metadataRepository.insertMany([
+          {
+            projectId: 'arbitrum',
+            tokenId: 'a',
+            source: 'canonical',
+            category: 'ether',
+            isAssociated: false,
+          },
+          {
+            projectId: 'arbitrum',
+            tokenId: 'b',
+            source: 'external',
+            category: 'stablecoin',
+            isAssociated: true,
+          },
+          {
+            projectId: 'base',
+            tokenId: 'c',
+            source: 'native',
+            category: 'other',
+            isAssociated: false,
+          },
+        ])
+        await repository.upsertMany([
+          // arbitrum: hourly rows over the range, latest at T0 + 2h, and a
+          // matching row exactly seven days before the latest one.
+          tokenValue('a', 'arbitrum', T0, 1, 100, 100, 100, 1),
+          tokenValue('a', 'arbitrum', T0 + UnixTime.HOUR, 1, 200, 200, 200, 1),
+          tokenValue(
+            'a',
+            'arbitrum',
+            T0 + 2 * UnixTime.HOUR,
+            1,
+            300,
+            300,
+            300,
+            1,
+          ),
+          tokenValue('b', 'arbitrum', T0 + 2 * UnixTime.HOUR, 1, 50, 50, 50, 1),
+          tokenValue(
+            'a',
+            'arbitrum',
+            T0 + 2 * UnixTime.HOUR - 7 * DAY,
+            1,
+            30,
+            30,
+            30,
+            1,
+          ),
+          // A seven-days-before row that matches an older, non-latest hour
+          // must not be returned.
+          tokenValue('a', 'arbitrum', T0 - 7 * DAY, 1, 10, 10, 10, 1),
+          // base: only has a latest row, nothing seven days before.
+          tokenValue('c', 'base', T0 + UnixTime.HOUR, 1, 500, 500, 500, 1),
+          // Outside the range: must not become the latest.
+          tokenValue(
+            'a',
+            'arbitrum',
+            T0 + 5 * UnixTime.HOUR,
+            1,
+            999,
+            999,
+            999,
+            1,
+          ),
+        ])
+      })
+
+      afterEach(async () => {
+        await metadataRepository.deleteAll()
+      })
+
+      it('sums each project at its latest timestamp in range and seven days before it', async () => {
+        const result =
+          await repository.getSummedByProjectAtLatestAndSevenDaysBefore(
+            ['arbitrum', 'base'],
+            [T0, T0 + 3 * UnixTime.HOUR],
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: true,
+            },
+          )
+
+        expect(result.map((r) => [r.project, r.timestamp, r.value])).toEqual([
+          ['arbitrum', T0 + 2 * UnixTime.HOUR - 7 * DAY, 30],
+          ['base', T0 + UnixTime.HOUR, 500],
+          ['arbitrum', T0 + 2 * UnixTime.HOUR, 350],
+        ])
+      })
+
+      it('applies the same breakdown and filters as getSummedByProjectForRanges', async () => {
+        const opts = {
+          excludeAssociatedTokens: true,
+          excludeRwaRestrictedTokens: true,
+        }
+        const result =
+          await repository.getSummedByProjectAtLatestAndSevenDaysBefore(
+            ['arbitrum'],
+            [T0, T0 + 3 * UnixTime.HOUR],
+            opts,
+          )
+        const reference = await repository.getSummedByProjectForRanges(
+          ['arbitrum'],
+          [[T0 + 2 * UnixTime.HOUR, T0 + 2 * UnixTime.HOUR]],
+          opts,
+        )
+
+        expect(result.filter((r) => r.timestamp >= T0)).toEqual(reference)
+        expect(reference[0]?.value).toEqual(300)
+      })
+
+      it('picks the latest timestamp among tokens that pass the filters', async () => {
+        // optimism's newest hour only holds an associated token, so with
+        // associated tokens excluded the latest row must be the older hour
+        // that still has an included token, not an orphaned 7d-before row.
+        await metadataRepository.insertMany([
+          {
+            projectId: 'optimism',
+            tokenId: 'e',
+            source: 'canonical',
+            category: 'ether',
+            isAssociated: false,
+          },
+          {
+            projectId: 'optimism',
+            tokenId: 'f',
+            source: 'native',
+            category: 'other',
+            isAssociated: true,
+          },
+        ])
+        await repository.upsertMany([
+          tokenValue(
+            'e',
+            'optimism',
+            T0 + UnixTime.HOUR - 7 * DAY,
+            1,
+            5,
+            5,
+            5,
+            1,
+          ),
+          tokenValue('e', 'optimism', T0 + UnixTime.HOUR, 1, 7, 7, 7, 1),
+          tokenValue('f', 'optimism', T0 + 2 * UnixTime.HOUR, 1, 9, 9, 9, 1),
+        ])
+
+        const result =
+          await repository.getSummedByProjectAtLatestAndSevenDaysBefore(
+            ['optimism'],
+            [T0, T0 + 3 * UnixTime.HOUR],
+            {
+              excludeAssociatedTokens: true,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+
+        expect(result.map((r) => [r.timestamp, r.value])).toEqual([
+          [T0 + UnixTime.HOUR - 7 * DAY, 5],
+          [T0 + UnixTime.HOUR, 7],
+        ])
+      })
+
+      it('is scoped to the given projects', async () => {
+        const result =
+          await repository.getSummedByProjectAtLatestAndSevenDaysBefore(
+            ['base'],
+            [T0, T0 + 3 * UnixTime.HOUR],
+            {
+              excludeAssociatedTokens: false,
+              excludeRwaRestrictedTokens: false,
+            },
+          )
+        expect(result.map((r) => r.project)).toEqual(['base'])
+      })
+    },
+  )
+
+  afterEach(async () => {
+    await repository.deleteAll()
+  })
+})
+
+function tokenValue(
+  configId: string,
+  projectId: string,
+  timestamp: UnixTime,
+  amount: number,
+  value: number,
+  valueForProject: number,
+  valueForSummary: number,
+  priceUsd: number,
+) {
+  return {
+    configurationId: configId.repeat(12),
+    projectId,
+    timestamp,
+    tokenId: configId,
+    amount,
+    value,
+    valueForProject,
+    valueForSummary,
+    priceUsd,
+  }
+}

@@ -1,15 +1,33 @@
-import { assert } from '@l2beat/backend-tools'
-import { BaseTypeCaster } from './BaseTypeCaster'
+import { assert } from '@l2beat/shared-pure'
+import type { BaseTypeCaster } from './BaseTypeCaster'
+import { Bytes32ToString } from './Bytes32ToString'
+import { BytesToString } from './BytesToString'
+import { CCIPAllowedFinality } from './CCIPAllowedFinality'
+import { CCIPCurseSubject } from './CCIPCurseSubject'
+import { CCIPOcr3Config } from './CCIPOcr3Config'
+import { ChainPrefix } from './ChainPrefix'
 import { FormatSeconds } from './FormatSeconds'
 import { GreaterThan } from './GreaterThan'
 import { Mapping } from './Mapping'
+import { Ocr3OffchainConfig } from './Ocr3OffchainConfig'
+import { SliceAddress } from './SliceAddress'
+import { TimeSince } from './TimeSince'
 import { Undecimal } from './Undecimal'
 
 export const TypeConverters = {
+  Bytes32ToString,
+  BytesToString,
+  CCIPAllowedFinality,
+  CCIPCurseSubject,
+  CCIPOcr3Config,
   FormatSeconds,
   Undecimal,
   Mapping,
+  ChainPrefix,
   GreaterThan,
+  TimeSince,
+  SliceAddress,
+  Ocr3OffchainConfig,
 }
 
 export function isCustomTypeCaster(name: string): boolean {

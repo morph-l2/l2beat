@@ -1,0 +1,404 @@
+import {
+  ChainSpecificAddress,
+  EthereumAddress,
+  formatSeconds,
+  ProjectId,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import {
+  CONTRACTS,
+  DA_BRIDGES,
+  DA_LAYERS,
+  DA_MODES,
+  EXITS,
+  FRONTRUNNING_RISK,
+  RISK_VIEW,
+} from '../../common'
+import { BADGES } from '../../common/badges'
+import { getRollupStage } from '../../common/stages/getRollupStage'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import type { ScalingProject } from '../../internalTypes'
+import { getDiscoveryInfo } from '../../templates/getDiscoveryInfo'
+import { readProjectMarkdown } from '../../utils/readMarkdown'
+
+const discovery = new ProjectDiscovery('lighter')
+
+const priorityExpiration = discovery.getContractValue<number>(
+  'Lighter',
+  'PRIORITY_EXPIRATION',
+)
+
+const upgradeDelay = discovery.getContractValue<number>(
+  'UpgradeGatekeeper',
+  'approvedUpgradeNoticePeriod',
+)
+
+const finalizationPeriod = 0 // state root immediately finalized when proven
+
+export const lighter: ScalingProject = {
+  id: ProjectId('lighter'),
+  type: 'layer2',
+  capability: 'appchain',
+  addedAt: UnixTime(1711551933), // 2024-03-27T15:05:33Z
+  badges: [BADGES.VM.AppChain, BADGES.DA.EthereumBlobs],
+  display: {
+    name: 'Lighter',
+    slug: 'lighter',
+    description:
+      'Lighter is an application-specific zk rollup on a mission to revolutionize trading by building provably fair, secure, and scalable infrastructure for finance.',
+    purposes: ['Exchange'],
+    links: {
+      websites: ['https://lighter.xyz', 'https://app.lighter.xyz/'],
+      explorers: ['https://app.lighter.xyz/explorer'],
+      documentation: [
+        'https://docs.lighter.xyz',
+        'https://assets.lighter.xyz/whitepaper.pdf',
+      ],
+      repositories: ['https://github.com/elliottech'],
+      socialMedia: [
+        'https://x.com/Lighter_xyz',
+        'https://discord.gg/lighterxyz',
+        'https://linkedin.com/company/lighter-xyz',
+        'https://t.me/lighterxyz_official',
+      ],
+    },
+  },
+  proofSystem: {
+    type: 'Validity',
+    zkCatalogIds: [ProjectId('lighterprover')],
+  },
+  dataAvailability: {
+    layer: DA_LAYERS.ETH_BLOBS,
+    bridge: DA_BRIDGES.ENSHRINED,
+    mode: DA_MODES.STATE_DIFFS,
+  },
+  chainConfig: {
+    name: 'lighter',
+    chainId: undefined,
+    apis: [],
+  },
+  config: {
+    associatedTokens: ['LIT'],
+    escrows: [
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(
+          'eth:0x3B4D794a66304F130a4Db8F2551B0070dfCf5ca7',
+        ),
+        tokens: [
+          'USDC',
+          'ETH',
+          'LIT',
+          'LINK',
+          'AAVE',
+          'UNI',
+          'SKY',
+          'LDO',
+          'AZTEC',
+        ],
+      }),
+    ],
+    daTracking: [
+      {
+        type: 'ethereum',
+        daLayer: ProjectId('ethereum'),
+        sinceBlock: 21642011, // https://etherscan.io/tx/0x228496195e6c4a6cdbf9fc3c153cce0fb652e5aeee5a4f0a966b16257ebb34b9
+        untilBlock: 24040916,
+        inbox: EthereumAddress('0x3B4D794a66304F130a4Db8F2551B0070dfCf5ca7'),
+        sequencers: [
+          EthereumAddress('0xfDb36C132fA19f7774d72fA39c89272D1B954A41'),
+          EthereumAddress('0xFBC0dcd6c3518cB529bC1B585dB992A7d40005fa'),
+          EthereumAddress('0xfcB73F6405F6B9be91013d9477d81833a69C9c0D'),
+          EthereumAddress('0x1c0F4f6daf0E0f32C5482672fa5342784915df21'),
+        ],
+      },
+      {
+        type: 'ethereum',
+        daLayer: ProjectId('ethereum'),
+        sinceBlock: 24040917, // https://etherscan.io/tx/0x61f50fb26d996bc13b8f528e2d29e723b29e80f5ae11358ac7bded4f735611d3
+        inbox: EthereumAddress('0x3B4D794a66304F130a4Db8F2551B0070dfCf5ca7'),
+        sequencers: [
+          EthereumAddress('0x191fF0EC830F83916A427d169a234c33e48aA79f'),
+          EthereumAddress('0x750bdb90AC72A78308d21eAC78999bBAE31cd63d'),
+          EthereumAddress('0xC0D2853e06F1E145177D5ef08Ab065a76e14354C'),
+        ],
+      },
+    ],
+    trackedTxs: [
+      {
+        uses: [
+          {
+            type: 'liveness',
+            subtype: 'proofSubmissions',
+          },
+          {
+            type: 'l2costs',
+            subtype: 'proofSubmissions',
+          },
+        ],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x3B4D794a66304F130a4Db8F2551B0070dfCf5ca7',
+          ),
+          selector: '0x23ff50e1',
+          functionSignature:
+            'function verifyBatch(tuple(uint64 batchNumber, uint64 endBlockNumber, uint32 batchSize, uint64 startTimestamp, uint64 endTimestamp, uint32 priorityRequestCount, bytes32 prefixPriorityRequestHash, bytes32 onChainOperationsHash, bytes32 stateRoot, bytes32 validiumRoot, bytes32 commitment) batch, bytes proof)',
+          sinceTimestamp: 1737090335, // Friday, January 17, 2025 5:05:35 AM
+        },
+      },
+      {
+        uses: [
+          {
+            type: 'liveness',
+            subtype: 'stateUpdates',
+          },
+          {
+            type: 'l2costs',
+            subtype: 'stateUpdates',
+          },
+        ],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x3B4D794a66304F130a4Db8F2551B0070dfCf5ca7',
+          ),
+          selector: '0x2d320e28',
+          functionSignature:
+            'function executeBatches(tuple(uint64 batchNumber, uint64 endBlockNumber, uint32 batchSize, uint64 startTimestamp, uint64 endTimestamp, uint32 priorityRequestCount, bytes32 prefixPriorityRequestHash, bytes32 onChainOperationsHash, bytes32 stateRoot, bytes32 validiumRoot, bytes32 commitment)[] batches, bytes[] onChainOperationsPubData)',
+          sinceTimestamp: 1737090335, // Friday, January 17, 2025 5:05:35 AM
+        },
+      },
+      {
+        uses: [
+          {
+            type: 'liveness',
+            subtype: 'batchSubmissions',
+          },
+          {
+            type: 'l2costs',
+            subtype: 'batchSubmissions',
+          },
+        ],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x3B4D794a66304F130a4Db8F2551B0070dfCf5ca7',
+          ),
+          selector: '0xe415f0f4',
+          functionSignature:
+            'function commitBatch(tuple(uint64 endBlockNumber, uint32 batchSize, uint64 startTimestamp, uint64 endTimestamp, uint32 priorityRequestCount, bytes32 prefixPriorityRequestHash, bytes32 onChainOperationsHash, bytes32 newStateRoot, bytes32 newValidiumRoot, bytes pubdataCommitments) newBatchData, tuple(uint64 batchNumber, uint64 endBlockNumber, uint32 batchSize, uint64 startTimestamp, uint64 endTimestamp, uint32 priorityRequestCount, bytes32 prefixPriorityRequestHash, bytes32 onChainOperationsHash, bytes32 stateRoot, bytes32 validiumRoot, bytes32 commitment) lastStoredBatch)',
+          sinceTimestamp: 1737149807, // block 21646942, first commitBatch blob tx: https://etherscan.io/tx/0x5b9954f76e6bbae376197d8d9ddeece1ab410231229d1932981029037552e563
+        },
+      },
+    ],
+    activityConfig: {
+      type: 'day',
+      dataSource: 'Lighter API',
+      sinceTimestamp: UnixTime(1759363200), // 2025-10-01T00:00:00Z
+    },
+  },
+  riskView: {
+    stateValidation: {
+      ...RISK_VIEW.STATE_ZKP_SN,
+      executionDelay: finalizationPeriod,
+    },
+    dataAvailability: RISK_VIEW.DATA_ON_CHAIN_STATE_DIFFS,
+    exitWindow: RISK_VIEW.EXIT_WINDOW(0, priorityExpiration),
+    sequencerFailure: RISK_VIEW.SEQUENCER_FORCE_VIA_L1(priorityExpiration),
+    proposerFailure: RISK_VIEW.PROPOSER_USE_ESCAPE_HATCH_ZK,
+  },
+  stage: getRollupStage(
+    {
+      stage0: {
+        callsItselfRollup: true,
+        stateRootsPostedToL1: true,
+        dataAvailabilityOnL1: true,
+        rollupNodeSourceAvailable: true,
+        stateVerificationOnL1: true,
+        fraudProofSystemAtLeast5Outsiders: null,
+      },
+      stage1: {
+        principle: false,
+        usersHave7DaysToExit: false,
+        usersCanExitWithoutCooperation: false,
+        securityCouncilProperlySetUp: false,
+        noRedTrustedSetups: true,
+        programHashesReproducible: null,
+        proverSourcePublished: true,
+        verifierContractsReproducible: true,
+      },
+      stage2: {
+        proofSystemOverriddenOnlyInCaseOfABug: false,
+        fraudProofSystemIsPermissionless: null,
+        delayWith30DExitWindow: false,
+      },
+    },
+    {
+      rollupNodeLink: 'https://github.com/elliottech/lighter-prover/tree/main',
+    },
+  ),
+  technology: {
+    dataAvailability: {
+      name: 'Data published onchain',
+      description:
+        'Account delta data is published onchain as blobs. A prover migration (gnark/MIMC → plonky2/Poseidon2) at block 23,711,820 left pre-migration blobs undecodable, but Lighter published a full state snapshot at batch #166859 (blobs.zip) that closes the gap. L2BEAT reproduced the snapshot state root from blobs and verified the roll-forward to chain head, confirming the live state is reconstructable from L1.',
+      risks: [],
+      references: [
+        {
+          title: 'Lighter Prover v0.0.1 (first public release, Dec 2025)',
+          url: 'https://github.com/elliottech/lighter-prover',
+        },
+        {
+          title: 'StateRootUpdate event — gnark to plonky2 migration',
+          url: 'https://etherscan.io/tx/0x6a50b2b00444914e5c53df2fb48404078a098f93fc3911e6fcbde1c7b6418225',
+        },
+        {
+          title: 'Desert exit circuit + state snapshot (blobs.zip)',
+          url: 'https://github.com/elliottech/lighter-prover/tree/main/desertexit',
+        },
+      ],
+    },
+    operator: {
+      name: 'Centralized operators',
+      description:
+        'Only the centralized operators can submit batches and verify them with a ZK proof, i.e. advance the state of the protocol.',
+      risks: [FRONTRUNNING_RISK],
+      references: [],
+    },
+    forceTransactions: {
+      name: 'Users can force their transactions on L1',
+      description: readProjectMarkdown(
+        'lighter',
+        'technologyForceTransactions',
+        { priorityExpiration: formatSeconds(priorityExpiration) },
+      ),
+      risks: [],
+      references: [],
+    },
+    exitMechanisms: [
+      EXITS.REGULAR_WITHDRAWAL('zk'),
+      {
+        name: 'Escape hatch through ZK proofs',
+        description:
+          'If the centralized operators fail to process forced transactions after the deadline, the system can be frozen (desert mode) and users are expected to exit by reconstructing the latest settled state and providing a ZK proof of balance. The desert exit circuit and a full state snapshot at batch #166859 are public, and the deployed DesertVerifier matches a rebuild from that circuit. L2BEAT reproduced the snapshot state root from L1 blobs and verified the roll-forward to chain head.',
+        risks: [],
+        references: [
+          {
+            title: 'Desert exit circuit + state snapshot',
+            url: 'https://github.com/elliottech/lighter-prover/tree/main/desertexit',
+          },
+        ],
+      },
+    ],
+    otherConsiderations: [
+      {
+        name: 'External oracles used for index prices',
+        description:
+          'Lighter uses a combination of oracles to determine index prices, with Stork as the primary source. External signatures are currently not verified and the sequencer must be trusted to truthfully report data.',
+        risks: [
+          {
+            category: 'Funds can be lost if',
+            text: 'the oracle prices are manipulated.',
+          },
+        ],
+        references: [
+          {
+            title: 'Lighter docs - Fair Price Marking',
+            url: 'https://docs.lighter.xyz/perpetual-futures/fair-price-marking',
+          },
+        ],
+      },
+    ],
+  },
+  stateValidation: {
+    description:
+      'Each update to the system state must be accompanied by a ZK proof that ensures that the new state was derived by correctly applying a series of valid transactions to the previous state. This includes user transactions originating from L1 and L2, as well as internal transactions created by L2 operators. In the desert mode, valid proofs of exit must be generated. These proofs are then verified on Ethereum by a smart contract.',
+    categories: [
+      {
+        title: 'Prover Architecture',
+        description:
+          '[This repo](https://github.com/elliottech/lighter-prover/tree/main) contains the circuits and prover code for both normal and desert operation mode of Lighter. It includes the logic to generate and verify proofs of valid state transition according to the Lighter [matching engine](https://github.com/elliottech/lighter-prover/blob/d0ff2304aea516b22f3a5223881006b6a9af1cc9/circuit/src/matching_engine.rs).',
+      },
+      {
+        title: 'ZK Circuits',
+        description:
+          'Lighter transition is proven with custom Plonky2 circuits, compiled into ZK Lighter Verifier and Desert Verifier. ZK Lighter verifier implements the perp DEX and spot trading logic and could be found in this [prover repo](https://github.com/elliottech/lighter-prover/tree/main/circuit/src). Desert verifier consists of circuits proving valid L2 -> L1 withdrawals in the desert mode. More details in [ZK Catalog](https://l2beat.com/zk-catalog/lighterprover#proof-system).',
+      },
+      {
+        title: 'Verification Keys Generation',
+        description:
+          'Lighter wraps its validity proof into a Plonk-based proof system which requires a trusted setup. The verification keys are hardcoded in the verifier contract on-chain. Lighter prover repo contains a [script](https://github.com/elliottech/lighter-prover/blob/main/build_circuits.sh) that regenerates circuits and verification keys.',
+        references: [
+          {
+            title: 'ZK Lighter verifier verification keys',
+            url: 'https://etherscan.io/address/0x21B036c441C2E3aeD710526189Cd6F5b3151AfbE#code#F1#L54',
+          },
+          {
+            title: 'Desert verifier verification keys',
+            url: 'https://etherscan.io/address/0x866418061d4C1168e1c8E8f6facE79675395E008#code#F1#L55',
+          },
+        ],
+      },
+    ],
+  },
+  discoveryInfo: getDiscoveryInfo([discovery]),
+  upgradesAndGovernance: {
+    content: `Regular upgrades are initiated by the "network governor" and executed with a ${formatSeconds(upgradeDelay)} delay. The "security council" is allowed to reduce the upgrade delay to zero in case of an emergency. The security council does not currently satisfy the Stage 1 requirements. The network governor also retains the ability to add or remove validators.`,
+  },
+  contracts: {
+    addresses: {
+      ...discovery.getDiscoveredContracts(),
+    },
+    risks: [CONTRACTS.UPGRADE_NO_DELAY_RISK],
+    zkVerifiers: getVerifiers(),
+  },
+  permissions: {
+    ...discovery.getDiscoveredPermissions(),
+  },
+  milestones: [
+    {
+      title: 'Lighter experiences 4.5h of downtime',
+      url: 'https://x.com/Lighter_xyz/status/1977252708533911614',
+      date: '2025-10-10T00:00:00Z',
+      description:
+        'Lighter experiences 4.5 hours of downtime due to DB growth issues.',
+      type: 'incident',
+    },
+    {
+      title: 'Lighter launches public mainnet',
+      url: 'https://x.com/Lighter_xyz/status/1973508660061180363',
+      date: '2025-10-02T00:00:00Z',
+      description:
+        'Lighter launches public mainnet after 8 months of private beta.',
+      type: 'general',
+    },
+  ],
+  interopConfig: {
+    description:
+      'Canonical bridge between Ethereum and the Lighter perp DEX (zkSync-style priority queue), used by traders to deposit collateral and claim withdrawals.',
+    plugins: [
+      {
+        plugin: 'lighter-bridge',
+        bridgeType: 'lockAndMint',
+      },
+    ],
+    type: 'canonical',
+    transfersTimeMode: 'unknown',
+  },
+}
+
+function getVerifiers(): ChainSpecificAddress[] {
+  const verifierProxy = discovery.getContractValue<ChainSpecificAddress>(
+    'Lighter',
+    'verifier',
+  )
+
+  const result = discovery.get$Implementations(verifierProxy)
+  result.push(
+    discovery.getContractValue<ChainSpecificAddress>(
+      'Lighter',
+      'desertVerifier',
+    ),
+  )
+  return result
+}

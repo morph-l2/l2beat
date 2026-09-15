@@ -1,0 +1,21 @@
+import { formatInteger } from '@l2beat/shared-pure'
+import type { InteropDashboardData } from '~/server/features/layer2s/interop/getInteropDashboardData'
+import { TopProtocolsWidget } from './TopProtocolsWidget'
+
+export function TopProtocolsByTransfers({
+  topProtocols,
+  isLoading,
+}: {
+  topProtocols: InteropDashboardData['topProtocols'] | undefined
+  isLoading: boolean
+}) {
+  return (
+    <TopProtocolsWidget
+      metricType="transfers"
+      heading="Last 24 hours transfers"
+      topProtocols={topProtocols}
+      isLoading={isLoading}
+      formatValue={formatInteger}
+    />
+  )
+}

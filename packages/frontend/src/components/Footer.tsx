@@ -1,23 +1,39 @@
-import React from 'react'
-import { Link } from './Link'
-import { SocialLinks } from './navbar/SocialLinks'
-export function Footer() {
+import { cn } from '~/utils/cn'
+import { CustomLink } from './link/CustomLink'
+
+interface Props {
+  className?: string
+  innerContainerClassName?: string
+}
+
+export function Footer({ className, innerContainerClassName }: Props) {
+  const currentYear = new Date().getFullYear()
+
   return (
-    <footer className="mt-auto">
-      <div className="mt-20 min-h-[81px] border-gray-200 border-t py-4 dark:border-gray-850">
-        <div className="m-auto flex grid-cols-3 flex-col gap-4 px-4 md:grid md:px-12">
-          <p className="text-center font-medium text-sm md:text-left">
-            Made with 💗 by the L2BEAT research team.{' '}
-            <br className="hidden lg:inline" />
-            Support us by <Link href="/donate">donating</Link>.
-          </p>
-          <ul className="flex w-full justify-center gap-4">
-            <SocialLinks />
-          </ul>
-          <p className="text-center font-medium text-sm md:text-right">
-            Copyright {new Date().getFullYear()} L2BEAT
-          </p>
-        </div>
+    <footer
+      className={cn('px-4 py-6 md:px-12 md:pt-4 md:pb-10 lg:pb-5', className)}
+    >
+      <div
+        className={cn(
+          'mx-auto flex max-w-[1216px] flex-col items-center gap-2 text-secondary md:h-6 md:flex-row md:justify-between',
+          innerContainerClassName,
+        )}
+      >
+        <p className="text-center font-medium text-xs leading-none">
+          Made with 💗 by the L2BEAT team
+        </p>
+        <p>
+          <CustomLink
+            href="/terms-of-service"
+            variant="plain"
+            className="font-medium text-secondary text-xs"
+          >
+            Terms of Service
+          </CustomLink>
+        </p>
+        <p className="text-center font-medium text-xs leading-none md:text-right">
+          Copyright {currentYear} L2BEAT
+        </p>
       </div>
     </footer>
   )

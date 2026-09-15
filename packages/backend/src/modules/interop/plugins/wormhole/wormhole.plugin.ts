@@ -1,0 +1,208 @@
+import { Address32, assert, EthereumAddress } from '@l2beat/shared-pure'
+import type { InteropConfigStore } from '../../engine/config/InteropConfigStore'
+import { CCTPV1Config, CCTPV2Config } from '../cctp/cctp.config'
+import { findParsedAfter, findTransferLogBefore } from '../logScan'
+import {
+  findMayanCircleDestinationChain,
+  isMayanCircleSender,
+  MAYAN_FORWARDER_TX_EVENT_SIGNATURES,
+} from '../mayan-wormhole'
+import {
+  createEventParser,
+  createInteropEventType,
+  type DataRequest,
+  type InteropPluginResyncable,
+  type LogToCapture,
+} from '../types'
+import { FOLKS_CHAIN_ID_TO_CHAIN } from './folks-finance'
+import {
+  findWormholeChain,
+  getWormholeCoreAddresses,
+  WormholeConfig,
+} from './wormhole.config'
+
+const logMessagePublishedLog =
+  'event LogMessagePublished(address indexed sender, uint64 sequence, uint32 nonce, bytes payload, uint8 consistencyLevel)'
+
+const transferLog =
+  'event Transfer(address indexed from, address indexed to, uint256 value)'
+
+// Folks Finance uses Wormhole for cross-chain messaging
+const folksSendMessageLog =
+  'event SendMessage(bytes32 operationId, ((uint16,uint16,uint256,uint256,uint256),bytes32,uint16,bytes32,bytes,uint64,bytes) message)'
+
+const parseLogMessagePublished = createEventParser(logMessagePublishedLog)
+
+const parseTransfer = createEventParser(transferLog)
+
+const parseFolksSendMessage = createEventParser(folksSendMessageLog)
+
+export const LogMessagePublished = createInteropEventType<{
+  payload: `0x${string}`
+  sequence: bigint
+  wormholeChainId: number
+  sender: EthereumAddress
+  srcTokenAddress?: Address32
+  srcAmount?: bigint
+  $dstChain?: string
+}>('wormhole.LogMessagePublished')
+
+export class WormholePlugin implements InteropPluginResyncable {
+  readonly name = 'wormhole'
+
+  constructor(private configs: InteropConfigStore) {}
+
+  getDataRequests(): DataRequest[] {
+    const networks = this.configs.get(WormholeConfig) ?? []
+    const coreContractAddresses = getWormholeCoreAddresses(networks)
+
+    return [
+      {
+        type: 'event',
+        signature: logMessagePublishedLog,
+        includeTxEvents: [
+          transferLog,
+          folksSendMessageLog,
+          ...MAYAN_FORWARDER_TX_EVENT_SIGNATURES,
+        ],
+        addresses: coreContractAddresses,
+      },
+    ]
+  }
+
+  capture(input: LogToCapture) {
+    const networks = this.configs.get(WormholeConfig)
+    if (!networks) return
+
+    const network = networks.find((n) => n.chain === input.chain)
+    if (!network) {
+      return
+    }
+
+    assert(network.coreContract, 'We capture only chain with core contracts')
+
+    const parsed = parseLogMessagePublished(input.log, [network.coreContract])
+    if (!parsed) return
+
+    // If the sender is the token bridge, get the src token from the Transfer event at previous log positions
+    // Example: https://app.blocksec.com/phalcon/explorer/tx/base/0x7eebd35bd9b1d0b614dfe3d464d915378f2d370ab425d1ddc4510b820ed5df8d
+    let srcTokenAddress: Address32 | undefined
+    let srcAmount: bigint | undefined
+
+    const senderAddress = EthereumAddress(parsed.sender)
+
+    // Mayan Circle (MCTP) messages usually expose $dstChain through a companion
+    // Mayan Forwarder event. Destination-side confirmations have no forwarder,
+    // so keep the event with an unsupported placeholder chain.
+    if (isMayanCircleSender(senderAddress)) {
+      const cctpNetworks = [
+        ...(this.configs.get(CCTPV1Config) ?? []),
+        ...(this.configs.get(CCTPV2Config) ?? []),
+      ]
+      const $dstChain =
+        findMayanCircleDestinationChain(input.txLogs, networks, cctpNetworks) ??
+        'Unknown_mayanCircle'
+
+      return [
+        LogMessagePublished.create(input, {
+          payload: parsed.payload,
+          sequence: parsed.sequence,
+          wormholeChainId: network.wormholeChainId,
+          sender: senderAddress,
+          $dstChain,
+        }),
+      ]
+    }
+
+    const logIndex = input.log.logIndex
+    if (
+      network.tokenBridge &&
+      senderAddress === network.tokenBridge &&
+      logIndex !== null
+    ) {
+      const tokenBridgeAddress = network.tokenBridge
+      const transferMatch = findTransferLogBefore(
+        input.txLogs,
+        logIndex,
+        (log) => parseTransfer(log, null),
+        (transfer) => transfer.to === Address32.from(tokenBridgeAddress),
+      )
+      srcTokenAddress = transferMatch.transfer?.logAddress
+      srcAmount = transferMatch.transfer?.value
+    }
+
+    // Try to find destination chain
+    let $dstChain: string | undefined
+
+    // Portal Token Bridge: extract destination chain from payload
+    if (
+      !$dstChain &&
+      network.tokenBridge &&
+      senderAddress === network.tokenBridge
+    ) {
+      const toChainId = extractTokenBridgeDestChain(parsed.payload)
+      if (toChainId !== undefined) {
+        $dstChain = findWormholeChain(networks, toChainId)
+      }
+    }
+
+    // Folks Finance: find SendMessage event after LogMessagePublished
+    if (!$dstChain) {
+      $dstChain =
+        logIndex === null
+          ? undefined
+          : findParsedAfter(input.txLogs, logIndex, (candidateLog) => {
+              const folksSendMessage = parseFolksSendMessage(candidateLog, null)
+              if (!folksSendMessage) return
+              // message tuple: ((params), sender, destinationChainId, handler, payload, finalityLevel, extraArgs)
+              // destinationChainId is at index 2, using Folks Finance's own chain ID system
+              const folksChainId = Number(folksSendMessage.message[2])
+              return (
+                FOLKS_CHAIN_ID_TO_CHAIN[folksChainId] ??
+                `Unknown_${folksChainId}`
+              )
+            })
+    }
+
+    return [
+      LogMessagePublished.create(input, {
+        payload: parsed.payload,
+        sequence: parsed.sequence,
+        wormholeChainId: network.wormholeChainId,
+        sender: EthereumAddress(parsed.sender),
+        srcTokenAddress,
+        srcAmount,
+        $dstChain,
+      }),
+    ]
+  }
+  // no matching because wormhole matches by (msg.sender,sequence) (sender=emitter in wormhole core contracts, not to be confused with event emitter),
+  // of which the destination event depends on the app layer
+}
+
+// Portal Token Bridge transfer payload format:
+// [0..1)    payloadType (1 byte) - 0x01 for transfer, 0x03 for transferWithPayload
+// [1..33)   amount (32 bytes)
+// [33..65)  tokenAddress (32 bytes)
+// [65..67)  tokenChain (2 bytes)
+// [67..99)  to (32 bytes)
+// [99..101) toChain (2 bytes)
+function extractTokenBridgeDestChain(payload: string): number | undefined {
+  try {
+    // Remove 0x prefix if present
+    const data = payload.startsWith('0x') ? payload.slice(2) : payload
+
+    // Check minimum length: payloadType(2) + amount(64) + tokenAddr(64) + tokenChain(4) + to(64) + toChain(4) = 202
+    if (data.length < 202) return undefined
+
+    // Check payload type (first byte)
+    const payloadType = Number.parseInt(data.slice(0, 2), 16)
+    if (payloadType !== 1 && payloadType !== 3) return undefined
+
+    // Extract toChain at chars 198-202 (bytes 99-101)
+    const toChainHex = data.slice(198, 202)
+    return Number.parseInt(toChainHex, 16)
+  } catch {
+    return undefined
+  }
+}

@@ -1,13 +1,12 @@
-import { ProxyDetails } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
-
-import { get$Implementations } from '@l2beat/discovery-types'
-import { IProvider } from '../../provider/IProvider'
+import type { ChainSpecificAddress } from '@l2beat/shared-pure'
+import type { IProvider } from '../../provider/IProvider'
+import { get$Implementations } from '../../utils/extractors'
 import { detectEip1967Proxy } from '../auto/Eip1967Proxy'
+import type { ProxyDetails } from '../types'
 
 export async function getZkSyncLiteProxy(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<ProxyDetails | undefined> {
   const detection = await detectEip1967Proxy(provider, address)
   if (!detection || detection.type !== 'EIP1967 proxy') {
@@ -18,7 +17,9 @@ export async function getZkSyncLiteProxy(
     type: 'zkSync Lite proxy',
     values: {
       $admin: detection.values.$admin,
-      $implementation: get$Implementations(detection.values).concat(additional),
+      $implementation: get$Implementations(detection.values)
+        .concat(additional)
+        .map((i) => i.toString()),
     },
   }
 }

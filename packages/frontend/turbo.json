@@ -1,10 +1,36 @@
 {
-  "$schema": "https://turbo.build/schema.json",
+  "$schema": "https://v2-9-6.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
     "build": {
-      "env": ["DEPLOYMENT_ENV", "NODE_ENV", "MOCK"],
-      "cache": false
+      "dependsOn": ["^build"],
+      "outputs": ["dist"],
+      "env": [
+        "CI",
+        "CRON_SECRET",
+        "DATABASE_URL",
+        "DATABASE_LOG_ENABLED",
+        "DISABLE_CACHE",
+        "EXCLUDED_TVS_PROJECTS",
+        "EXCLUDED_ACTIVITY_PROJECTS",
+        "FEATURE_FLAG_GITCOIN_OPTION",
+        "FEATURE_FLAG_HIRING",
+        "CLIENT_SIDE_DEFI_ENABLED",
+        "CLIENT_SIDE_GARDEN_ENABLED",
+        "MOCK",
+        "NODE_ENV",
+        "DEPLOYMENT_ENV",
+        "NEXT_RUNTIME",
+        "PORT",
+        "REWRITE",
+        "SENTRY_AUTH_TOKEN",
+        "SKIP_ENV_VALIDATION",
+        "TINIFY_API_KEY",
+        "VERCEL_GIT_COMMIT_REF",
+        "VERCEL_GIT_COMMIT_SHA",
+        "VERCEL_ENV",
+        "VERCEL_URL"
+      ]
     }
   }
 }

@@ -1,41 +1,52 @@
-import { BackendProject } from '@l2beat/config'
-import { AnomalyRecord, Database } from '@l2beat/database'
+import type { Logger } from '@l2beat/backend-tools'
+import type {
+  AnomalyRecord,
+  AnomalyStatsRecord,
+  Database,
+} from '@l2beat/database'
 import {
   assert,
-  ProjectId,
-  TrackedTxsConfigSubtype,
-  UnixTime,
   clampRangeToDay,
   notUndefined,
+  type ProjectId,
+  type TrackedTxsConfigSubtype,
+  UnixTime,
 } from '@l2beat/shared-pure'
+import type { TrackedTxProject } from '../../../../../config/Config'
 import {
   ManagedChildIndexer,
-  ManagedChildIndexerOptions,
+  type ManagedChildIndexerOptions,
 } from '../../../../../tools/uif/ManagedChildIndexer'
-import {
-  LivenessRecordWithConfig,
-  LivenessWithConfigService,
-} from '../services/LivenessWithConfigService'
-import { RunningStatistics } from '../utils/RollingVariance'
-import { Interval, calculateIntervals } from '../utils/calculateIntervals'
+import { calculateIntervals, type Interval } from '../utils/calculateIntervals'
 import { getActiveConfigurations } from '../utils/getActiveConfigurations'
 import { groupByType } from '../utils/groupByType'
+import {
+  type LivenessRecordWithConfig,
+  mapToRecordWithConfig,
+} from '../utils/mapToRecordWithConfig'
+import { RunningStatistics } from '../utils/RollingVariance'
 
 export interface AnomaliesIndexerIndexerDeps
   extends Omit<ManagedChildIndexerOptions, 'name'> {
   db: Database
-  projects: BackendProject[]
+  projects: TrackedTxProject[]
 }
 
 export class AnomaliesIndexer extends ManagedChildIndexer {
   private readonly SYNC_RANGE = 30
-  constructor(private readonly $: AnomaliesIndexerIndexerDeps) {
-    super({ ...$, name: 'anomalies' })
+  constructor(
+    private readonly $: AnomaliesIndexerIndexerDeps,
+    logger: Logger,
+  ) {
+    super({ ...$, name: 'anomalies' }, logger)
   }
 
   override async update(from: number, to: number): Promise<number> {
     // we only need to go one day back
-    const maxDepth = UnixTime.now().add(-1, 'days').toStartOf('day').toNumber()
+    const maxDepth = UnixTime.toStartOf(
+      UnixTime.now() - 1 * UnixTime.DAY,
+      'day',
+    )
     if (to <= maxDepth) {
       this.logger.info('Skipping update', { from, to })
       return to
@@ -52,11 +63,23 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
 
     this.logger.info('Calculating anomalies', { unixTo })
 
-    const anomalies = await this.getAnomalies(unixTo)
+    const records = await this.getAnomalies(unixTo)
 
-    await this.$.db.anomalies.upsertMany(anomalies)
+    await this.$.db.transaction(async () => {
+      // anomalies are recalculated on each run so we can safely delete all records
+      // to make sure we don't have any outdated records
+      const deleted = await this.$.db.anomalies.deleteAll()
+      await this.$.db.anomalies.upsertMany(records.anomalyRecords)
+      await this.$.db.anomalyStats.upsertMany(records.anomalyStatsRecords)
 
-    return unixTo.toNumber()
+      this.logger.info('Anomaly records saved to db', {
+        deleted,
+        upserted: records.anomalyRecords.length,
+        stats: records.anomalyStatsRecords.length,
+      })
+    })
+
+    return unixTo
   }
 
   override async invalidate(targetHeight: number): Promise<number> {
@@ -65,15 +88,19 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
     return await Promise.resolve(targetHeight)
   }
 
-  async getAnomalies(to: UnixTime) {
-    const anomalies: AnomalyRecord[] = []
-
+  async getAnomalies(to: UnixTime): Promise<{
+    anomalyRecords: AnomalyRecord[]
+    anomalyStatsRecords: AnomalyStatsRecord[]
+  }> {
     const configurations = await this.$.indexerService.getSavedConfigurations(
       'tracked_txs_indexer',
     )
 
     // we need data from 2 * SYNC_RANGE past days to calculate standard deviation
-    const deviationRange = to.add(-1 * this.SYNC_RANGE * 2, 'days')
+    const deviationRange = to - 1 * this.SYNC_RANGE * 2 * UnixTime.DAY
+
+    const anomalyRecords: AnomalyRecord[] = []
+    const anomalyStatsRecords: AnomalyStatsRecord[] = []
 
     for (const project of this.$.projects) {
       const activeConfigs = getActiveConfigurations(project, configurations)
@@ -82,60 +109,80 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
         continue
       }
 
-      const livenessWithConfig = new LivenessWithConfigService(
-        activeConfigs,
-        this.$.db,
-      )
+      // NOTE(maciekzygmunt): we need to take record for range and latest before for each configuration
+      // to calculate interval for first record in time range
+      const records =
+        await this.$.db.liveness.getRecordsInRangeWithLatestBefore(
+          activeConfigs.map((c) => c.id),
+          deviationRange,
+          to,
+        )
 
-      const livenessRecords = await livenessWithConfig.getWithinTimeRange(
-        deviationRange,
-        to,
-      )
+      // NOTE(maciekzygmunt): normally this steps should be done in the database, but because liveness table is huge, sorting and distinction
+      // takes a lot of memory, so for this case it is better to do it here
+      records.sort((a, b) => b.timestamp - a.timestamp)
+      const livenessRecords: LivenessRecordWithConfig[] = []
+      const present = new Set<string>()
+
+      for (const r of records) {
+        const key = r.timestamp + '-' + r.configurationId
+
+        if (!present.has(key)) {
+          present.add(key)
+          livenessRecords.push(mapToRecordWithConfig(r, activeConfigs))
+        }
+      }
 
       if (livenessRecords.length === 0) {
         this.logger.debug('No records found for project', {
-          projectId: project.projectId,
+          projectId: project.id,
         })
         continue
       }
 
       this.logger.debug('Liveness records loaded', {
-        projectId: project.projectId,
+        projectId: project.id,
         count: livenessRecords.length,
       })
 
       const [batchSubmissions, stateUpdates, proofSubmissions] =
         groupByType(livenessRecords)
 
-      anomalies.push(
-        ...this.detectAnomalies(
-          project.projectId,
-          'batchSubmissions',
-          batchSubmissions,
-          to,
-        ),
+      const {
+        anomalies: batchSubmissionsAnomalies,
+        stats: batchSubmissionsStats,
+      } = this.detectAnomalies(
+        project.id,
+        'batchSubmissions',
+        batchSubmissions,
+        to,
       )
 
-      anomalies.push(
-        ...this.detectAnomalies(
-          project.projectId,
-          'stateUpdates',
-          stateUpdates,
-          to,
-        ),
+      anomalyRecords.push(...batchSubmissionsAnomalies)
+      if (batchSubmissionsStats) anomalyStatsRecords.push(batchSubmissionsStats)
+
+      const { anomalies: stateUpdatesAnomalies, stats: stateUpdatesStats } =
+        this.detectAnomalies(project.id, 'stateUpdates', stateUpdates, to)
+
+      anomalyRecords.push(...stateUpdatesAnomalies)
+      if (stateUpdatesStats) anomalyStatsRecords.push(stateUpdatesStats)
+
+      const {
+        anomalies: proofSubmissionsAnomalies,
+        stats: proofSubmissionsUpdatesStats,
+      } = this.detectAnomalies(
+        project.id,
+        'proofSubmissions',
+        proofSubmissions,
+        to,
       )
 
-      anomalies.push(
-        ...this.detectAnomalies(
-          project.projectId,
-          'proofSubmissions',
-          proofSubmissions,
-          to,
-        ),
-      )
+      anomalyRecords.push(...proofSubmissionsAnomalies)
+      if (proofSubmissionsUpdatesStats)
+        anomalyStatsRecords.push(proofSubmissionsUpdatesStats)
     }
 
-    return anomalies
+    return { anomalyRecords, anomalyStatsRecords }
   }
 
   detectAnomalies(
@@ -143,17 +190,18 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
     subtype: TrackedTxsConfigSubtype,
     livenessRecords: LivenessRecordWithConfig[],
     to: UnixTime,
-  ): AnomalyRecord[] {
+  ): { anomalies: AnomalyRecord[]; stats: AnomalyStatsRecord | undefined } {
     if (livenessRecords.length === 0) {
-      return []
+      return { anomalies: [], stats: undefined }
     }
 
-    // if the oldest record is newer than 2 * SYNC_RANGE -1 we can't calculate anomalies
+    // if the oldest record is newer than 2 * SYNC_RANGE we can't calculate anomalies
     const lastRecord = livenessRecords.at(-1)
     if (
-      lastRecord?.timestamp.gt(to.add(-1 * (2 * this.SYNC_RANGE - 1), 'days'))
+      lastRecord?.timestamp &&
+      lastRecord.timestamp > to - 2 * this.SYNC_RANGE * UnixTime.DAY
     )
-      return []
+      return { anomalies: [], stats: undefined }
 
     const anomalies: AnomalyRecord[] = []
 
@@ -169,8 +217,9 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
 
     const intervals = calculateIntervals(livenessRecords)
 
-    const lastIndex = intervals.findIndex((interval) =>
-      interval.record.timestamp.lte(to.add(-1 * this.SYNC_RANGE, 'days')),
+    const lastIndex = intervals.findIndex(
+      (interval) =>
+        interval.record.timestamp <= to - 1 * this.SYNC_RANGE * UnixTime.DAY,
     )
 
     const { means, stdDeviations } = this.calculate30DayRollingStats(
@@ -180,12 +229,16 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
       to,
     )
 
+    if (lastIndex === 0) {
+      return { anomalies: [], stats: undefined }
+    }
+
     const currentRange = intervals.slice(0, lastIndex)
     currentRange.forEach((interval) => {
-      const point = interval.record.timestamp.toStartOf('minute').toNumber()
+      const point = UnixTime.toStartOf(interval.record.timestamp, 'minute')
       const mean = means.get(point)
       const stdDev = stdDeviations.get(
-        interval.record.timestamp.toStartOf('minute').toNumber(),
+        UnixTime.toStartOf(interval.record.timestamp, 'minute'),
       )
 
       assert(mean !== undefined, 'Mean should not be undefined')
@@ -202,7 +255,25 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
       }
     })
 
-    return anomalies
+    const latestPoint = UnixTime.toStartOf(
+      currentRange[0].record.timestamp,
+      'minute',
+    )
+    const latestMean = means.get(latestPoint)
+    const latestStDev = stdDeviations.get(latestPoint)
+
+    assert(latestMean !== undefined, 'Latest mean should not be undefined')
+    assert(latestStDev !== undefined, 'Latest stdDev should not be undefined')
+
+    const stats = {
+      timestamp: to,
+      projectId,
+      subtype,
+      mean: latestMean,
+      stdDev: latestStDev,
+    } as AnomalyStatsRecord
+
+    return { anomalies, stats }
   }
 
   calculate30DayRollingStats(
@@ -233,24 +304,21 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
       initialWindow.map((r) => r.duration).filter(notUndefined),
     )
 
-    result.means.set(timeStart.toNumber(), mean)
-    result.stdDeviations.set(
-      timeStart.toNumber(),
-      rollingStdDev.getStandardDeviation(),
-    )
-    while (timeStart.gte(upTo.add(-1 * this.SYNC_RANGE, 'days'))) {
-      timeStart = timeStart.add(-1, 'minutes')
+    result.means.set(timeStart, mean)
+    result.stdDeviations.set(timeStart, rollingStdDev.getStandardDeviation())
+    while (timeStart >= upTo - 1 * this.SYNC_RANGE * UnixTime.DAY) {
+      timeStart = timeStart - 1 * UnixTime.MINUTE
       const leftFence = timeStart
-      const rightFence = timeStart.add(-1 * this.SYNC_RANGE, 'days')
+      const rightFence = timeStart - 1 * this.SYNC_RANGE * UnixTime.DAY
 
-      while (entireScope[windowStartIndex].record.timestamp.gte(leftFence)) {
+      while (entireScope[windowStartIndex].record.timestamp >= leftFence) {
         sum -= entireScope[windowStartIndex].duration ?? 0
         rollingStdDev.removeValue(entireScope[windowStartIndex].duration ?? 0)
         windowStartIndex++
       }
       while (
         windowEndIndex < entireScope.length &&
-        entireScope[windowEndIndex].record.timestamp.gte(rightFence)
+        entireScope[windowEndIndex].record.timestamp >= rightFence
       ) {
         sum += entireScope[windowEndIndex].duration ?? 0
         rollingStdDev.addValue(entireScope[windowEndIndex].duration ?? 0)
@@ -258,11 +326,8 @@ export class AnomaliesIndexer extends ManagedChildIndexer {
       }
 
       const mean = sum / (windowEndIndex - windowStartIndex)
-      result.means.set(timeStart.toNumber(), mean)
-      result.stdDeviations.set(
-        timeStart.toNumber(),
-        rollingStdDev.getStandardDeviation(),
-      )
+      result.means.set(timeStart, mean)
+      result.stdDeviations.set(timeStart, rollingStdDev.getStandardDeviation())
     }
 
     return result

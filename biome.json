@@ -1,7 +1,14 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.7.0/schema.json",
+  "$schema": "node_modules/@biomejs/biome/configuration_schema.json",
   "files": {
-    "ignore": ["node_modules/", ".cache/", "dist/", ".next/"]
+    "includes": [
+      "**",
+      "!**/node_modules/**",
+      "!**/.cache/**",
+      "!**/dist/**",
+      "!**/build/**",
+      "!docs/**"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -18,25 +25,33 @@
     "defaultBranch": "main",
     "useIgnoreFile": true
   },
-  "organizeImports": { "enabled": true },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "linter": {
     "enabled": true,
-    "ignore": ["packages/frontend2"],
     "rules": {
       "recommended": false,
       "complexity": {
         "noBannedTypes": "error",
         "noExtraBooleanCast": "error",
-        "noMultipleSpacesInRegularExpressionLiterals": "error",
         "noStaticOnlyClass": "error",
         "noUselessCatch": "error",
         "noUselessConstructor": "error",
         "noUselessThisAlias": "error",
         "noUselessTypeConstraint": "error",
-        "noWith": "error"
+        "noAdjacentSpacesInRegex": "error"
       },
       "correctness": {
-        "noUnusedImports": "error",
+        "noUnusedImports": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "noUnusedFunctionParameters": "error",
         "noConstAssign": "error",
         "noConstantCondition": "off",
         "noEmptyCharacterClassInRegex": "error",
@@ -44,7 +59,6 @@
         "noGlobalObjectCalls": "error",
         "noInnerDeclarations": "error",
         "noInvalidConstructorSuper": "error",
-        "noNewSymbol": "error",
         "noNonoctalDecimalEscape": "error",
         "noPrecisionLoss": "error",
         "noSelfAssign": "error",
@@ -59,32 +73,48 @@
         "noUnusedVariables": "error",
         "useIsNan": "error",
         "useValidForDirection": "error",
-        "useYield": "error"
+        "useYield": "error",
+        "noInvalidBuiltinInstantiation": "error",
+        "useValidTypeof": "error"
       },
       "style": {
         "useForOf": "error",
         "noDefaultExport": "error",
         "noNamespace": "error",
+        "noParameterAssign": "off",
         "noNonNullAssertion": "error",
         "useAsConstAssertion": "error",
-        "useLiteralEnumMembers": "error"
+        "useLiteralEnumMembers": "error",
+        "useImportType": "error",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "console": "Do not use console",
+              "node:console": "Do not use console",
+              "assert": "Use assert from @l2beat/shared-pure",
+              "node:assert": "Use assert from @l2beat/shared-pure",
+              "lodash": "Use lodash/{module}",
+              "process": "Do not use process",
+              "earl": "earl is a test-only dependency. Use lodash/isEqual for deep equality or move this file under a test/ directory."
+            },
+            "patterns": [
+              {
+                "group": ["@l2beat/*/dist", "@l2beat/*/dist/**"],
+                "message": "Import from the package's public entrypoint instead."
+              }
+            ]
+          }
+        }
       },
       "performance": {
         "noAccumulatingSpread": "error",
         "noDelete": "error"
       },
       "nursery": {
-        "noDuplicateElseIf": "error",
-        "noRestrictedImports": {
-          "level": "error",
-          "options": {
-            "paths": {
-              "console": "Do not use console"
-            }
-          }
-        },
         "useSortedClasses": {
           "level": "error",
+          "fix": "safe",
           "options": {
             "attributes": ["className", "classname"],
             "functions": ["cn", "cva"]
@@ -122,7 +152,8 @@
         "noUnsafeNegation": "error",
         "useAwait": "error",
         "useGetterReturn": "error",
-        "useValidTypeof": "error"
+        "noWith": "error",
+        "noDuplicateElseIf": "error"
       }
     }
   },
@@ -130,7 +161,7 @@
     "formatter": {
       "jsxQuoteStyle": "double",
       "quoteProperties": "asNeeded",
-      "trailingComma": "all",
+      "trailingCommas": "all",
       "semicolons": "asNeeded",
       "arrowParentheses": "always",
       "bracketSpacing": true,
@@ -142,35 +173,53 @@
   },
   "overrides": [
     {
-      "include": ["**/test/**/*.ts", "*.test.ts"],
+      "includes": ["**/test/**/*.ts", "**/*.test.ts"],
       "linter": {
         "rules": {
-          "style": { "noNonNullAssertion": "off" },
-          "suspicious": { "noExplicitAny": "off", "useAwait": "off" }
+          "style": {
+            "noNonNullAssertion": "off",
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "console": "Do not use console",
+                  "node:console": "Do not use console",
+                  "assert": "Use assert from @l2beat/shared-pure",
+                  "node:assert": "Use assert from @l2beat/shared-pure",
+                  "lodash": "Use lodash/{module}",
+                  "process": "Do not use process"
+                },
+                "patterns": [
+                  {
+                    "group": ["@l2beat/*/dist", "@l2beat/*/dist/**"],
+                    "message": "Import from the package's public entrypoint instead."
+                  }
+                ]
+              }
+            }
+          },
+          "suspicious": {
+            "noExplicitAny": "off",
+            "useAwait": "off"
+          }
         }
       }
     },
     {
-      "include": ["src/**/*.stories.ts", "src/**/*.tsx"],
-      "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
-    },
-    {
-      "include": ["*.ts", "*.tsx", "*.mts", "*.cts"],
+      "includes": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
       "linter": {
         "rules": {
           "correctness": {
             "noConstAssign": "off",
             "noGlobalObjectCalls": "off",
             "noInvalidConstructorSuper": "off",
-            "noNewSymbol": "off",
             "noSetterReturn": "off",
             "noUndeclaredVariables": "off",
             "noUnreachable": "off",
-            "noUnreachableSuper": "off"
+            "noUnreachableSuper": "off",
+            "noInvalidBuiltinInstantiation": "off"
           },
           "style": {
-            "noArguments": "error",
-            "noVar": "error",
             "useConst": "error"
           },
           "suspicious": {
@@ -181,7 +230,11 @@
             "noImportAssign": "off",
             "noRedeclare": "off",
             "noUnsafeNegation": "off",
-            "useGetterReturn": "off"
+            "useGetterReturn": "off",
+            "noVar": "error"
+          },
+          "complexity": {
+            "noArguments": "error"
           }
         }
       }

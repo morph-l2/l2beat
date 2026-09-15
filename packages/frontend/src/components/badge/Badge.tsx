@@ -1,22 +1,24 @@
-import { VariantProps, cva } from 'class-variance-authority'
-import React, { ReactNode } from 'react'
-
-import { cn } from '../../utils/cn'
+import type { VariantProps } from 'class-variance-authority'
+import { cva } from 'class-variance-authority'
+import type { ReactNode } from 'react'
+import { cn } from '~/utils/cn'
 
 export interface BadgeProps extends VariantProps<typeof badgeVariants> {
   className?: string
   children: ReactNode
 }
 
-const badgeVariants = cva('text-center font-medium', {
+const badgeVariants = cva('inline rounded text-center font-medium', {
   variants: {
     type: {
-      error: 'bg-red-500 text-white',
-      gray: 'bg-gray-200 font-medium text-gray-700 dark:bg-zinc-700 dark:text-gray-50',
+      error: 'bg-negative/20 text-negative',
+      gray: 'border border-[#CCDBFF] bg-[#D5E5F1] font-medium text-secondary dark:border-[#1B3C54] dark:bg-[#192E3C]',
       warning: 'bg-yellow-500 text-black',
       brightYellow: 'bg-yellow-200 text-purple-700',
-      purple: 'bg-pink-900 text-white',
-      blue: 'bg-blue-500 text-white',
+      pink: 'bg-pink-900 text-white',
+      purple: 'bg-purple-100',
+      blue: 'border border-n-sky-500 bg-n-sky-500/20 text-n-sky-500 dark:border-n-sky-300 dark:bg-n-sky-300/20 dark:text-n-sky-300',
+      green: 'border border-positive bg-positive/20 text-positive',
     },
     size: {
       extraSmall: 'text-3xs',
@@ -27,32 +29,34 @@ const badgeVariants = cva('text-center font-medium', {
       small: 'px-1.5 py-px',
       regular: 'px-1.5 py-1',
     },
-    rounded: {
-      regular: 'rounded',
-      full: 'rounded-full',
-    },
   },
   defaultVariants: {
     size: 'regular',
     padding: 'small',
-    rounded: 'regular',
   },
 })
 
-export function Badge(props: BadgeProps) {
+export function Badge({
+  className,
+  children,
+  type,
+  size,
+  padding,
+  ...rest
+}: BadgeProps) {
   return (
-    <span
+    <div
       className={cn(
         badgeVariants({
-          type: props.type,
-          size: props.size,
-          padding: props.padding,
-          rounded: props.rounded,
+          type: type,
+          size: size,
+          padding: padding,
         }),
-        props.className,
+        className,
       )}
+      {...rest}
     >
-      {props.children}
-    </span>
+      {children}
+    </div>
   )
 }

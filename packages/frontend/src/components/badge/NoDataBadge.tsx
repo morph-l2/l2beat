@@ -1,21 +1,14 @@
-import React from 'react'
+import { Badge, type BadgeProps } from './Badge'
 
-import { Tooltip, TooltipContent, TooltipTrigger } from '../tooltip/Tooltip'
-import { Badge } from './Badge'
-
-export interface NoDataBadgeProps {
+interface Props {
   className?: string
+  size?: BadgeProps['size']
 }
 
-export function NoDataBadge(props: NoDataBadgeProps) {
+export function NoDataBadge({ className, size = 'small' }: Props) {
   return (
-    <Tooltip>
-      <TooltipTrigger>
-        <Badge className={props.className} type="gray" size="small">
-          No data
-        </Badge>
-      </TooltipTrigger>
-      <TooltipContent>We don't have data for this item</TooltipContent>
-    </Tooltip>
+    <Badge className={className} type="gray" size={size}>
+      No data
+    </Badge>
   )
 }

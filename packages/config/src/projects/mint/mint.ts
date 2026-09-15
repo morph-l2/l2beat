@@ -1,0 +1,113 @@
+import { EthereumAddress, ProjectId, UnixTime } from '@l2beat/shared-pure'
+import { DERIVATION, REASON_FOR_BEING_OTHER } from '../../common'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import type { ScalingProject } from '../../internalTypes'
+import { opStackL2 } from '../../templates/opStack'
+
+const discovery = new ProjectDiscovery('mint')
+
+export const mint: ScalingProject = opStackL2({
+  ecosystemInfo: {
+    id: ProjectId('superchain'),
+    isPartOfSuperchain: true,
+  },
+  addedAt: UnixTime(1715644800), // 2024-05-14T00:00:00Z
+  archivedAt: UnixTime(1775534349), // 2026-04-07T03:59:09Z
+  discovery,
+  daTracking: [
+    {
+      type: 'ethereum',
+      daLayer: ProjectId('ethereum'),
+      sinceBlock: 19862462, // first batch of the original batcher
+      untilBlock: 23979599, // batcher rotation, last old-batcher batch @ 23969121
+      inbox: EthereumAddress('0x4e31448a098393727b786e25B54E59DcA1b77FE1'),
+      sequencers: [
+        EthereumAddress('0x68bdFecE01535090c8f3C27ec3b1AE97E83fA4aA'),
+      ],
+    },
+    {
+      type: 'ethereum',
+      daLayer: ProjectId('ethereum'),
+      sinceBlock: 23979599, // first batch of the rotated batcher
+      untilBlock: 24824990, // last batch before archival
+      inbox: EthereumAddress('0x4e31448a098393727b786e25B54E59DcA1b77FE1'),
+      sequencers: [
+        EthereumAddress('0x560aFA9cF6B39D8C83938C77036E80807a56Da16'),
+      ],
+    },
+  ],
+  additionalBadges: [],
+  additionalPurposes: ['NFT'],
+  reasonsForBeingOther: [REASON_FOR_BEING_OTHER.CLOSED_PROOFS],
+  isPartOfSuperchain: true,
+  display: {
+    redWarning: {
+      text: 'Mint Blockchain ceased operations on April 17, 2026 and only supports withdrawals. Users must withdraw ETH, WBTC, USDC, and USDT to Ethereum via [mintchain.io/withdraw](https://mintchain.io/withdraw) before October 20, 2026. Any assets left on the chain after that date will be unrecoverable.',
+    },
+    name: 'Mint',
+    slug: 'mint',
+    description: 'Mint Blockchain is a Layer 2 network for NFTs.',
+    links: {
+      websites: ['https://mintchain.io/'],
+      bridges: ['https://bridge.mintchain.io/', 'https://mintchain.io/faucet'],
+      documentation: ['https://docs.mintchain.io/'],
+      explorers: ['https://explorer.mintchain.io'],
+      repositories: ['https://github.com/Mint-Blockchain'],
+      socialMedia: [
+        'https://twitter.com/Mint_Blockchain',
+        'https://discord.com/invite/jmANcWNp8r',
+        'https://t.me/MintBlockchain',
+        'https://mirror.xyz/mintchain.eth',
+        'https://community.mintchain.io',
+      ],
+      other: ['https://growthepie.com/chains/mint'],
+    },
+  },
+  chainConfig: {
+    name: 'mint',
+    chainId: 185,
+    explorerUrl: 'https://explorer.mintchain.io',
+    coingeckoPlatform: 'mint',
+    multicallContracts: [
+      {
+        sinceBlock: 19861572,
+        batchSize: 150,
+        address: EthereumAddress('0xcA11bde05977b3631167028862bE2a173976CA11'),
+        version: '3',
+      },
+    ],
+    sinceTimestamp: UnixTime.fromDate(new Date('2024-05-13T14:02:11Z')),
+    untilTimestamp: UnixTime(1775534349), // 2026-04-07T03:59:09Z
+    apis: [
+      { type: 'rpc', url: 'https://rpc.mintchain.io', callsPerMinute: 800 },
+      { type: 'blockscout', url: 'https://explorer.mintchain.io/api' },
+    ],
+  },
+  activityConfig: {
+    type: 'block',
+    startBlock: 1,
+    adjustCount: { type: 'SubtractOne' },
+  },
+  isNodeAvailable: true,
+  nodeSourceLink:
+    'https://github.com/ethereum-optimism/optimism/tree/develop/op-node',
+  stateDerivation: DERIVATION.OPSTACK('MINT'),
+  genesisTimestamp: UnixTime(1715608931),
+  milestones: [
+    {
+      title: 'Mint Blockchain shutdown',
+      url: 'https://mintchain.io/withdraw',
+      date: '2026-04-17T00:00:00Z',
+      description:
+        'Mint Blockchain ceases operations. Users must withdraw funds before October 20, 2026.',
+      type: 'incident',
+    },
+    {
+      title: 'Mainnet Launch',
+      url: 'https://mirror.xyz/mintchain.eth/HYbutKDjAKkphS_3_93AFh93JGWDUKtrz1lH6NpUybM',
+      date: '2024-05-14T00:00:00Z',
+      description: 'Mint Mainnet is now live.',
+      type: 'general',
+    },
+  ],
+})

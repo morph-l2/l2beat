@@ -1,0 +1,377 @@
+/*
+V2 MessageSent Format for TokenMessenger V2:
+- version: uint32
+- sourceDomain: uint32. // 3
+- destinationDomain: uint32. // 0
+- nonce: uint256.   // PLACEHOLDER in Sent message ! (0)
+- sender: bytes32 (address padded to 32 bytes).  // 0x00000000000000000000000028b5a0e9c621a5badaa536219b3a228c8168cf5d
+- recipient: bytes32 (address padded to 32 bytes). // 0x00000000000000000000000028b5a0e9c621a5badaa536219b3a228c8168cf5d
+- destinationCaller: bytes32 (address padded to 32 bytes) // 0x000000000000000000000000047669ebb4ec165d2bd5e78706e9aede04bf095a
+- minFinalityThreshold: uint32 (the minimum finality threshold the sender is willing to accept).  // 1000
+- finalityThresholdExecuted: uint32 (the finality threshold that was actually executed, set to 0 in the Sent message). // 0
+- messageBody: bytes (the actual message payload, e.g., a BurnMessage)
+    - version: uint32
+    - burnToken: bytes32
+    - mintRecipient: bytes32
+    - amount: uint256
+    - messageSender: bytes32
+    - maxFee: uint256
+    - feeExecuted: uint256                 // PLACEHOLDER in Sent message !
+    - expirationBlock: uint256             // PLACEHOLDER in Sent message !
+    - hookData: bytes (optional data for the receiving app)
+
+CIRCLE Validators changes on-the-fly the feeExecuted and expirationBlock that are placeholders in the Sent message.
+
+V2 ReceiveMessage Format for TokenMessenger V2:
+- caller. // 0x047669eBB4EC165d2Bd5E78706E9aede04BF095a
+- sourceDomain // 1
+- nonce // 0xc4944792b9c7d189f56a99c664965118978e307e1287c25e3a259a50020ae6ed
+- sender // 0x00000000000000000000000028b5a0e9c621a5badaa536219b3a228c8168cf5d
+- finalityThresholdExecuted // 2000
+- messageBody (the same BurnMessage as above, but with feeExecuted and expirationBlock properly set)
+    - version: uint32
+    - burnToken: bytes32
+    - mintRecipient: bytes32
+    - amount: uint256
+    - messageSender: bytes32
+    - maxFee: uint256
+    - feeExecuted: uint256
+    - expirationBlock: uint256
+    - hookData: bytes (optional data for the receiving app)
+
+Matching logic:
+- sender should be the same in Sent and Received messages
+- srcDomain and dstDomain should match
+- messageBody except feeExecuted and expirationBlock should match
+This has a problem that the same message sent twice will be identical, however considering that the nonce
+is set by Circle validators, it's hard to say how this can be solved by the matching logic only.
+*/
+
+import {
+  Address32,
+  assert,
+  ChainSpecificAddress,
+  type EthereumAddress,
+} from '@l2beat/shared-pure'
+import type { InteropConfigStore } from '../../engine/config/InteropConfigStore'
+import { isMayanCircleForwarded, MayanForwarded } from '../mayan-forwarder'
+import { findWrappedMayanWormholeLog } from '../mayan-wormhole'
+import {
+  createInteropEventType,
+  type DataRequest,
+  findChain,
+  type InteropEvent,
+  type InteropEventDb,
+  type InteropPluginResyncable,
+  type LogToCapture,
+  type MatchResult,
+  Result,
+} from '../types'
+import { LogMessagePublished } from '../wormhole/wormhole.plugin'
+import { CCTPV1Config } from './cctp.config'
+import {
+  cctpMessageSentLog,
+  cctpTransferLog,
+  cctpV1MessageReceivedLog,
+  decodeMessageVersion,
+  decodeV1Message,
+  decodeV1MessageBody,
+  parseCctpMessageSent,
+  parseCctpV1ReceivedTransfer,
+} from './cctp.utils'
+
+type CCTPV1MessagePayloadInfo = {
+  app?: string
+  messageType?: string
+  selector?: string
+  relayerRefundRoot?: string
+  slowRelayRoot?: string
+}
+
+export const CCTPv1MessageSent = createInteropEventType<
+  {
+    messageBody: string
+    $dstChain: string
+    srcTokenAddress?: Address32
+    srcAmount?: bigint
+  } & CCTPV1MessagePayloadInfo
+>('cctp-v1.MessageSent', {
+  direction: 'outgoing',
+})
+
+export const CCTPv1MessageReceived = createInteropEventType<
+  {
+    caller: EthereumAddress
+    $srcChain: string
+    nonce: number
+    messageBody: string
+    dstTokenAddress?: Address32
+    dstAmount?: bigint
+  } & CCTPV1MessagePayloadInfo
+>('cctp-v1.MessageReceived', {
+  direction: 'incoming',
+})
+
+export class CCTPV1Plugin implements InteropPluginResyncable {
+  readonly name = 'cctp-v1'
+
+  constructor(
+    private configs: InteropConfigStore,
+    private oneSidedChains: string[] = [],
+  ) {}
+
+  getDataRequests(): DataRequest[] {
+    const networks = this.configs.get(CCTPV1Config)
+    if (!networks) return []
+
+    const addresses: ChainSpecificAddress[] = []
+    for (const network of networks) {
+      if (
+        !network.messageTransmitter ||
+        this.oneSidedChains.includes(network.chain)
+      ) {
+        continue
+      }
+      try {
+        addresses.push(
+          ChainSpecificAddress.fromLong(
+            network.chain,
+            network.messageTransmitter,
+          ),
+        )
+      } catch {
+        // Chain not supported by ChainSpecificAddress, skip
+      }
+    }
+
+    return [
+      {
+        type: 'event',
+        signature: cctpMessageSentLog,
+        addresses,
+      },
+      {
+        type: 'event',
+        signature: cctpV1MessageReceivedLog,
+        includeTxEvents: [cctpTransferLog],
+        addresses,
+      },
+    ]
+  }
+
+  capture(input: LogToCapture) {
+    const networks = this.configs.get(CCTPV1Config)
+    if (!networks) return
+
+    const network = networks.find((n) => n.chain === input.chain)
+    if (!network) return
+    assert(
+      network.messageTransmitter,
+      'We capture only chain with message transmitters',
+    )
+
+    const messageSent = parseCctpMessageSent(input.log, [
+      network.messageTransmitter,
+    ])
+    if (messageSent) {
+      const version = decodeMessageVersion(messageSent.message)
+      if (version === 0) {
+        const message = decodeV1Message(messageSent.message)
+        if (!message) return
+        const messageBody = decodeV1MessageBody(message.rawBody)
+        const payloadInfo = classifyV1MessagePayload(
+          message.rawBody,
+          messageBody,
+        )
+        return [
+          CCTPv1MessageSent.create(input, {
+            messageBody: message.rawBody,
+            $dstChain: findChain(
+              networks,
+              (x) => x.domain,
+              Number(message.destinationDomain),
+            ),
+            srcTokenAddress: messageBody
+              ? Address32.from(messageBody.burnToken)
+              : undefined,
+            srcAmount: messageBody?.amount ?? undefined,
+            ...payloadInfo,
+          }),
+        ]
+      }
+    }
+
+    const v1MessageReceived = parseCctpV1ReceivedTransfer(input, networks)
+    if (v1MessageReceived) {
+      const payloadInfo = classifyV1MessagePayload(
+        v1MessageReceived.messageBody,
+        v1MessageReceived.burnMessage,
+      )
+      return [
+        CCTPv1MessageReceived.create(input, {
+          caller: v1MessageReceived.caller,
+          $srcChain: v1MessageReceived.srcChain,
+          nonce: v1MessageReceived.nonce,
+          messageBody: v1MessageReceived.messageBody,
+          dstTokenAddress: v1MessageReceived.dstTokenAddress,
+          dstAmount: v1MessageReceived.dstAmount,
+          ...payloadInfo,
+        }),
+      ]
+    }
+  }
+
+  matchTypes = [CCTPv1MessageSent, CCTPv1MessageReceived]
+  match(event: InteropEvent, db: InteropEventDb): MatchResult | undefined {
+    const networks = this.configs.get(CCTPV1Config)
+    if (!networks) return
+    if (CCTPv1MessageReceived.checkType(event)) {
+      const network = networks.find((n) => n.chain === event.ctx.chain)
+      if (!network) return
+
+      // findAll and use oldest for determinism
+      // there are bots like https://etherscan.io/address/0xfd62020cee216dc543e29752058ee9f60f7d9ff9#tokentxns
+      // who always use the same messageBody
+      const messageSentMatches = db.findAll(CCTPv1MessageSent, {
+        messageBody: event.args.messageBody,
+      })
+      if (messageSentMatches.length === 0) {
+        const srcChain = event.args.$srcChain
+        if (!this.oneSidedChains.includes(srcChain)) return
+        if (isMessageOnlyPayload(event.args)) return []
+
+        return [
+          Result.Transfer('cctp-v1.Transfer', {
+            srcChain,
+            dstEvent: event,
+            dstTokenAddress: event.args.dstTokenAddress,
+            dstAmount: event.args.dstAmount,
+            srcWasBurned: true,
+            dstWasMinted: true,
+            bridgeType: 'burnAndMint',
+          }),
+        ]
+      }
+      const messageSent = messageSentMatches.sort(
+        (a, b) => a.ctx.timestamp - b.ctx.timestamp,
+      )[0]
+      const wrappers: MatchResult = []
+      const mayanForwarded = db
+        .findAll(MayanForwarded, { sameTxAfter: messageSent })
+        .find(isMayanCircleForwarded)
+      if (mayanForwarded) {
+        const mayanWrappedWormholeLog = findWrappedMayanWormholeLog(
+          db,
+          mayanForwarded,
+          LogMessagePublished,
+        )
+        wrappers.push(
+          Result.Message('mayan.Message', {
+            app: 'mctp',
+            srcEvent: mayanForwarded,
+            dstEvent: event,
+            extraEvents: mayanWrappedWormholeLog
+              ? [mayanWrappedWormholeLog]
+              : undefined,
+          }),
+        )
+      }
+      return [
+        ...wrappers,
+        Result.Message('cctp-v1.Message', {
+          app: isMessageOnlyPayload(messageSent.args)
+            ? (messageSent.args.app ?? 'unknown')
+            : 'cctp-v1',
+          srcEvent: messageSent,
+          dstEvent: event,
+        }),
+        ...(!isMessageOnlyPayload(messageSent.args) &&
+        !isMessageOnlyPayload(event.args)
+          ? [
+              Result.Transfer('cctp-v1.Transfer', {
+                srcEvent: messageSent,
+                srcTokenAddress: messageSent.args.srcTokenAddress,
+                srcAmount: messageSent.args.srcAmount,
+                dstEvent: event,
+                dstTokenAddress: event.args.dstTokenAddress,
+                dstAmount: event.args.dstAmount,
+                srcWasBurned: true,
+                dstWasMinted: true,
+                bridgeType: 'burnAndMint',
+              }),
+            ]
+          : []),
+      ]
+    }
+
+    if (CCTPv1MessageSent.checkType(event)) {
+      const hasCounterpart =
+        db.findAll(CCTPv1MessageReceived, {
+          messageBody: event.args.messageBody,
+        }).length > 0
+      if (hasCounterpart) return
+
+      const dstChain = event.args.$dstChain
+      if (!this.oneSidedChains.includes(dstChain)) return
+      if (isMessageOnlyPayload(event.args)) return []
+
+      return [
+        Result.Transfer('cctp-v1.Transfer', {
+          srcEvent: event,
+          dstChain,
+          srcTokenAddress: event.args.srcTokenAddress,
+          srcAmount: event.args.srcAmount,
+          srcWasBurned: true,
+          dstWasMinted: true,
+          bridgeType: 'burnAndMint',
+        }),
+      ]
+    }
+  }
+}
+
+function classifyV1MessagePayload(
+  encodedHex: string,
+  burnMessage: ReturnType<typeof decodeV1MessageBody>,
+): CCTPV1MessagePayloadInfo {
+  if (burnMessage) {
+    return {
+      app: 'cctp-v1',
+      messageType: 'transfer',
+    }
+  }
+
+  const relayRootBundle = decodeAcrossRelayRootBundle(encodedHex)
+  if (relayRootBundle) {
+    return {
+      app: 'across',
+      messageType: 'relayRootBundle',
+      ...relayRootBundle,
+    }
+  }
+
+  return {
+    app: 'unknown',
+    messageType: 'messageOnly',
+    selector: readSelector(encodedHex),
+  }
+}
+
+function isMessageOnlyPayload(payload: CCTPV1MessagePayloadInfo) {
+  return payload.messageType !== undefined && payload.messageType !== 'transfer'
+}
+
+function decodeAcrossRelayRootBundle(encodedHex: string) {
+  const selector = '0x493a4f84'
+  if (!encodedHex.startsWith(selector)) return
+  if ((encodedHex.length - 2) / 2 !== 4 + 32 + 32) return
+
+  return {
+    relayerRefundRoot: `0x${encodedHex.slice(10, 74)}`,
+    slowRelayRoot: `0x${encodedHex.slice(74, 138)}`,
+  }
+}
+
+function readSelector(encodedHex: string) {
+  return encodedHex.length >= 10 ? encodedHex.slice(0, 10) : undefined
+}

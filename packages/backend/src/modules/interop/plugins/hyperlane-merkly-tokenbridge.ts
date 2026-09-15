@@ -1,0 +1,254 @@
+/**
+ * Merkly tokenbridge via Hyperlane AMB (there are other merkly bridges)
+ * in practice Merkly is only used to bridge ETH/WETH (liquidity pool)
+ * does not emit at the destination, so for matching it behaves like a half-HWR with ETH as the asset
+ * NON-MINTING
+ */
+import { Address32, EthereumAddress } from '@l2beat/shared-pure'
+import type { InteropConfigStore } from '../engine/config/InteropConfigStore'
+import {
+  Dispatch,
+  dispatchIdLog,
+  dispatchLog,
+  Process,
+  parseDispatch,
+  parseDispatchId,
+} from './hyperlane'
+import { findHyperlaneChain, HyperlaneConfig } from './hyperlane.config'
+import { parseSentTransferRemote, sentTransferRemoteLog } from './hyperlane-hwr'
+import { findParsedAround } from './logScan'
+import {
+  createInteropEventType,
+  type DataRequest,
+  defineNetworks,
+  type InteropEvent,
+  type InteropEventDb,
+  type InteropPluginResyncable,
+  type LogToCapture,
+  type MatchResult,
+  Result,
+} from './types'
+
+// https://minter.merkly.com/hyperlane/docs --> ETH bridge
+// chainconfeeg
+const MERKLY_TOKENBRIDGE_NETWORKS = defineNetworks(
+  'hyperlane-merkly-tokenbridge',
+  [
+    {
+      chain: 'ethereum',
+      chainId: 1,
+      address: EthereumAddress('0x64D9b639aE85a1e436c1752889c5C40699f3887C'),
+    },
+    {
+      chain: 'arbitrum',
+      chainId: 42161,
+      address: EthereumAddress('0x233888F5Dc1d3C0360b559aBc029675290DAFa70'),
+    },
+    {
+      chain: 'base',
+      chainId: 8453,
+      address: EthereumAddress('0x0cb0354E9C51960a7875724343dfC37B93d32609'),
+    },
+    {
+      chain: 'optimism',
+      chainId: 10,
+      address: EthereumAddress('0xC110E7FAA95680c79937CCACa3d1caB7902bE25e'),
+    },
+    // no apechain
+    {
+      chain: 'polygonpos',
+      chainId: 137,
+      address: EthereumAddress('0x0cb0354E9C51960a7875724343dfC37B93d32609'),
+      token: EthereumAddress('0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619'),
+    },
+    {
+      chain: 'gnosis',
+      chainId: 100,
+      address: EthereumAddress('0x98Ee7E8f0A0D18F393805cf99A56ce6B33ea1B21'),
+      token: EthereumAddress('0x6A023CCd1ff6F2045C3309768eAd9E68F978f6e1'),
+    },
+    // no zksync2
+    {
+      chain: 'abstract',
+      chainId: 2741,
+      address: EthereumAddress('0xa0be52cEA8BDC5CF39ca6EdB4FeBb9610ef68750'),
+    },
+    // no katana
+    // no bsc
+    // no celo
+    {
+      chain: 'linea',
+      chainId: 59144,
+      address: EthereumAddress('0x8F2161c83F46B46628cb591358dE4a89A63eEABf'),
+    },
+    {
+      chain: 'ink',
+      chainId: 57073,
+      address: EthereumAddress('0x25730BDE542aDBEf1FD978526Bf20c04b5251530'),
+    },
+    {
+      chain: 'xlayer',
+      chainId: 196,
+      address: EthereumAddress('0x444791b5cA0E0BdC2De93467f430fbe925b35487'),
+    },
+    // monad, tempo unsupported
+    {
+      chain: 'worldchain',
+      chainId: 480,
+      address: EthereumAddress('0x6E55472109E6aBE4054a8E8b8d9EdFfCb31032C5'),
+    },
+  ],
+)
+
+export const HwrTransferSentMerkly = createInteropEventType<{
+  messageId: `0x${string}`
+  $dstChain: string
+  destination: number
+  recipient: Address32
+  amount: bigint
+  tokenAddress: Address32
+}>('hyperlane-merkly-tokenbridge.TransferSent')
+
+export class HyperlaneMerklyTokenBridgePlugin
+  implements InteropPluginResyncable
+{
+  readonly name = 'hyperlane-merkly-tokenbridge'
+
+  constructor(
+    private configs: InteropConfigStore,
+    private oneSidedChains: string[] = [],
+  ) {}
+
+  getDataRequests(): DataRequest[] {
+    return [
+      {
+        type: 'event',
+        signature: sentTransferRemoteLog,
+        includeTxEvents: [dispatchLog, dispatchIdLog],
+        addresses: '*',
+      },
+    ]
+  }
+
+  capture(input: LogToCapture) {
+    const hyperlaneNetworks = this.configs.get(HyperlaneConfig) ?? []
+    const network = MERKLY_TOKENBRIDGE_NETWORKS.find(
+      (n) => n.chain === input.chain,
+    )
+    if (!network) return
+
+    const sentTransferRemote = parseSentTransferRemote(input.log, [
+      network.address, // important to filter by emitter as this is the only distinction from other HWR
+    ])
+    if (sentTransferRemote) {
+      const senderAddress = input.log.address.toLowerCase()
+      const messageId = findParsedAround(
+        input.txLogs,
+        // biome-ignore lint/style/noNonNullAssertion: It's there
+        input.log.logIndex!,
+        (txLog, index) => {
+          const dispatch = parseDispatch(txLog, null)
+          if (!dispatch) return
+          if (dispatch.sender.toLowerCase() !== senderAddress) return
+          // TODO: edge case logs
+          if (
+            Number(dispatch.destination) !==
+            Number(sentTransferRemote.destination)
+          )
+            return
+
+          const nextLog = input.txLogs[index + 1]
+          const dispatchId = nextLog && parseDispatchId(nextLog, null)
+          return dispatchId?.messageId
+        },
+      )
+      if (!messageId) return
+
+      const $dstChain = findHyperlaneChain(
+        hyperlaneNetworks,
+        Number(sentTransferRemote.destination),
+      )
+
+      return [
+        HwrTransferSentMerkly.create(input, {
+          messageId,
+          $dstChain,
+          destination: Number(sentTransferRemote.destination),
+          recipient: Address32.from(sentTransferRemote.recipient),
+          amount: sentTransferRemote.amount,
+          tokenAddress: network.token
+            ? Address32.from(network.token)
+            : Address32.NATIVE, // we assume ETH (empirically, contracts are unverified)
+        }),
+      ]
+    }
+  }
+
+  matchTypes = [Process, HwrTransferSentMerkly]
+  match(event: InteropEvent, db: InteropEventDb): MatchResult | undefined {
+    if (Process.checkType(event)) {
+      const network = MERKLY_TOKENBRIDGE_NETWORKS.find(
+        (n) => n.chain === event.ctx.chain,
+      )
+      const hwrSentMerkly = db.find(HwrTransferSentMerkly, {
+        messageId: event.args.messageId,
+      })
+      if (!hwrSentMerkly) return
+
+      const dispatch = db.find(Dispatch, {
+        messageId: event.args.messageId,
+      })
+      if (!dispatch) {
+        return
+      }
+
+      return [
+        Result.Message('hyperlane.Message', {
+          // there are non-hyperlane merkly bridges
+          app: 'merkly-tokenbridge-hyperlane',
+          srcEvent: dispatch,
+          dstEvent: event,
+        }),
+        Result.Transfer('merkly-tokenbridge-hyperlane.Transfer', {
+          srcEvent: hwrSentMerkly,
+          srcTokenAddress: hwrSentMerkly.args.tokenAddress,
+          srcAmount: hwrSentMerkly.args.amount,
+          dstEvent: event, // merkly does not emit at destination
+          dstTokenAddress: network?.token
+            ? Address32.from(network.token)
+            : Address32.NATIVE,
+          dstAmount: hwrSentMerkly.args.amount,
+        }),
+      ]
+    }
+
+    if (!HwrTransferSentMerkly.checkType(event)) return
+
+    const process = db.find(Process, {
+      messageId: event.args.messageId,
+    })
+    if (process) return
+
+    const dstChain = event.args.$dstChain
+    if (!dstChain || !this.oneSidedChains.includes(dstChain)) return
+
+    const dstNetwork = MERKLY_TOKENBRIDGE_NETWORKS.find(
+      (network) => network.chain === dstChain,
+    )
+
+    return [
+      Result.Transfer('merkly-tokenbridge-hyperlane.Transfer', {
+        srcEvent: event,
+        srcTokenAddress: event.args.tokenAddress,
+        srcAmount: event.args.amount,
+        dstChain,
+        dstTokenAddress: dstNetwork?.token
+          ? Address32.from(dstNetwork.token)
+          : dstNetwork
+            ? Address32.NATIVE
+            : undefined,
+        dstAmount: event.args.amount,
+      }),
+    ]
+  }
+}

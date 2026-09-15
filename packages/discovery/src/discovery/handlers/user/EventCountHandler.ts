@@ -1,16 +1,15 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
-import * as z from 'zod'
+import type { ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
 
-export type EventCountHandlerDefinition = z.infer<
+export type EventCountHandlerDefinition = v.infer<
   typeof EventCountHandlerDefinition
 >
-export const EventCountHandlerDefinition = z.strictObject({
-  type: z.literal('eventCount'),
-  topics: z.array(z.union([z.string(), z.null()])),
+export const EventCountHandlerDefinition = v.strictObject({
+  type: v.literal('eventCount'),
+  topics: v.array(v.union([v.string(), v.null()])),
 })
 
 export class EventCountHandler implements Handler {
@@ -19,16 +18,13 @@ export class EventCountHandler implements Handler {
   constructor(
     readonly field: string,
     readonly definition: EventCountHandlerDefinition,
-    readonly logger: DiscoveryLogger,
   ) {}
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, [`Counting events`])
     const logs = await provider.getLogs(address, this.definition.topics)
-
     return {
       field: this.field,
       value: logs.length,

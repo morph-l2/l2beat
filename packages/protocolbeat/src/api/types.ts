@@ -1,114 +1,364 @@
-export interface ProjectParameters {
-  name: string
-  blockNumber: number
-  contracts: ContractParameters[]
-  eoas: string[]
-  abis: Record<string, string[]>
-}
+// This file is duplicated in protocolbeat and l2b!
 
-export type ContractValue =
+export type json =
   | string
   | number
   | boolean
-  | ContractValue[]
-  | { [key: string]: ContractValue }
+  | null
+  | json[]
+  | { [key: string]: json }
 
-export interface ContractParameters {
+export type ApiProjectsResponse = ApiProjectEntry[]
+
+export interface ApiProjectEntry {
   name: string
-  unverified?: true
+  addresses: string[]
+  contractNames: string[]
+}
+
+export interface ApiProjectResponse {
+  entries: ApiProjectChain[]
+}
+
+export type ApiTvlResponse = ApiTvlEntry[]
+
+export interface ApiTvlEntry {
+  tvl: number
+  ticker: string
   address: string
-  code?: string
-  upgradeability: UpgradeabilityParameters
-  values?: Record<string, ContractValue>
-  errors?: Record<string, string>
+  iconURL: string | undefined
+  balance: number
+  price: number | undefined
 }
 
-export type UpgradeabilityParameters =
-  | ImmutableUpgradeability
-  | GnosisSafeUpgradeability
-  | EIP1967ProxyUpgradeability
-  | ZeppelinOSProxyUpgradeability
-  | StarkWareProxyUpgradeability
-  | StarkWareDiamondUpgradeability
-  | ArbitrumProxyUpgradeability
-  | NewArbitrumProxyUpgradeability
-  | ResolvedDelegateProxyUpgradeability
-  | EIP897ProxyUpgradeability
-  | CallImplementationProxyUpgradeability
-  | EIP2535ProxyUpgradeability
-
-export interface ImmutableUpgradeability {
-  type: 'immutable'
+export interface ApiPreviewResponse {
+  permissionsPerChain: { chain: string; permissions: ApiPreviewPermissions }[]
+  contractsPerChain: { chain: string; contracts: ApiPreviewContract[] }[]
 }
 
-export interface GnosisSafeUpgradeability {
-  type: 'gnosis safe'
-  masterCopy: string
+export interface ApiPreviewPermissions {
+  roles: ApiPreviewPermission[]
+  actors: ApiPreviewPermission[]
 }
 
-export interface EIP1967ProxyUpgradeability {
-  type: 'EIP1967 proxy'
-  admin: string
-  implementation: string
+export interface ApiPreviewPermission {
+  addresses: AddressFieldValue[]
+  name: string
+  description: string
+  multisigParticipants: AddressFieldValue[] | undefined
 }
 
-export interface ZeppelinOSProxyUpgradeability {
-  type: 'ZeppelinOS proxy'
-  admin?: string
-  owner?: string
-  implementation: string
+export interface ApiPreviewContract {
+  addresses: AddressFieldValue[]
+  name: string
+  description: string
+  upgradableBy: UpgradeabilityActor[] | undefined
 }
 
-export interface StarkWareProxyUpgradeability {
-  type: 'StarkWare proxy'
-  implementation: string
-  callImplementation: string
-  upgradeDelay: number
-  isFinal: boolean
+export interface ApiProjectChain {
+  project: string
+  initialContracts: ApiProjectContract[]
+  discoveredContracts: ApiProjectContract[]
+  eoas: ApiAddressEntry[]
+  blockNumbers: Record<string, number>
 }
 
-export interface StarkWareDiamondUpgradeability {
-  type: 'StarkWare diamond'
-  implementation: string
-  upgradeDelay: number
-  isFinal: boolean
-  facets: Record<string, string>
+export type ApiListTemplatesResponse = string[]
+
+export interface ApiTemplateFileResponse {
+  template: string
+  shapes?: string
+  criteria?: string
 }
 
-export interface ArbitrumProxyUpgradeability {
-  type: 'Arbitrum proxy'
-  admin: string
-  adminImplementation: string
-  userImplementation: string
+export interface ApiConfigFileResponse {
+  config: string
 }
 
-export interface NewArbitrumProxyUpgradeability {
-  type: 'new Arbitrum proxy'
-  admin: string
-  implementation: string
-  adminImplementation: string
-  userImplementation: string
+export interface ApiProjectLayoutEntry {
+  name: string
+  description?: string
 }
 
-export interface ResolvedDelegateProxyUpgradeability {
-  type: 'resolved delegate proxy'
-  addressManager: string
-  implementationName: string
-  implementation: string
+export type ApiProjectLayoutsResponse = ApiProjectLayoutEntry[]
+
+export interface ApiProjectLayoutResponse {
+  layout: unknown
 }
 
-export interface EIP897ProxyUpgradeability {
-  type: 'EIP897 proxy'
-  isUpgradable: boolean
-  implementation: string
+export type ApiDiffHistorySectionKind =
+  | 'watched-changes'
+  | 'initial-discovery'
+  | 'source-code-changes'
+  | 'config-related-changes'
+
+export interface ApiDiffHistorySection {
+  kind: ApiDiffHistorySectionKind
+  body: string
 }
 
-export interface CallImplementationProxyUpgradeability {
-  type: 'call implementation proxy'
-  implementation: string
+export type ApiChainPoint =
+  | { kind: 'timestamp'; value: number }
+  | { kind: 'block'; value: number }
+
+export interface ApiDiffHistoryEntry {
+  date: string
+  current: ApiChainPoint | null
+  author: string | null
+  comparing: {
+    ref: string
+    commit: string
+    at: ApiChainPoint | null
+  } | null
+  discoveryHash: string | null
+  description: string
+  sections: ApiDiffHistorySection[]
 }
 
-export interface EIP2535ProxyUpgradeability {
-  type: 'EIP2535 diamond proxy'
-  facets: string[]
+export interface ApiDiffHistoryResponse {
+  total: number
+  entries: ApiDiffHistoryEntry[]
 }
+
+type RefreshReason =
+  | {
+      type: 'TEMPLATE_NO_LONGER_MATCHES'
+      contract: string
+      template: string
+    }
+  | {
+      type: 'TEMPLATE_MATCH_CHANGED'
+      contract: string
+      oldTemplate: string
+      newTemplates: string[]
+    }
+  | {
+      type: 'NEW_TEMPLATE_MATCH'
+      contract: string
+      newTemplates: string[]
+    }
+  | {
+      type: 'CONFIG_CHANGED'
+    }
+  | {
+      type: 'TEMPLATE_CONFIG_CHANGED'
+      templates: string[]
+    }
+
+export interface ApiConfigSyncStatusResponse {
+  reasons: RefreshReason[]
+}
+
+export type ApiCreateShapeResponse =
+  | {
+      success: true
+    }
+  | {
+      success: false
+      error: string
+    }
+
+export type ApiCreateConfigFileResponse =
+  | {
+      success: true
+    }
+  | {
+      success: false
+      error: string
+    }
+
+export interface ApiHandlersResponse {
+  handlers: {
+    type: string
+    schema: json
+    docs: string
+    examples: string[]
+  }[]
+}
+
+export type {
+  AnalyzerApiResponse,
+  AnalyzerResultApiResponse,
+} from '@l2beat/shared-pure'
+
+export type ApiAddressType =
+  | 'EOA'
+  | 'EOAPermissioned'
+  | 'Unverified'
+  | 'Token'
+  | 'Multisig'
+  | 'Diamond'
+  | 'Timelock'
+  | 'Untemplatized'
+  | 'Contract'
+  | 'Group'
+  | 'Unknown'
+
+export interface ApiAddressEntry {
+  name?: string
+  description?: string
+  roles: string[]
+  type: ApiAddressType
+  referencedBy: ApiAddressReference[]
+  address: string
+  chain: string
+  isReachable: boolean
+}
+
+export interface ApiAddressReference extends AddressFieldValue {
+  fieldNames: string[]
+}
+
+export interface Field {
+  name: string
+  value: FieldValue
+}
+
+export type FieldValue =
+  | AddressFieldValue
+  | HexFieldValue
+  | StringFieldValue
+  | NumberFieldValue
+  | BooleanFieldValue
+  | ArrayFieldValue
+  | ObjectFieldValue
+  | UnknownFieldValue
+  | ErrorFieldValue
+  | EmptyFieldValue
+
+export interface AddressFieldValue {
+  type: 'address'
+  name?: string
+  addressType: ApiAddressType
+  address: string
+}
+
+export interface HexFieldValue {
+  type: 'hex'
+  value: string
+}
+
+export interface StringFieldValue {
+  type: 'string'
+  value: string
+}
+
+export interface NumberFieldValue {
+  type: 'number'
+  value: string
+}
+
+export interface BooleanFieldValue {
+  type: 'boolean'
+  value: boolean
+}
+
+export interface ArrayFieldValue {
+  type: 'array'
+  values: FieldValue[]
+}
+
+export interface ObjectFieldValue {
+  type: 'object'
+  values: [FieldValue, FieldValue][]
+}
+
+export interface UnknownFieldValue {
+  type: 'unknown'
+  value: string
+}
+
+export interface ErrorFieldValue {
+  type: 'error'
+  error: string
+}
+
+export interface EmptyFieldValue {
+  type: 'empty'
+}
+
+export interface ApiProjectContract extends ApiAddressEntry {
+  template?: {
+    id: string
+    shape?: {
+      name: string
+      hasCriteria: boolean
+    }
+  }
+  proxyType?: string
+  fields: Field[]
+  abis: ApiAbi[]
+  implementationNames?: Record<string, string>
+}
+
+export interface ApiAbi {
+  address: string
+  entries: ApiAbiEntry[]
+}
+
+export interface ApiAbiEntry {
+  value: string
+  signature?: string
+  topic?: string
+}
+
+export interface ApiCodeSegment {
+  // `null` marks non-selectable text: the license/pragma/imports preamble and
+  // the whitespace between declarations. Joining every segment's `content` in
+  // order reproduces the original flattened source byte-for-byte.
+  name: string | null
+  content: string
+}
+
+export interface ApiCodeResponse {
+  entryName: string | undefined
+  sources: { name: string; declarations: ApiCodeSegment[] }[]
+}
+
+export interface ApiCodeSearchResponse {
+  matches: {
+    name: string | undefined
+    address: string
+    codeLocation: {
+      line: string
+      fileName: string
+      index: number
+      offset: number
+    }[]
+  }[]
+}
+
+export interface UpgradeabilityActor {
+  name: string
+  delay: string
+}
+
+// Config health report types
+export type ApiConfigHealthResponse = {
+  healthHints: ApiHealthHint[]
+  length: number
+}
+
+type ApiHealthHintBase = {
+  excess: {
+    ignoreInWatchMode?: string[]
+    ignoreMethods?: string[]
+    ignoreRelatives?: string[]
+  }
+}
+
+export type ApiHealthHint =
+  | (ApiHealthHintBase & {
+      source: 'config'
+      target: {
+        project: string
+        address: string
+        name?: string
+      }
+    })
+  | (ApiHealthHintBase & {
+      source: 'template'
+      target: {
+        templateId: string
+      }
+    })

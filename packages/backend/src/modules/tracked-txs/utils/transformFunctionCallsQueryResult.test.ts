@@ -1,22 +1,38 @@
-import { readFileSync } from 'fs'
+import { Logger } from '@l2beat/backend-tools'
+import {
+  createTrackedTxId,
+  type TrackedTxConfigEntry,
+  type TrackedTxFunctionCallConfig,
+  type TrackedTxId,
+  type TrackedTxSharedBridgeConfig,
+  type TrackedTxSharpSubmissionConfig,
+} from '@l2beat/shared'
 import {
   EthereumAddress,
   ProjectId,
-  TrackedTxsConfigSubtype,
+  type TrackedTxsConfigSubtype,
   UnixTime,
 } from '@l2beat/shared-pure'
-import { expect } from 'earl'
-
+import { expect, mockFn, mockObject } from 'earl'
+import { utils } from 'ethers'
+import { readFileSync } from 'fs'
 import {
-  TrackedTxConfigEntry,
-  TrackedTxFunctionCallConfig,
-  TrackedTxId,
-  TrackedTxSharpSubmissionConfig,
-  createTrackedTxId,
-} from '@l2beat/shared'
-import { Configuration } from '../../../tools/uif/multi/types'
-import {
-  BigQueryFunctionCallResult,
+  agglayerSharedBridgeChainId,
+  agglayerSharedBridgeVerifyBatchesInput,
+  agglayerSharedBridgeVerifyBatchesSelector,
+  agglayerSharedBridgeVerifyBatchesSignature,
+  elasticChainSharedBridgeChainId,
+  elasticChainSharedBridgeCommitBatchesInput,
+  elasticChainSharedBridgeCommitBatchesSelector,
+  elasticChainSharedBridgeCommitBatchesSignature,
+  elasticChainSharedBridgeExecuteBatchesPost29Input,
+  elasticChainSharedBridgeExecuteBatchesPost29Selector,
+  elasticChainSharedBridgeExecuteBatchesPost29Signature,
+  gatewaySharedBridgeChainAddress,
+} from '../../../test/sharedBridge'
+import type { Configuration } from '../../../tools/uif/multi/types'
+import type {
+  DuneFunctionCallResult,
   TrackedTxFunctionCallResult,
 } from '../types/model'
 import { transformFunctionCallsQueryResult } from './transformFunctionCallsQueryResult'
@@ -25,6 +41,8 @@ const ADDRESS_1 = EthereumAddress.random()
 const SELECTOR_1 = '0x095e4'
 const ADDRESS_2 = EthereumAddress.random()
 const SELECTOR_2 = '0x915d9'
+const ADDRESS_3 = EthereumAddress.random()
+const SELECTOR_3 = '0x90d5e'
 const SINCE_TIMESTAMP = UnixTime.now()
 
 const timestamp = UnixTime.fromDate(new Date('2022-01-01T01:00:00Z'))
@@ -35,12 +53,122 @@ const txHashes = [
   '0x90d5e81b40d6a6fa6f34b3dc67d3fce6',
 ]
 
-const inputFile = `src/test/sharpVerifierInput.txt`
+const inputFile = 'src/test/sharpVerifierInput.txt'
 const sharpInput = readFileSync(inputFile, 'utf-8')
 const paradexProgramHash =
   '3258367057337572248818716706664617507069572185152472699066582725377748079373'
 
 describe(transformFunctionCallsQueryResult.name, () => {
+  it('groups liveness without affecting costs from the same call', () => {
+    const signature = 'function submit((uint256 start,uint256 end))' as const
+    const iface = new utils.Interface([signature])
+    const selector = iface.getSighash('submit')
+    const address = EthereumAddress.random()
+    const firstInput = iface.encodeFunctionData('submit', [[123, 456]])
+    const secondInput = iface.encodeFunctionData('submit', [[123, 789]])
+    const livenessId = createTrackedTxId.random()
+    const costsId = createTrackedTxId.random()
+    const warn = mockFn().returns(undefined)
+    const logger = mockObject<Logger>({ warn })
+    const common = {
+      projectId: ProjectId('project'),
+      subtype: 'stateUpdates' as const,
+      sinceTimestamp: SINCE_TIMESTAMP,
+      params: {
+        formula: 'functionCall' as const,
+        address,
+        selector,
+        signature,
+      },
+    }
+    const configurations: Configuration<
+      TrackedTxConfigEntry & { params: TrackedTxFunctionCallConfig }
+    >[] = [
+      {
+        id: livenessId,
+        minHeight: 0,
+        maxHeight: null,
+        properties: {
+          ...common,
+          id: livenessId,
+          type: 'liveness',
+          groupBy: { type: 'functionCallParameter', path: [0, 0] },
+        },
+      },
+      {
+        id: costsId,
+        minHeight: 0,
+        maxHeight: null,
+        properties: {
+          ...common,
+          id: costsId,
+          type: 'l2costs',
+        },
+      },
+    ]
+
+    const result = transformFunctionCallsQueryResult(
+      configurations,
+      [],
+      [],
+      [
+        {
+          hash: txHashes[0],
+          block_number: block,
+          block_time: timestamp,
+          input: firstInput,
+          to: address,
+          gas_price: 10n,
+          gas_used: 100,
+          data_length: 100,
+          non_zero_bytes: 100,
+          blob_versioned_hashes: null,
+        },
+        {
+          hash: txHashes[1],
+          block_number: block + 1,
+          block_time: timestamp + 1,
+          input: secondInput,
+          to: address,
+          gas_price: 10n,
+          gas_used: 100,
+          data_length: 100,
+          non_zero_bytes: 100,
+          blob_versioned_hashes: null,
+        },
+        {
+          hash: txHashes[2],
+          block_number: block + 2,
+          block_time: timestamp + 2,
+          input: selector,
+          to: address,
+          gas_price: 10n,
+          gas_used: 100,
+          data_length: 4,
+          non_zero_bytes: 4,
+          blob_versioned_hashes: null,
+        },
+      ],
+      logger,
+    )
+
+    const liveness = result.filter((entry) => entry.type === 'liveness')
+    const costs = result.filter((entry) => entry.type === 'l2costs')
+
+    expect(liveness.map((entry) => entry.groupingKey)).toEqual(['123', '123'])
+    expect(costs).toHaveLength(3)
+    expect(warn).toHaveBeenCalledWith(
+      'Failed to derive liveness grouping key',
+      {
+        error: expect.anything(),
+        configurationId: livenessId,
+        projectId: common.projectId,
+        transactionHash: txHashes[2],
+        blockNumber: block + 2,
+      },
+    )
+  })
+
   it('should transform results', () => {
     const functionCalls = [
       mockFunctionCall({
@@ -76,45 +204,56 @@ describe(transformFunctionCallsQueryResult.name, () => {
       }),
     ]
 
-    const queryResults: BigQueryFunctionCallResult[] = [
+    const sharedBridgeCalls = [
+      mockSharedBridgeCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project2'),
+        address: EthereumAddress.random(),
+        selector: elasticChainSharedBridgeCommitBatchesSelector,
+        formula: 'sharedBridge',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'batchSubmissions',
+        firstParameter: elasticChainSharedBridgeChainId,
+        signature: elasticChainSharedBridgeCommitBatchesSignature,
+      }),
+    ]
+
+    const queryResults: DuneFunctionCallResult[] = [
       {
         hash: txHashes[0],
         block_number: block,
-        block_timestamp: timestamp,
+        block_time: timestamp,
         input: SELECTOR_1,
-        to_address: ADDRESS_1,
+        to: ADDRESS_1,
         gas_price: 10n,
-        receipt_gas_used: 100,
-        calldata_gas_used: 100,
+        gas_used: 100,
         data_length: 100,
-        receipt_blob_gas_price: null,
-        receipt_blob_gas_used: null,
+        non_zero_bytes: 100,
+        blob_versioned_hashes: null,
       },
       {
         hash: txHashes[1],
         block_number: block,
-        block_timestamp: timestamp,
+        block_time: timestamp,
         input: SELECTOR_2,
-        to_address: ADDRESS_2,
+        to: ADDRESS_2,
         gas_price: 20n,
-        receipt_gas_used: 200,
-        calldata_gas_used: 200,
+        gas_used: 200,
         data_length: 200,
-        receipt_blob_gas_price: null,
-        receipt_blob_gas_used: null,
+        non_zero_bytes: 150,
+        blob_versioned_hashes: null,
       },
       {
         hash: txHashes[2],
         block_number: block,
-        block_timestamp: timestamp,
+        block_time: timestamp,
         input: sharpInput,
-        to_address: sharpSubmissions[0].properties.params.address,
+        to: sharpSubmissions[0].properties.params.address,
         gas_price: 30n,
-        receipt_gas_used: 300,
-        calldata_gas_used: 300,
+        gas_used: 300,
         data_length: 300,
-        receipt_blob_gas_price: null,
-        receipt_blob_gas_used: null,
+        non_zero_bytes: 200,
+        blob_versioned_hashes: null,
       },
     ]
     const expected: TrackedTxFunctionCallResult[] = [
@@ -130,11 +269,10 @@ describe(transformFunctionCallsQueryResult.name, () => {
         toAddress: ADDRESS_1,
         input: SELECTOR_1,
         gasPrice: 10n,
-        receiptGasUsed: 100,
-        calldataGasUsed: 100,
+        gasUsed: 100,
+        calldataGasUsed: 16 * 100 + 4 * (100 - 100),
         dataLength: 100,
-        receiptBlobGasPrice: null,
-        receiptBlobGasUsed: null,
+        blobVersionedHashes: null,
       },
       {
         formula: 'functionCall',
@@ -148,11 +286,10 @@ describe(transformFunctionCallsQueryResult.name, () => {
         toAddress: ADDRESS_2,
         input: SELECTOR_2,
         gasPrice: 20n,
-        receiptGasUsed: 200,
-        calldataGasUsed: 200,
+        gasUsed: 200,
+        calldataGasUsed: 16 * 150 + 4 * (200 - 150),
         dataLength: 200,
-        receiptBlobGasPrice: null,
-        receiptBlobGasUsed: null,
+        blobVersionedHashes: null,
       },
       {
         formula: 'functionCall',
@@ -166,17 +303,19 @@ describe(transformFunctionCallsQueryResult.name, () => {
         toAddress: sharpSubmissions[0].properties.params.address,
         input: sharpInput,
         gasPrice: 30n,
-        receiptGasUsed: 300,
-        calldataGasUsed: 300,
+        gasUsed: 300,
+        calldataGasUsed: 16 * 200 + 4 * (300 - 200),
         dataLength: 300,
-        receiptBlobGasPrice: null,
-        receiptBlobGasUsed: null,
+        blobVersionedHashes: null,
       },
     ]
+
     const result = transformFunctionCallsQueryResult(
       functionCalls,
       sharpSubmissions,
+      sharedBridgeCalls,
       queryResults,
+      Logger.SILENT,
     )
 
     expect(result).toEqual(expected)
@@ -195,24 +334,30 @@ describe(transformFunctionCallsQueryResult.name, () => {
       }),
     ]
 
-    const queryResults: BigQueryFunctionCallResult[] = [
+    const queryResults: DuneFunctionCallResult[] = [
       {
         hash: txHashes[0],
-        to_address: EthereumAddress.random(),
+        to: EthereumAddress.random(),
         input: 'random-string',
         block_number: block,
-        block_timestamp: timestamp,
+        block_time: timestamp,
         gas_price: 10n,
-        receipt_gas_used: 100,
-        calldata_gas_used: 100,
+        gas_used: 100,
         data_length: 100,
-        receipt_blob_gas_price: null,
-        receipt_blob_gas_used: null,
+        non_zero_bytes: 100,
+
+        blob_versioned_hashes: null,
       },
     ]
 
     expect(() =>
-      transformFunctionCallsQueryResult(functionCalls, [], queryResults),
+      transformFunctionCallsQueryResult(
+        functionCalls,
+        [],
+        [],
+        queryResults,
+        Logger.SILENT,
+      ),
     ).toThrow('There should be at least one matching config')
   })
 
@@ -240,19 +385,19 @@ describe(transformFunctionCallsQueryResult.name, () => {
       }),
     ]
 
-    const queryResults: BigQueryFunctionCallResult[] = [
+    const queryResults: DuneFunctionCallResult[] = [
       {
         hash: txHashes[0],
-        to_address: sharpSubmissions[0].properties.params.address,
+        to: sharpSubmissions[0].properties.params.address,
         input: sharpInput,
         block_number: block,
-        block_timestamp: timestamp,
+        block_time: timestamp,
         gas_price: 10n,
-        receipt_gas_used: 100,
-        calldata_gas_used: 100,
+        gas_used: 100,
         data_length: 100,
-        receipt_blob_gas_price: null,
-        receipt_blob_gas_used: null,
+        non_zero_bytes: 60,
+
+        blob_versioned_hashes: null,
       },
     ]
 
@@ -269,18 +414,355 @@ describe(transformFunctionCallsQueryResult.name, () => {
         toAddress: sharpSubmissions[0].properties.params.address,
         input: sharpInput,
         gasPrice: 10n,
-        receiptGasUsed: 100,
-        calldataGasUsed: 100,
+        gasUsed: 100,
+        calldataGasUsed: 16 * 60 + 4 * (100 - 60),
         dataLength: 100,
-        receiptBlobGasPrice: null,
-        receiptBlobGasUsed: null,
+
+        blobVersionedHashes: null,
       },
     ]
 
     const result = transformFunctionCallsQueryResult(
       [],
       sharpSubmissions,
+      [],
       queryResults,
+      Logger.SILENT,
+    )
+
+    expect(result).toEqual(expected)
+  })
+
+  it('includes only configurations where chain id matches', () => {
+    const sharedBridgeCalls = [
+      mockSharedBridgeCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project1'),
+        address: EthereumAddress.random(),
+        selector: elasticChainSharedBridgeCommitBatchesSelector,
+        formula: 'sharedBridge',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'batchSubmissions',
+        firstParameter: elasticChainSharedBridgeChainId,
+        signature: elasticChainSharedBridgeCommitBatchesSignature,
+      }),
+      mockSharedBridgeCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project2'),
+        address: EthereumAddress.random(),
+        selector: elasticChainSharedBridgeCommitBatchesSelector,
+        formula: 'sharedBridge',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'batchSubmissions',
+        firstParameter: 1,
+        signature: elasticChainSharedBridgeCommitBatchesSignature,
+      }),
+      mockSharedBridgeCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project3'),
+        address: EthereumAddress.random(),
+        selector: agglayerSharedBridgeVerifyBatchesSelector,
+        formula: 'sharedBridge',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'batchSubmissions',
+        firstParameter: agglayerSharedBridgeChainId,
+        signature: agglayerSharedBridgeVerifyBatchesSignature,
+      }),
+    ]
+
+    const queryResults: DuneFunctionCallResult[] = [
+      {
+        hash: txHashes[0],
+        to: sharedBridgeCalls[0].properties.params.address,
+        input: elasticChainSharedBridgeCommitBatchesInput,
+        block_number: block,
+        block_time: timestamp,
+        gas_price: 10n,
+        gas_used: 100,
+        data_length: 100,
+        non_zero_bytes: 60,
+
+        blob_versioned_hashes: null,
+      },
+      {
+        hash: txHashes[1],
+        to: sharedBridgeCalls[2].properties.params.address,
+        input: agglayerSharedBridgeVerifyBatchesInput,
+        block_number: block,
+        block_time: timestamp,
+        gas_price: 10n,
+        gas_used: 100,
+        data_length: 100,
+        non_zero_bytes: 70,
+
+        blob_versioned_hashes: null,
+      },
+    ]
+
+    const expected: TrackedTxFunctionCallResult[] = [
+      {
+        formula: 'functionCall',
+        projectId: sharedBridgeCalls[0].properties.projectId,
+        type: sharedBridgeCalls[0].properties.type,
+        id: sharedBridgeCalls[0].id,
+        subtype: sharedBridgeCalls[0].properties.subtype,
+        hash: txHashes[0],
+        blockNumber: block,
+        blockTimestamp: timestamp,
+        toAddress: sharedBridgeCalls[0].properties.params.address,
+        input: elasticChainSharedBridgeCommitBatchesInput,
+        gasPrice: 10n,
+        gasUsed: 100,
+        calldataGasUsed: 16 * 60 + 4 * (100 - 60),
+        dataLength: 100,
+
+        blobVersionedHashes: null,
+      },
+      {
+        formula: 'functionCall',
+        projectId: sharedBridgeCalls[2].properties.projectId,
+        type: sharedBridgeCalls[2].properties.type,
+        id: sharedBridgeCalls[2].id,
+        subtype: sharedBridgeCalls[2].properties.subtype,
+        hash: txHashes[1],
+        blockNumber: block,
+        blockTimestamp: timestamp,
+        toAddress: sharedBridgeCalls[2].properties.params.address,
+        input: agglayerSharedBridgeVerifyBatchesInput,
+        gasPrice: 10n,
+        gasUsed: 100,
+        calldataGasUsed: 16 * 70 + 4 * (100 - 70),
+        dataLength: 100,
+
+        blobVersionedHashes: null,
+      },
+    ]
+
+    const result = transformFunctionCallsQueryResult(
+      [],
+      [],
+      sharedBridgeCalls,
+      queryResults,
+      Logger.SILENT,
+    )
+
+    expect(result).toEqual(expected)
+  })
+
+  it('includes only configurations where chain address matches', () => {
+    const sharedBridgeCalls = [
+      // Gateway config with correct chainAddress
+      mockSharedBridgeCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project1'),
+        address: EthereumAddress.random(),
+        selector: elasticChainSharedBridgeExecuteBatchesPost29Selector,
+        formula: 'sharedBridge',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'stateUpdates',
+        firstParameter: EthereumAddress(gatewaySharedBridgeChainAddress),
+        signature: elasticChainSharedBridgeExecuteBatchesPost29Signature,
+      }),
+      // Wrong chainAddress - should be filtered out
+      mockSharedBridgeCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project2'),
+        address: EthereumAddress.random(),
+        selector: elasticChainSharedBridgeExecuteBatchesPost29Selector,
+        formula: 'sharedBridge',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'stateUpdates',
+        firstParameter: EthereumAddress.random(),
+        signature: elasticChainSharedBridgeExecuteBatchesPost29Signature,
+      }),
+    ]
+
+    const queryResults: DuneFunctionCallResult[] = [
+      {
+        hash: txHashes[0],
+        to: sharedBridgeCalls[0].properties.params.address,
+        input: elasticChainSharedBridgeExecuteBatchesPost29Input,
+        block_number: block,
+        block_time: timestamp,
+        gas_price: 10n,
+        gas_used: 100,
+        data_length: 100,
+        non_zero_bytes: 60,
+
+        blob_versioned_hashes: null,
+      },
+    ]
+
+    const expected: TrackedTxFunctionCallResult[] = [
+      {
+        formula: 'functionCall',
+        projectId: sharedBridgeCalls[0].properties.projectId,
+        type: sharedBridgeCalls[0].properties.type,
+        id: sharedBridgeCalls[0].id,
+        subtype: sharedBridgeCalls[0].properties.subtype,
+        hash: txHashes[0],
+        blockNumber: block,
+        blockTimestamp: timestamp,
+        toAddress: sharedBridgeCalls[0].properties.params.address,
+        input: elasticChainSharedBridgeExecuteBatchesPost29Input,
+        gasPrice: 10n,
+        gasUsed: 100,
+        calldataGasUsed: 16 * 60 + 4 * (100 - 60),
+        dataLength: 100,
+
+        blobVersionedHashes: null,
+      },
+    ]
+
+    const result = transformFunctionCallsQueryResult(
+      [],
+      [],
+      sharedBridgeCalls,
+      queryResults,
+      Logger.SILENT,
+    )
+
+    expect(result).toEqual(expected)
+  })
+
+  it('should calculate calldata gas used correctly', () => {
+    const functionCalls = [
+      mockFunctionCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project1'),
+        address: ADDRESS_1,
+        selector: SELECTOR_1,
+        formula: 'functionCall',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'batchSubmissions',
+      }),
+      mockFunctionCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project1'),
+        address: ADDRESS_2,
+        selector: SELECTOR_2,
+        formula: 'functionCall',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'stateUpdates',
+      }),
+      mockFunctionCall({
+        id: createTrackedTxId.random(),
+        projectId: ProjectId('project1'),
+        address: ADDRESS_3,
+        selector: SELECTOR_3,
+        formula: 'functionCall',
+        sinceTimestamp: SINCE_TIMESTAMP,
+        subtype: 'stateUpdates',
+      }),
+    ]
+
+    const queryResults: DuneFunctionCallResult[] = [
+      // Before Pectra
+      {
+        hash: txHashes[0],
+        block_number: block,
+        block_time: timestamp,
+        input: SELECTOR_1,
+        to: ADDRESS_1,
+        gas_price: 10n,
+        gas_used: 100,
+        data_length: 100,
+        non_zero_bytes: 100,
+
+        blob_versioned_hashes: null,
+      },
+      // After Pectra - high compute
+      {
+        hash: txHashes[1],
+        block_number: 22431085,
+        block_time: timestamp,
+        input: SELECTOR_2,
+        to: ADDRESS_2,
+        gas_price: 20n,
+        gas_used: 200,
+        data_length: 200,
+        non_zero_bytes: 150,
+
+        blob_versioned_hashes: null,
+      },
+      // After Pectra - low compute
+      {
+        hash: txHashes[2],
+        block_number: 22431085,
+        block_time: timestamp,
+        input: SELECTOR_3,
+        to: ADDRESS_3,
+        gas_price: 30n,
+        gas_used: 300,
+        data_length: 10_000,
+        non_zero_bytes: 200,
+
+        blob_versioned_hashes: null,
+      },
+    ]
+    const expected: TrackedTxFunctionCallResult[] = [
+      {
+        formula: 'functionCall',
+        projectId: functionCalls[0].properties.projectId,
+        id: functionCalls[0].id,
+        type: functionCalls[0].properties.type,
+        subtype: functionCalls[0].properties.subtype,
+        hash: txHashes[0],
+        blockNumber: block,
+        blockTimestamp: timestamp,
+        toAddress: ADDRESS_1,
+        input: SELECTOR_1,
+        gasPrice: 10n,
+        gasUsed: 100,
+        calldataGasUsed: 16 * 100 + 4 * (100 - 100),
+        dataLength: 100,
+
+        blobVersionedHashes: null,
+      },
+      {
+        formula: 'functionCall',
+        projectId: functionCalls[1].properties.projectId,
+        id: functionCalls[1].id,
+        type: functionCalls[1].properties.type,
+        subtype: functionCalls[1].properties.subtype,
+        hash: txHashes[1],
+        blockNumber: 22431085,
+        blockTimestamp: timestamp,
+        toAddress: ADDRESS_2,
+        input: SELECTOR_2,
+        gasPrice: 20n,
+        gasUsed: 200,
+        calldataGasUsed: 40 * 150 + 10 * (200 - 150),
+        dataLength: 200,
+
+        blobVersionedHashes: null,
+      },
+      {
+        formula: 'functionCall',
+        projectId: functionCalls[2].properties.projectId,
+        id: functionCalls[2].id,
+        subtype: functionCalls[2].properties.subtype,
+        type: functionCalls[2].properties.type,
+        hash: txHashes[2],
+        blockNumber: 22431085,
+        blockTimestamp: timestamp,
+        toAddress: ADDRESS_3,
+        input: SELECTOR_3,
+        gasPrice: 30n,
+        gasUsed: 300,
+        calldataGasUsed: 40 * 200 + 10 * (10_000 - 200),
+        dataLength: 10_000,
+
+        blobVersionedHashes: null,
+      },
+    ]
+
+    const result = transformFunctionCallsQueryResult(
+      functionCalls,
+      [],
+      [],
+      queryResults,
+      Logger.SILENT,
     )
 
     expect(result).toEqual(expected)
@@ -301,7 +783,7 @@ function mockFunctionCall({
   subtype: TrackedTxsConfigSubtype
   address: EthereumAddress
   selector: string
-  sinceTimestamp: UnixTime
+  sinceTimestamp: number
   formula: TrackedTxFunctionCallConfig['formula']
 }): Configuration<
   TrackedTxConfigEntry & {
@@ -322,6 +804,7 @@ function mockFunctionCall({
         formula,
         address,
         selector,
+        signature: 'function foo()',
       },
     },
   }
@@ -342,7 +825,7 @@ function mockSharpSubmission({
   subtype: TrackedTxsConfigSubtype
   address: EthereumAddress
   selector: string
-  sinceTimestamp: UnixTime
+  sinceTimestamp: number
   formula: TrackedTxSharpSubmissionConfig['formula']
   programHashes: string[]
 }): Configuration<
@@ -365,6 +848,52 @@ function mockSharpSubmission({
         address,
         selector,
         programHashes,
+      },
+    },
+  }
+}
+
+function mockSharedBridgeCall({
+  id,
+  projectId,
+  subtype,
+  address,
+  selector,
+  sinceTimestamp,
+  formula,
+  firstParameter,
+  signature,
+}: {
+  id: TrackedTxId
+  projectId: ProjectId
+  subtype: TrackedTxsConfigSubtype
+  address: EthereumAddress
+  selector: string
+  sinceTimestamp: number
+  formula: TrackedTxSharedBridgeConfig['formula']
+  firstParameter: number | EthereumAddress
+  signature: `function ${string}`
+}): Configuration<
+  TrackedTxConfigEntry & {
+    params: TrackedTxSharedBridgeConfig
+  }
+> {
+  return {
+    id,
+    minHeight: 0,
+    maxHeight: 0,
+    properties: {
+      id,
+      projectId,
+      type: 'liveness',
+      subtype,
+      sinceTimestamp,
+      params: {
+        formula,
+        address,
+        selector,
+        firstParameter,
+        signature,
       },
     },
   }

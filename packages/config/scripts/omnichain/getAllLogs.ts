@@ -1,4 +1,4 @@
-import { providers } from 'ethers'
+import type { providers } from 'ethers'
 
 export interface LogFilter {
   address: string
@@ -36,8 +36,7 @@ export async function getAllLogs(
         }),
       ])
       return a.concat(b)
-    } else {
-      throw e
     }
+    throw e
   }
 }

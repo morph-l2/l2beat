@@ -1,25 +1,19 @@
-import { resolve } from 'path'
-import { assert } from '@l2beat/backend-tools'
+import type { Logger } from '@l2beat/backend-tools'
 import {
-  Layer2Provider,
-  Layer3Provider,
-  layer2s,
-  layer3s,
-} from '@l2beat/config'
-import {
-  HashedFileContent,
   buildSimilarityHashmap,
+  ConfigReader,
+  type DiscoveryPaths,
   estimateSimilarity,
-  removeComments,
+  format,
+  type HashedFileContent,
 } from '@l2beat/discovery'
+import { assert } from '@l2beat/shared-pure'
 import chalk from 'chalk'
-import { readFile, readdir } from 'fs/promises'
-
-export const ALL_CONFIGS = [...layer2s, ...layer3s]
+import { readdir, readFile } from 'fs/promises'
+import { join } from 'path'
 
 export interface Project {
   name: string
-  chain: string
   concatenatedSource: HashedFileContent
   sources: HashedFileContent[]
 }
@@ -29,56 +23,43 @@ interface FileId {
   path: string
 }
 
-export function needsToBe(
-  expression: boolean,
-  message: string,
-): asserts expression {
-  if (!expression) {
-    console.log(`${chalk.red('ERROR')}: ${message}`)
-    process.exit(1)
-  }
-}
-
 export async function computeStackSimilarity(
-  stack: Layer2Provider | Layer3Provider,
-  discoveryPath: string,
+  logger: Logger,
+  paths: DiscoveryPaths,
 ): Promise<{
   matrix: Record<string, Record<string, number>>
   projects: Project[]
 }> {
-  const configs = ALL_CONFIGS.filter(
-    (config) =>
-      config.display.provider === stack &&
-      ('isArchived' in config ? !config.isArchived : true) &&
-      ('hostChain' in config ? config.hostChain !== 'Multiple' : true) &&
-      !config.isUpcoming,
-  )
+  const configReader = new ConfigReader(paths.discovery)
+  const configs = configReader
+    .readAllDiscoveredProjects()
+    .flatMap((project) => configReader.readConfig(project))
 
   const stackProject = await Promise.all(
-    configs.map((config) =>
-      readProject(
-        config.id.toString(),
-        'hostChain' in config ? config.hostChain : 'ethereum',
-        discoveryPath,
-      ),
-    ),
+    configs.flatMap((config) => readProject(logger, config.name, paths)),
   )
   const projects = stackProject.filter((p) => p !== undefined) as Project[]
 
   const matrix: Record<string, Record<string, number>> = {}
+  for (let row = 0; row < projects.length; row++) {
+    const p1 = projects[row]
+    const path1 = p1.name
 
-  for (const p1 of projects) {
-    const c1Object: Record<string, number> = {}
+    matrix[path1] ??= {}
+    matrix[path1][path1] = 1
+    for (let col = row + 1; col < projects.length; col++) {
+      const p2 = projects[col]
+      const path2 = p2.name
 
-    for (const p2 of projects) {
       const similarity = estimateSimilarity(
         p1.concatenatedSource,
         p2.concatenatedSource,
       )
-      c1Object[encodeProjectPath(p2.name, p2.chain)] = similarity
-    }
 
-    matrix[encodeProjectPath(p1.name, p1.chain)] = c1Object
+      matrix[path2] ??= {}
+      matrix[path1][path2] = similarity
+      matrix[path2][path1] = similarity
+    }
   }
 
   return { matrix, projects }
@@ -86,7 +67,6 @@ export async function computeStackSimilarity(
 
 interface Similarity {
   name: string
-  chain: string
   similarity: number
 }
 
@@ -98,15 +78,12 @@ export function getMostSimilar(
   for (const [p1Path, row] of Object.entries(matrix)) {
     for (const [p2Path, similarity] of Object.entries(row)) {
       if (p1Path !== p2Path) {
-        const { name: p1Name } = decodeProjectPath(p1Path)
         if (
-          mostSimilar[p1Name] === undefined ||
-          similarity > mostSimilar[p1Name].similarity
+          mostSimilar[p1Path] === undefined ||
+          similarity > mostSimilar[p1Path].similarity
         ) {
-          const { name: p2Name, chain: p2Chain } = decodeProjectPath(p2Path)
-          mostSimilar[p1Name] = {
-            name: p2Name,
-            chain: p2Chain,
+          mostSimilar[p1Path] = {
+            name: p2Path,
             similarity,
           }
         }
@@ -118,29 +95,17 @@ export function getMostSimilar(
 }
 
 export async function computeComparisonBetweenProjects(
+  logger: Logger,
   firstProjectPath: string,
   secondProjectPath: string,
-  discoveryPath: string,
+  paths: DiscoveryPaths,
 ): Promise<{
   matrix: Record<string, Record<string, number>>
   firstProject: Project
   secondProject: Project
 }> {
-  const { name: firstProjectName, chain: firstProjectChain } =
-    decodeProjectPath(firstProjectPath)
-  const { name: secondProjectName, chain: secondProjectChain } =
-    decodeProjectPath(secondProjectPath)
-
-  const firstProject = await readProject(
-    firstProjectName,
-    firstProjectChain,
-    discoveryPath,
-  )
-  const secondProject = await readProject(
-    secondProjectName,
-    secondProjectChain,
-    discoveryPath,
-  )
+  const firstProject = await readProject(logger, firstProjectPath, paths)
+  const secondProject = await readProject(logger, secondProjectPath, paths)
   assert(firstProject, `Project ${firstProjectPath} not found`)
   assert(secondProject, `Project ${secondProjectPath} not found`)
 
@@ -189,28 +154,26 @@ export function removeCommonPath(fileIds: FileId[]): FileId[] {
 }
 
 async function readProject(
+  logger: Logger,
   projectName: string,
-  chain: string,
-  discoveryPath: string,
+  paths: DiscoveryPaths,
 ): Promise<Project | undefined> {
   try {
-    const sources = await getFlatSources(projectName, chain, discoveryPath)
+    const sources = await getFlatSources(projectName, paths)
     const concatenatedSources = sources.map((source) => source.content).join('')
     const concatenatedSourceHashChunks =
       buildSimilarityHashmap(concatenatedSources)
-    console.log(`[ OK ] Reading ${projectName}`)
     return {
       name: projectName,
-      chain,
       concatenatedSource: {
-        path: `virtualPath.sol`,
+        path: 'virtualPath.sol',
         hashChunks: concatenatedSourceHashChunks,
         content: concatenatedSources,
       },
       sources,
     }
   } catch {
-    console.log(
+    logger.info(
       `[${chalk.red('FAIL')}] Reading ${projectName} - ${chalk.magenta(
         'run discovery to generate flat files',
       )}`,
@@ -220,19 +183,20 @@ async function readProject(
 
 async function getFlatSources(
   project: string,
-  chain: string,
-  discoveryPath: string,
+  paths: DiscoveryPaths,
 ): Promise<HashedFileContent[]> {
-  const path = `${discoveryPath}/discovery/${project}/${chain}/.flat/`
+  const configReader = new ConfigReader(paths.discovery)
+  const basePath = configReader.getProjectPath(project)
+  const path = join(basePath, '.flat')
 
   const filePaths = await listFilesRecursively(path)
   const allFilesAreSol = filePaths.every((file) => file.endsWith('.sol'))
   assert(allFilesAreSol, 'All files should be .sol files')
 
   const contents: HashedFileContent[] = []
-  for (const filePath of filePaths.filter((file) => !file.endsWith('.p.sol'))) {
+  for (const filePath of filesToCompare(filePaths)) {
     const rawContent = await readFile(filePath, 'utf-8')
-    const content = removeComments(rawContent)
+    const content = format(rawContent)
 
     contents.push({
       path: filePath,
@@ -244,30 +208,20 @@ async function getFlatSources(
   return contents
 }
 
-async function listFilesRecursively(path: string): Promise<string[]> {
+function filesToCompare(paths: string[]): string[] {
+  return paths.filter(
+    (file) => !file.endsWith('.p.sol') && !file.endsWith('GnosisSafe.sol'),
+  )
+}
+
+export async function listFilesRecursively(path: string): Promise<string[]> {
   const entries = await readdir(path, { withFileTypes: true })
   const files = await Promise.all(
     entries.map((entry) => {
-      const resolved = resolve(path, entry.name)
+      const resolved = join(path, entry.name)
       return entry.isDirectory() ? listFilesRecursively(resolved) : resolved
     }),
   )
 
   return files.flat()
-}
-
-function encodeProjectPath(name: string, chain: string): string {
-  return `${chain}:${name}`
-}
-
-export function decodeProjectPath(projectPath: string): {
-  name: string
-  chain: string
-} {
-  if (!projectPath.includes(':')) {
-    return { name: projectPath, chain: 'ethereum' }
-  }
-
-  const [chain, name] = projectPath.split(':')
-  return { name, chain }
 }

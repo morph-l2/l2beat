@@ -1,0 +1,6 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "description": "L2 -> L1 message passer at the OP Stack predeploy address, used by L1Bridge-style canonical bridges to relay withdrawal requests from L2 to L1.",
+  "ignoreRelatives": [],
+  "category": "bridge-canonical"
+}

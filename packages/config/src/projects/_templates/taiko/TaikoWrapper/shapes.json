@@ -1,0 +1,17 @@
+{
+  "TaikoWrapper": {
+    "hash": "0x8ec1d0c6f3573ee9b9819790b1284d1d35c40756b167f508b772c53f440e69ae",
+    "address": "eth:0xAdBa78120E85Add0dBD2050dBA0548CEDA81A31b",
+    "blockNumber": 22565516
+  },
+  "TaikoWrapper_preconfRouterObligatory": {
+    "hash": "0xa4f2de1f5a1d5526eaab4a8dad4cf4bcb4bd6308e6833e700f3bfe2edb29fd71",
+    "address": "eth:0xa2D216dD9c84cb2e738240aac0956BE98293be61",
+    "blockNumber": 23123976
+  },
+  "TaikoWrapper_2908": {
+    "hash": "0x64de012f1935770a9c6838ee68f99ce5eaa0fecbde4b8062fd06b65bdffc567f",
+    "address": "eth:0x52D6FC6F6db9E370c336f64f61ff3C29568d1859",
+    "blockNumber": 23259637
+  }
+}

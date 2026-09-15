@@ -1,6 +1,5 @@
-import { readdirSync } from 'fs'
-import { basename, dirname, resolve } from 'path'
-import { readdir } from 'fs/promises'
+import { readdirSync, statSync } from 'fs'
+import { basename, dirname } from 'path'
 
 // NOTE(radomski): On some file systems, mainly Apple's AFS and Microsoft's
 // NTFS the path names are not case sensitive. So while you can have a file
@@ -12,22 +11,24 @@ import { readdir } from 'fs/promises'
 // sure that a given file exists with the same basename as provided in the path
 // use this function.
 export function fileExistsCaseSensitive(path: string): boolean {
-  const filenames = readdirSync(dirname(path))
-  if (!filenames.includes(basename(path))) {
-    return false
-  }
-
-  return true
+  return listDirectory(dirname(path)).has(basename(path))
 }
 
-export async function listFilesRecursively(path: string): Promise<string[]> {
-  const entries = await readdir(path, { withFileTypes: true })
-  const files = await Promise.all(
-    entries.map((entry) => {
-      const resolved = resolve(path, entry.name)
-      return entry.isDirectory() ? listFilesRecursively(resolved) : resolved
-    }),
-  )
+// Every project lookup lists the same large projects directory, which
+// dominated config loading. A directory's mtime changes whenever an entry is
+// added, removed or renamed, so a stat is enough to know the listing is fresh.
+const directoryListings = new Map<
+  string,
+  { mtimeMs: number; names: Set<string> }
+>()
 
-  return files.flat()
+function listDirectory(directory: string): Set<string> {
+  const { mtimeMs } = statSync(directory)
+  const cached = directoryListings.get(directory)
+  if (cached?.mtimeMs === mtimeMs) {
+    return cached.names
+  }
+  const names = new Set(readdirSync(directory))
+  directoryListings.set(directory, { mtimeMs, names })
+  return names
 }

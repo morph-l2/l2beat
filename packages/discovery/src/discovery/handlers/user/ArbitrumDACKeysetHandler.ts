@@ -1,18 +1,17 @@
-import { assert } from '@l2beat/backend-tools'
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
-import { providers, utils } from 'ethers'
-import * as z from 'zod'
+import { assert, Bytes, type ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import { type providers, utils } from 'ethers'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
+import { base64 } from 'ethers/lib/utils'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
 
-export type ArbitrumDACKeysetHandlerDefinition = z.infer<
+export type ArbitrumDACKeysetHandlerDefinition = v.infer<
   typeof ArbitrumDACKeysetHandlerDefinition
 >
 
-export const ArbitrumDACKeysetHandlerDefinition = z.strictObject({
-  type: z.literal('arbitrumDACKeyset'),
+export const ArbitrumDACKeysetHandlerDefinition = v.strictObject({
+  type: v.literal('arbitrumDACKeyset'),
 })
 
 const abi = new utils.Interface([
@@ -25,26 +24,25 @@ export class ArbitrumDACKeysetHandler implements Handler {
   constructor(
     readonly field: string,
     readonly definition: ArbitrumDACKeysetHandlerDefinition,
-    readonly logger: DiscoveryLogger,
   ) {}
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, ['Resolving Arbitrum DAC Keyset'])
-
     const events = await provider.getLogs(address, [
       [abi.getEventTopic('SetValidKeyset')],
     ])
 
-    const { requiredSignatures, membersCount } = decodeLastEvent(events)
+    const { requiredSignatures, membersCount, blsSignatures } =
+      decodeLastEvent(events)
 
     return {
       field: this.field,
       value: {
         requiredSignatures,
         membersCount,
+        blsSignatures,
       },
     }
   }
@@ -53,11 +51,13 @@ export class ArbitrumDACKeysetHandler implements Handler {
 function decodeLastEvent(events: providers.Log[]): {
   requiredSignatures: number
   membersCount: number
+  blsSignatures: string[]
 } {
   if (events.length === 0) {
     return {
       requiredSignatures: 0,
       membersCount: 0,
+      blsSignatures: [],
     }
   }
 
@@ -67,13 +67,28 @@ function decodeLastEvent(events: providers.Log[]): {
 
   // NOTE(radomski): Schema is not public, but we know that the first 8 bytes are the threshold and the next 8 are the keyCount
   const keysetBytes = Bytes.fromHex(decodedEvent.keysetBytes as string)
-  const assummedHonestMembers = keysetBytes.slice(0, 8).toNumber()
+  const assumedHonestMembers = keysetBytes.slice(0, 8).toNumber()
   const membersCount = keysetBytes.slice(8, 16).toNumber()
 
-  const requiredSignatures = membersCount - assummedHonestMembers + 1
+  const requiredSignatures = membersCount - assumedHonestMembers + 1
+
+  const blsSignatures: string[] = []
+  let head = 16
+  for (let i = 0; i < membersCount; i++) {
+    const size = keysetBytes.slice(head, head + 2).toNumber()
+    head += 2
+
+    blsSignatures.push(
+      base64.encode(keysetBytes.slice(head, head + size).toString()),
+    )
+    head += size
+  }
+
+  assert(head === keysetBytes.length)
 
   return {
     requiredSignatures,
     membersCount,
+    blsSignatures,
   }
 }

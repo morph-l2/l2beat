@@ -1,7 +1,7 @@
-import { assert } from '@l2beat/backend-tools'
-import { toUpper } from 'lodash'
-import { FieldDiff } from './diffContracts'
-import { DiscoveryDiff } from './diffDiscovery'
+import { assert } from '@l2beat/shared-pure'
+import toUpper from 'lodash/toUpper'
+import type { FieldDiff } from './diffContracts'
+import type { DiscoveryDiff } from './diffDiscovery'
 
 export function discoveryDiffToMarkdown(
   diffs: DiscoveryDiff[],
@@ -27,6 +27,16 @@ export function discoveryDiffToMarkdown(
   return joined
 }
 
+function externalOrOwnLabel(addressType: DiscoveryDiff['addressType']): string {
+  if (addressType === 'EOA') {
+    return 'EOA'
+  }
+  if (addressType === 'Reference') {
+    return 'external contract'
+  }
+  return addressType.toLowerCase()
+}
+
 export function contractDiffToMarkdown(
   diff: DiscoveryDiff,
   maxLength: number = Number.MAX_SAFE_INTEGER,
@@ -39,7 +49,16 @@ export function contractDiffToMarkdown(
   }
 
   const contractDescription = diff?.description ?? 'None'
-  const contractLine = `    contract ${diff.name} (${diff.address.toString()})`
+  const isContract =
+    diff.addressType !== 'EOA' && diff.addressType !== 'Reference'
+  // A Reference is an address another project owns and discovered in full, so
+  // it is labelled for what it is rather than as a contract of this project.
+  const kindLabel = externalOrOwnLabel(diff.addressType)
+  const templateLabel = isContract ? ` [${diff.template ?? 'N/A'}]` : ''
+  // An external holder is only known here by address: the name lives in the
+  // project that discovered it, which this diff does not read.
+  const nameLabel = diff.name === undefined ? '' : `${diff.name} `
+  const contractLine = `    ${kindLabel} ${nameLabel}(${diff.address.toString()})${templateLabel}`
   const descriptionLine = `    +++ description: ${contractDescription}`
   if (diff.diff) {
     result.push(`${contractLine} {`)

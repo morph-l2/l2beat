@@ -1,179 +1,281 @@
-import { readdirSync } from 'fs'
-import { readFileSync } from 'fs'
+import {
+  assert,
+  formatAsciiBorder,
+  Hash160,
+  type json,
+  notUndefined,
+} from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import { createHash } from 'crypto'
+import { existsSync, readdirSync, readFileSync } from 'fs'
+import merge from 'lodash/merge'
+import uniq from 'lodash/uniq'
 import path from 'path'
-import { assert } from '@l2beat/backend-tools'
-import { DiscoveryOutput } from '@l2beat/discovery-types'
-
-import { stripAnsiEscapeCodes } from '@l2beat/shared-pure'
-import chalk from 'chalk'
-import { ZodError } from 'zod'
 import { fileExistsCaseSensitive } from '../../utils/fsLayer'
-import { TemplateService } from '../analysis/TemplateService'
+import type { DiscoveryOutput } from '../output/types'
 import { readJsonc } from '../utils/readJsonc'
-import { DiscoveryConfig } from './DiscoveryConfig'
-import { RawDiscoveryConfig } from './RawDiscoveryConfig'
+import { ConfigRegistry } from './ConfigRegistry'
+
+const HASH_LINE_PREFIX = 'Generated with discovered.json: '
+
+type JustImport = v.infer<typeof JustImport>
+const JustImport = v.object({ import: v.array(v.string()).optional() })
 
 export class ConfigReader {
-  public templateService: TemplateService
+  private importedCache = new Map<string, JustImport>()
 
-  constructor(private readonly rootPath: string = '') {
-    this.templateService = new TemplateService(rootPath)
-  }
+  constructor(private rootPath: string) {}
 
-  readConfig(name: string, chain: string): DiscoveryConfig {
-    assert(
-      fileExistsCaseSensitive(path.join(this.rootPath, 'discovery', name)),
-      'Project not found, check if case matches',
-    )
-    assert(
-      fileExistsCaseSensitive(
-        path.join(this.rootPath, 'discovery', name, chain),
-      ),
-      'Chain not found in project, check if case matches',
-    )
+  readConfig(name: string): ConfigRegistry {
+    const rawConfig = this.readRawConfig(name)
 
-    const contents = readJsonc(
-      path.join(this.rootPath, 'discovery', name, chain, 'config.jsonc'),
-    )
-    const rawConfig = RawDiscoveryConfig.safeParse(contents)
-    if (!rawConfig.success) {
-      const message = formatZodParsingError(rawConfig.error, 'config.jsonc')
-      console.log(message)
-
-      throw new Error(`Cannot parse file ${name}/${chain}/config.jsonc`)
+    const rawConfigForChain = {
+      ...rawConfig,
+      ...(rawConfig.archived ? { archived: true } : {}),
     }
 
-    this.templateService.inlineTemplates(rawConfig.data)
-
-    const commonAddressNamesPath = path.join(
-      this.rootPath,
-      'discovery',
-      'commonAddressNames.jsonc',
-    )
-    assert(
-      fileExistsCaseSensitive(commonAddressNamesPath),
-      `${commonAddressNamesPath} not found`,
-    )
-    const commonAddressNames = readJsonc(
-      commonAddressNamesPath,
-    ) as unknown as Record<string, string>
-    const config = new DiscoveryConfig(rawConfig.data, commonAddressNames, this)
-
-    assert(config.chain === chain, 'Chain mismatch in config.jsonc')
+    const config = new ConfigRegistry(rawConfigForChain)
 
     return config
   }
 
-  readDiscovery(name: string, chain: string): DiscoveryOutput {
+  readRawConfig(name: string) {
+    const basePath = this.resolveProjectPath(name)
     assert(
-      fileExistsCaseSensitive(path.join(this.rootPath, 'discovery', name)),
+      fileExistsCaseSensitive(basePath),
       'Project not found, check if case matches',
     )
+
+    const contents = readJsonc(path.join(basePath, 'config.jsonc'))
+    const parseResult = JustImport.safeValidate(contents)
+    if (!parseResult.success) {
+      console.log(formatAsciiBorder([parseResult.message, 'config.jsonc']))
+
+      throw new Error(`Cannot parse file ${name}/config.jsonc`)
+    }
+
+    // biome-ignore lint/suspicious/noExplicitAny: hack that we are aware of
+    let rawConfig = parseResult.data as any
+    if (rawConfig.import !== undefined) {
+      const visited = new Set<string>()
+      rawConfig = merge(
+        this.resolveImports(basePath, rawConfig.import, visited),
+        rawConfig,
+      )
+    }
+    return rawConfig
+  }
+
+  readRawConfigAsText(name: string): string {
+    const basePath = this.resolveProjectPath(name)
+    return readFileSync(path.join(basePath, 'config.jsonc'), 'utf-8')
+  }
+
+  readDiscovery(name: string): DiscoveryOutput {
+    const projectPath = this.resolveProjectPath(name)
     assert(
-      fileExistsCaseSensitive(
-        path.join(this.rootPath, 'discovery', name, chain),
-      ),
-      'Chain not found in project, check if case matches',
+      fileExistsCaseSensitive(projectPath),
+      'Project not found, check if case matches',
     )
 
     const contents = readFileSync(
-      path.join(this.rootPath, 'discovery', name, chain, 'discovered.json'),
+      path.join(projectPath, 'discovered.json'),
       'utf-8',
     )
 
-    const meta = JSON.parse(contents) as unknown as DiscoveryOutput
-    assert(meta.chain === chain, 'Chain mismatch in discovered.json')
-    return meta
+    return JSON.parse(contents) as unknown as DiscoveryOutput
   }
 
-  readAllChains(): string[] {
-    const folders = readdirSync(path.join(this.rootPath, 'discovery'), {
-      withFileTypes: true,
-    }).filter((x) => x.isDirectory() && !x.name.startsWith('_'))
-    const chains = new Set<string>()
-    for (const folder of folders) {
-      readdirSync(path.join(this.rootPath, 'discovery', folder.name), {
-        withFileTypes: true,
+  readDiscoveryWithReferences(projectName: string): DiscoveryOutput[] {
+    const seen = new Set<string>()
+    return this._readDiscoveryWithReferences(projectName, seen)
+  }
+
+  private _readDiscoveryWithReferences(
+    projectName: string,
+    seen: Set<string>,
+  ): DiscoveryOutput[] {
+    if (seen.has(projectName)) {
+      return []
+    }
+
+    seen.add(projectName)
+
+    const discovery = this.readDiscovery(projectName)
+    const references = getReferencedProjects(discovery)
+
+    return [
+      discovery,
+      ...references
+        .map((reference) => this._readDiscoveryWithReferences(reference, seen))
+        .flat(),
+    ]
+  }
+
+  readDiscoveryHash(projectName: string): Hash160 {
+    const curDiscovery = this.readDiscovery(projectName)
+    const hasher = createHash('sha1')
+    hasher.update(JSON.stringify(curDiscovery))
+    return Hash160(`0x${hasher.digest('hex')}`)
+  }
+
+  readAllConfiguredProjects(): string[] {
+    return this.enumerateProjectDirectories()
+      .filter((projectPath) => {
+        const configPath = path.join(projectPath, 'config.jsonc')
+
+        if (!existsSync(configPath)) {
+          return false
+        }
+
+        const config = readJsonc(configPath)
+
+        if (
+          'initialAddresses' in config &&
+          Array.isArray(config.initialAddresses) &&
+          config.initialAddresses.every((x) => typeof x === 'string')
+        ) {
+          return true
+        }
+
+        return false
       })
-        .filter((x) => x.isDirectory())
-        .map((x) => x.name)
-        .forEach((x) => chains.add(x))
-    }
-    return [...chains]
+      .map((projectPath) => path.basename(projectPath))
   }
 
-  readAllConfigsForChain(chain: string): DiscoveryConfig[] {
-    const result: DiscoveryConfig[] = []
-    const projects = this.readAllProjectsForChain(chain)
+  // NOTE(radomski): Generates a list of projects that _have_ a
+  // discovered.json. Most of the time this is what you want to use. We assume
+  // that projects that have a discovered.json are also configured.
+  readAllDiscoveredProjects(): string[] {
+    return this.enumerateProjectDirectories()
+      .filter((projectPath) =>
+        existsSync(path.join(projectPath, 'discovered.json')),
+      )
+      .map((projectPath) => path.basename(projectPath))
+  }
 
-    for (const project of projects) {
-      const contents = this.readConfig(project, chain)
-      result.push(contents)
+  readDiffHistoryHash(name: string): Hash160 | undefined {
+    const projectPath = this.resolveProjectPath(name)
+    assert(
+      fileExistsCaseSensitive(projectPath),
+      'Project not found, check if case matches',
+    )
+
+    const content = readFileSync(
+      path.join(projectPath, 'diffHistory.md'),
+      'utf-8',
+    )
+    const hashLine = content.split('\n')[0]
+    if (hashLine !== undefined && hashLine.startsWith(HASH_LINE_PREFIX)) {
+      const hashString = hashLine.slice(HASH_LINE_PREFIX.length)
+      return Hash160(hashString)
+    }
+  }
+
+  readDiffLastDescription(name: string): string | undefined {
+    const projectPath = this.resolveProjectPath(name)
+    assert(
+      fileExistsCaseSensitive(projectPath),
+      'Project not found, check if case matches',
+    )
+
+    const content = readFileSync(
+      path.join(projectPath, 'diffHistory.md'),
+      'utf-8',
+    )
+    const lines = content.split('\n')
+    const index = lines.findIndex((l) => l === '## Description')
+    if (index < 0) {
+      return undefined
     }
 
+    const followingLines = lines.slice(index + 1)
+    const lastIndex = followingLines.findIndex((l) => l.startsWith('## '))
+    if (lastIndex < 0) {
+      return followingLines.join('\n').trim()
+    }
+
+    return followingLines.slice(0, lastIndex).join('\n').trim()
+  }
+
+  getProjectPath(project: string): string {
+    return this.resolveProjectPath(project)
+  }
+
+  resolveImports(
+    basePath: string,
+    imports: string[],
+    visited: Set<string>,
+  ): json {
+    let result: json = {}
+    for (const importPath of imports) {
+      const resolvedPath = path.resolve(basePath, importPath)
+      if (visited.has(resolvedPath)) {
+        throw new Error(`Circular import detected: ${importPath}`)
+      }
+      visited.add(resolvedPath)
+
+      let rawConfig = this.importedCache.get(resolvedPath)
+      if (rawConfig === undefined) {
+        const contents = readJsonc(resolvedPath)
+        const parseResult = JustImport.safeValidate(contents)
+        if (!parseResult.success) {
+          console.log(formatAsciiBorder([parseResult.message, importPath]))
+
+          throw new Error(`Cannot parse file ${importPath}`)
+        }
+        rawConfig = parseResult.data
+        this.importedCache.set(resolvedPath, rawConfig)
+      }
+
+      if (rawConfig.import !== undefined) {
+        const importBasePath = path.dirname(resolvedPath)
+        result = merge(
+          this.resolveImports(importBasePath, rawConfig.import, visited),
+          result,
+        )
+      }
+      result = merge(result, rawConfig)
+    }
     return result
   }
 
-  readAllProjectsForChain(chain: string): string[] {
-    const folders = readdirSync(path.join(this.rootPath, 'discovery'), {
-      withFileTypes: true,
-    }).filter((x) => x.isDirectory())
-
-    const projects = []
-
-    for (const folder of folders) {
-      const contents = readdirSync(
-        path.join(this.rootPath, 'discovery', folder.name),
-        {
-          withFileTypes: true,
-        },
-      )
-        .filter((x) => x.isDirectory())
-        .map((x) => x.name)
-
-      if (!contents.includes(chain)) {
-        continue
-      }
-
-      const chainFiles = readdirSync(
-        path.join(this.rootPath, 'discovery', folder.name, chain),
-        {
-          withFileTypes: true,
-        },
-      )
-        .filter((x) => x.isFile())
-        .map((x) => x.name)
-
-      const hasConfig = chainFiles.includes('config.jsonc')
-      const hasDiscovered = chainFiles.includes('discovered.json')
-      if (!hasConfig || !hasDiscovered) {
-        continue
-      }
-
-      projects.push(folder.name)
+  projectConfigExists(project: string): boolean {
+    try {
+      this.resolveProjectPath(project)
+      return true
+    } catch {
+      return false
     }
+  }
 
-    return projects
+  getConfigPath(project: string): string {
+    return path.join(this.resolveProjectPath(project), 'config.jsonc')
+  }
+
+  resolveProjectPath(project: string): string {
+    const full = path.join(this.rootPath, project)
+    if (
+      !fileExistsCaseSensitive(full) ||
+      !existsSync(path.join(full, 'config.jsonc'))
+    ) {
+      throw new Error('Project not found, check if case matches')
+    }
+    return full
+  }
+
+  enumerateProjectDirectories(): string[] {
+    return readdirSync(this.rootPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
+      .map((entry) => path.join(this.rootPath, entry.name))
   }
 }
 
-function formatZodParsingError(error: ZodError, fileName: string): string {
-  const errors = error.errors
-  const lines = [
-    `${chalk.red(' ERROR:')} reading ${fileName} encountered ${
-      errors.length
-    } issues:`,
-    ...errors.flatMap((x) => {
-      return [` ${chalk.yellow(x.message)}`, ` >    ${x.path.join('.')}`]
-    }),
-  ]
-
-  const maxLength = Math.max(
-    ...lines.map((x) => stripAnsiEscapeCodes(x).length),
+export function getReferencedProjects(discovery: DiscoveryOutput): string[] {
+  return uniq(
+    discovery.entries
+      .map((e) => e.targetProject)
+      .filter(notUndefined)
+      .sort(),
   )
-  return [
-    chalk.red(`╔${'═'.repeat(maxLength - 1)}╗`),
-    ...lines,
-    chalk.red(`╚${'═'.repeat(maxLength - 1)}╝`),
-  ].join('\n')
 }

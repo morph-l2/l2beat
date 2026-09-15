@@ -1,0 +1,12 @@
+{
+  "Eigen": {
+    "hash": "0x4707c12ced1a1548031596d6f9d1d169deea7101ab09532b3b6ae226067e0bd2",
+    "address": "eth:0x17f56E911C279bad67eDC08acbC9cf3DC4eF26A0",
+    "blockNumber": 22188285
+  },
+  "EIGENToken_2": {
+    "hash": "0x597ce12d4f62214f9fbf3fade349f8d99884f6e408dfb95416470171607b9476",
+    "address": "eth:0x2C4A81e257381F87F5A5C4bd525116466D972E50",
+    "blockNumber": 23083543
+  }
+}

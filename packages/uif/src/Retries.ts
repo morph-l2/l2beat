@@ -1,4 +1,4 @@
-import assert from 'node:assert'
+import { assert } from '@l2beat/shared-pure'
 
 export interface RetryStrategy {
   /** Returns true if the operation should be retried */
@@ -9,6 +9,8 @@ export interface RetryStrategy {
   timeoutMs: () => number
   /** Resets the number of attempts */
   clear: () => void
+  /** Get amount of attempts */
+  attempts: () => number
 }
 
 interface ExponentialBackOffOpts {
@@ -26,7 +28,7 @@ function exponentialBackOff(opts: ExponentialBackOffOpts): RetryStrategy {
   let attempts = 0
   const maxAttempts = opts.maxAttempts
   assert(maxAttempts > 0)
-  const maxTimeoutMs = opts.maxTimeoutMs ?? Infinity
+  const maxTimeoutMs = opts.maxTimeoutMs ?? Number.POSITIVE_INFINITY
   assert(maxTimeoutMs > 0)
 
   return {
@@ -43,6 +45,7 @@ function exponentialBackOff(opts: ExponentialBackOffOpts): RetryStrategy {
     clear: () => {
       attempts = 0
     },
+    attempts: () => attempts,
   }
 }
 

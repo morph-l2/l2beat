@@ -1,16 +1,32 @@
-# Git
-.git
-.gitignore
-
 # build system cache
 node_modules
+.pnpm-store
 .turbo
 
 # IDEs
 .vscode
 .idea
-.*.swp
+.*.sw[op]
 
 # Docker
 .dockerignore
 Dockerfile.*
+
+# Disco cache (for local development)
+packages/config/cache/**
+
+# env
+.env
+.env.*
+
+# Git
+.git
+
+# Test files and coverage
+coverage
+.nyc_output
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx

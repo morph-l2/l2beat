@@ -1,0 +1,12 @@
+{
+  "TokenMinter": {
+    "hash": "0x8ce1834b9145a30f7685f60bcbb820752f2a42cd7586782754eb4c2b8ca04117",
+    "address": "base:0xe45B133ddc64bE80252b0e9c75A8E74EF280eEd6",
+    "blockNumber": 29519230
+  },
+  "TokenMinterV2": {
+    "hash": "0xd344d9de17d9bc1f71a1617c4dcbb528e821a05bc72d58e263a87e66e6640696",
+    "address": "eth:0xfd78EE919681417d192449715b2594ab58f5D002",
+    "blockNumber": 22366580
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "entrypoints": {
+    "eth:0x015381651F240Ed6C44122dCba6Cf807c9442CD6": {
+      "name": "CpuVerifierAllSolidity_2026_13",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x094bD609998F0D4504145adAaaC3C3B3406e0Ae3": {
+      "name": "CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x0cD0cDf0132c566db61B691BCEEBA2c4D8cA5CdC": {
+      "name": "CpuVerifierDex_2026_13",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x13e120F6c8E747983F7aaF0f7731796bfcb0D934": {
+      "name": "SHARPVerifier_2025_11",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x18d3f47Ff00272Db6db5D4548B5d7b6a0765138E": {
+      "name": "CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x21F9eC47b19d95b5C2DDFB6Ae5D4F92fAdacAEc4": {
+      "name": "SHARP Multisig",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x243682b9A01455ac671c97D8dE686EBd4EE25791": {
+      "name": "CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x2867A4509B0969531641A42a3D4A9B0A07109B6B": {
+      "name": "CpuVerifierRecursive_2026_13",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x28E3aD4201ba416B23d9950503dB28a9232BE32a": {
+      "name": "Level2CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x30F3AB988Cb00fe3Fb5ab891F50c13684770419b": {
+      "name": "CpuVerifierSmall_2026_13",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x3d57526c1C8D63fa2A8704487Df65e9000166c8E": {
+      "name": "CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x42AF9498647Be47A256C9cc8278eE94473Cb7771": {
+      "name": "CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60": {
+      "name": "SHARPVerifierCallProxy",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x4956bda1d23F75B988644329c5B06BD1494a72b6": {
+      "name": "SHARPVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x5C1Ce45534A9c5f7F3E6683Cd79a8ad57EE3a9fe": {
+      "name": "SHARPVerifier_2026_13_1",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x5f1AbAA5d375Edb7bEd213855D44268B844CD65d": {
+      "name": "Level2CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x6097FC32a720D0DE369A67FecdBC91fE3C6Cc460": {
+      "name": "Level2CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x61BF6C2C60E3416B13C3c8d0591AEDd4D9d398D1": {
+      "name": "CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x66F2345D003511a1A60D87E3984Bb8d12C21A970": {
+      "name": "Level2CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x6a67796ee97700B5B5f5aFBCFFDCbc5F80803F11": {
+      "name": "CpuVerifierDexWithBitwise_2026_13",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x6cB3EE90C50a38A0e4662bB7e7E6e40B91361BF6": {
+      "name": "Level3SHARPVerifier_2022_7",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x71574057D12541ccDa98643aC56441838353A26D": {
+      "name": "CpuVerifierStarknet_2026_13",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x7Da1225C752ab37E610a242D9D8a0548262E3fF7": {
+      "name": "SHARPVerifier_2026_13_2",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x8055948c530dbBc19cc350d53473EEe3a1e3d22B": {
+      "name": "Level2CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0x9fb7F48dCB26b7bFA4e580b2dEFf637B13751942": {
+      "name": "SHARPVerifier_2024_10",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xaA2c9CDD4ceAebe9A35873B77F57FB47c3Ef11b9": {
+      "name": "Level2CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xAaAe0edF6536de72E7163D293518c40011179f8a": {
+      "name": "CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xbe0F8F150Fd10798524B4de80eD75751658CAEF3": {
+      "name": "CpuVerifierRecursiveLargeOutput_2026_13",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xbF8D127efc09ed49C65f00355A0C5a5FF57D26cc": {
+      "name": "Level2CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xD0fC19710c389ef4a7244656cB08db08eA9D88b4": {
+      "name": "Level2CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xd51A3D50d4D2f99a345a66971E650EEA064DD8dF": {
+      "name": "Level2SHARPVerifier_2023_9",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xe155154845950573EC5F518fC0D4950AB71303ff": {
+      "name": "CpuFrilessVerifier",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xE67515a751291445B85b2F176c1eCdf08e86b406": {
+      "name": "SHARPVerifier_2026_13_3",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xFE5e5b24FfE981C9faA0d4F36Ce346c3B22B0066": {
+      "name": "SHARPVerifier_2025_12",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    },
+    "eth:0xFFC7974cd74b95f631f454cd787AAc28F0476b44": {
+      "name": "CpuVerifierPerpetual_2026_13",
+      "type": "Contract",
+      "project": "shared-sharp-verifier"
+    }
+  }
+}

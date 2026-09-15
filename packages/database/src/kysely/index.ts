@@ -1,19 +1,17 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import {
+  type IsolationLevel,
   Kysely,
-  Transaction as KyselyTransaction,
+  type Transaction as KyselyTransaction,
+  type LogConfig,
+  type LogEvent,
   PostgresDialect,
 } from 'kysely'
-import { Pool, PoolConfig, defaults, types } from 'pg'
-import { DB as GeneratedDB } from './generated/types'
+import { defaults, Pool, type PoolConfig, types } from 'pg'
+import type { DB as GeneratedDB } from './generated/types'
 
-import { AsyncLocalStorage } from 'node:async_hooks'
-import { DailyTransactionCountRow } from '../activity/activity-view/entity'
-
-export type DB = GeneratedDB & {
-  // TODO: (sz-piotr) This is temporary!
-  'activity.daily_count_view': DailyTransactionCountRow
-}
-
+export type KyselyLogEvent = LogEvent
+export type DB = GeneratedDB
 // Interpret `timestamp without time zone` as UTC
 defaults.parseInputDatesAsUTC = true
 types.setTypeParser(types.builtins.TIMESTAMP, (value) => new Date(value + 'Z'))
@@ -25,11 +23,12 @@ export class DatabaseClient {
   private readonly kysely: Kysely<DB>
   private context = new AsyncLocalStorage<Transaction>()
 
-  constructor(config?: PoolConfig) {
+  constructor({ log, ...config }: PoolConfig & { log?: LogConfig }) {
     this.kysely = new Kysely<DB>({
       dialect: new PostgresDialect({
         pool: new Pool({ types, ...config }),
       }),
+      log,
     })
   }
 
@@ -38,12 +37,19 @@ export class DatabaseClient {
     return transaction ?? this.kysely
   }
 
-  transaction<T>(cb: () => Promise<T>): Promise<T> {
+  transaction<T>(
+    cb: () => Promise<T>,
+    isolationLevel?: IsolationLevel,
+  ): Promise<T> {
     if (this.db.isTransaction) {
       // TODO: consider checking for isolation levels in the future
       return cb()
     }
-    return this.kysely.transaction().execute((trx) => this.context.run(trx, cb))
+    const tx = this.kysely.transaction()
+    if (isolationLevel !== undefined) {
+      tx.setIsolationLevel(isolationLevel)
+    }
+    return tx.execute((trx) => this.context.run(trx, cb))
   }
 
   close() {

@@ -1,0 +1,21 @@
+import { formatCurrency } from '@l2beat/shared-pure'
+import { ChartStats, ChartStatsItem } from '~/components/core/chart/ChartStats'
+import { categoryToLabel } from '~/pages/layer2s/project/tvs-breakdown/components/tables/categoryToLabel'
+import type { ProjectToken } from '~/server/features/layer2s/tvs/tokens/getTokensForProject'
+import { sourceToLabel } from '~/server/features/layer2s/tvs/utils/sourceToLabel'
+
+export function TokenSummaryBox({ token }: { token: ProjectToken }) {
+  return (
+    <ChartStats className="mt-3 md:grid-cols-3 lg:grid-cols-3">
+      <ChartStatsItem label="Value">
+        <span className="font-bold">{formatCurrency(token.value, 'usd')}</span>
+      </ChartStatsItem>
+      <ChartStatsItem label="Bridging Type">
+        <span className="font-bold">{sourceToLabel(token.source)}</span>
+      </ChartStatsItem>
+      <ChartStatsItem label="Category">
+        <span className="font-bold">{categoryToLabel(token.category)}</span>
+      </ChartStatsItem>
+    </ChartStats>
+  )
+}

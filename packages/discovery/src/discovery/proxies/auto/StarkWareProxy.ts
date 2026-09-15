@@ -1,10 +1,16 @@
-import { ProxyDetails } from '@l2beat/discovery-types'
-import { Bytes, EthereumAddress, Hash256 } from '@l2beat/shared-pure'
-import { BigNumber, utils } from 'ethers'
-
-import { Semver, parseSemver } from '../../../utils/semver'
-import { IProvider } from '../../provider/IProvider'
-
+import {
+  assert,
+  Bytes,
+  ChainSpecificAddress,
+  Hash256,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import { BigNumber, type providers, utils } from 'ethers'
+import { parseSemver, type Semver } from '../../../utils/semver'
+import type { ContractValue } from '../../output/types'
+import type { IProvider } from '../../provider/IProvider'
+import type { DateAddresses } from '../pastUpgrades'
+import type { ProxyDetails } from '../types'
 import { getProxyGovernance } from './StarkWareProxyGovernance'
 
 // keccak256("StarkWare2019.implementation-slot")
@@ -19,14 +25,14 @@ const CALL_IMPLEMENTATION_SLOT = Bytes.fromHex(
 
 async function getCallImplementation(
   provider: IProvider,
-  address: EthereumAddress,
-): Promise<EthereumAddress | undefined> {
+  address: ChainSpecificAddress,
+): Promise<ChainSpecificAddress | undefined> {
   const callImplementation = await provider.getStorageAsAddress(
     address,
     CALL_IMPLEMENTATION_SLOT,
   )
 
-  if (callImplementation === EthereumAddress.ZERO) return
+  if (callImplementation === ChainSpecificAddress.ZERO(provider.chain)) return
 
   return callImplementation
 }
@@ -38,7 +44,7 @@ const UPGRADE_DELAY_SLOT = Bytes.fromHex(
 
 async function getUpgradeDelay(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<number> {
   const value = await provider.getStorage(address, UPGRADE_DELAY_SLOT)
   return BigNumber.from(value.toString()).toNumber()
@@ -51,7 +57,7 @@ const FINALIZED_STATE_SLOT = Bytes.fromHex(
 
 async function getFinalizedState(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<boolean> {
   const stored = await provider.getStorage(address, FINALIZED_STATE_SLOT)
   return !BigNumber.from(stored.toString()).eq(0)
@@ -59,7 +65,7 @@ async function getFinalizedState(
 
 async function getProxyVersion(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<Semver | undefined> {
   const versionString = await provider.callMethod<string>(
     address,
@@ -83,15 +89,56 @@ async function getProxyVersion(
   return parseSemver(versionString)
 }
 
+const abi = new utils.Interface([
+  'event Upgraded(address indexed implementation)',
+  'event ImplementationUpgraded(address indexed implementation, bytes initializer)',
+  'event ImplementationAdded(address indexed implementation, bytes initializer, bool finalize)',
+])
+
+async function getPastProxyUpgrades(
+  provider: IProvider,
+  address: ChainSpecificAddress,
+): Promise<DateAddresses[]> {
+  const logs = await provider.getLogs(address, [
+    [
+      abi.getEventTopic('Upgraded'),
+      abi.getEventTopic('ImplementationUpgraded'),
+    ],
+  ])
+
+  const blockNumbers = [...new Set(logs.map((l) => l.blockNumber))]
+  const blocks = await Promise.all(
+    blockNumbers.map(
+      async (blockNumber) => await provider.getBlock(blockNumber),
+    ),
+  )
+  assert(blocks.every((b) => b !== undefined))
+  const dateMap = Object.fromEntries(
+    blocks.map((b) => [b.number, UnixTime.toDate(b.timestamp).toISOString()]),
+  )
+
+  return logs.map((l) => {
+    const implementation = ChainSpecificAddress.fromLong(
+      provider.chain,
+      abi.parseLog(l).args.implementation,
+    )
+    return [
+      dateMap[l.blockNumber] ?? 'ERROR',
+      Hash256(l.transactionHash),
+      [implementation],
+    ]
+  })
+}
+
 export async function detectStarkWareProxy(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<ProxyDetails | undefined> {
   const implementation = await provider.getStorageAsAddress(
     address,
     IMPLEMENTATION_SLOT,
   )
-  if (implementation === EthereumAddress.ZERO) {
+  if (implementation === ChainSpecificAddress.ZERO(provider.chain)) {
     return
   }
 
@@ -122,48 +169,68 @@ export async function detectStarkWareProxy(
   }
   const relatives = callImplementation ? [callImplementation] : []
   relatives.push(...proxyGovernance)
+  const pastUpgrades = await getPastProxyUpgrades(provider, address)
 
   return {
     type: 'StarkWare proxy',
     values: {
       $immutable: isFinal,
-      $admin: proxyGovernance,
-      $implementation: implementation,
-      StarkWareProxy_callImplementation: callImplementation,
+      $admin: proxyGovernance.map((g) => g.toString()),
+      $implementation: implementation.toString(),
+      $pastUpgrades: pastUpgrades as ContractValue,
+      $upgradeCount: pastUpgrades.length,
+      StarkWareProxy_callImplementation: callImplementation?.toString(),
       // TODO: (sz-piotr) should be a property of the $admin permission
       StarkWareProxy_upgradeDelay: upgradeDelay,
     },
   }
 }
 
-const coder = new utils.Interface([
-  'event Upgraded(address indexed implementation)',
-  'event ImplementationUpgraded(address indexed implementation, bytes initializer)',
-  'event ImplementationAdded(address indexed implementation, bytes initializer, bool finalize)',
-])
-
-// if returns false, it means that the proxy is not a StarkWare diamond
-async function getStarkWareDiamond(
+async function getPastDiamondUpgrades(
   provider: IProvider,
-  address: EthereumAddress,
-  implementation: EthereumAddress,
-  upgradeDelay: number,
-  isFinal: boolean,
-  proxyGovernance: EthereumAddress[],
-): Promise<ProxyDetails | false> {
-  // TODO: (sz-piotr) new provider Promise.all
-  const upgrades = await provider.getLogs(address, [
+  address: ChainSpecificAddress,
+): Promise<DateAddresses[]> {
+  const logs = await provider.getLogs(address, [
     [
-      coder.getEventTopic('Upgraded'),
-      coder.getEventTopic('ImplementationUpgraded'),
+      abi.getEventTopic('Upgraded'),
+      abi.getEventTopic('ImplementationUpgraded'),
     ],
   ])
 
-  const lastUpgrade = upgrades.at(-1)
-  if (!lastUpgrade) {
-    return false
-  }
+  const blockNumbers = [...new Set(logs.map((l) => l.blockNumber))]
+  const blocks = await Promise.all(
+    blockNumbers.map(
+      async (blockNumber) => await provider.getBlock(blockNumber),
+    ),
+  )
+  assert(blocks.every((b) => b !== undefined))
+  const dateMap = Object.fromEntries(
+    blocks.map((b) => [b.number, UnixTime.toDate(b.timestamp).toISOString()]),
+  )
 
+  return await Promise.all(
+    logs.map(async (l) => {
+      const implementation = ChainSpecificAddress.fromLong(
+        provider.chain,
+        abi.parseLog(l).args.implementation,
+      )
+      const facets = await getStarkWareDiamondFacets(provider, address, l)
+      assert(facets !== false)
+
+      return [
+        dateMap[l.blockNumber] ?? 'ERROR',
+        Hash256(l.transactionHash),
+        [implementation, ...Object.values(facets)],
+      ]
+    }),
+  )
+}
+
+async function getStarkWareDiamondFacets(
+  provider: IProvider,
+  address: ChainSpecificAddress,
+  lastUpgrade: providers.Log,
+) {
   let data: string | undefined
 
   try {
@@ -186,15 +253,13 @@ async function getStarkWareDiamond(
     ) {
       throw e
     }
-    console.log('Failed to decode upgradeTo data')
 
-    if (lastUpgrade.topics[0] === coder.getEventTopic('Upgraded')) {
+    if (lastUpgrade.topics[0] === abi.getEventTopic('Upgraded')) {
       // dydx uses the Upgraded event with governance
       // so we cannot get the info from their tx data
       // we need to find the ImplementationAdded event that holds the initializer
-      console.log('Trying to find corresponding ImplementationAdded event')
       const implementationsAdded = await provider.getLogs(address, [
-        coder.getEventTopic('ImplementationAdded'),
+        abi.getEventTopic('ImplementationAdded'),
       ])
       const correspondingImplementationAdded = implementationsAdded.find(
         (log) => {
@@ -210,7 +275,6 @@ async function getStarkWareDiamond(
 
       data = `0x${correspondingImplementationAdded.data.slice(194)}`
     } else {
-      console.log('Falling back to decoding logs parameters')
       data = `0x${lastUpgrade.data.slice(130)}`
     }
   }
@@ -218,13 +282,16 @@ async function getStarkWareDiamond(
   // we subtract 2 for '0x' and 1 for an external initializer contract
   const maxAddresses = Math.floor((data.length - 2) / 64) - 1
 
-  const facets: Record<string, EthereumAddress> = {}
+  const facets: Record<string, ChainSpecificAddress> = {}
   for (let i = 0; i < maxAddresses; i++) {
     const bytes32 = data.slice(2 + 64 * i, 2 + 64 * (i + 1))
     if (!bytes32.startsWith('0'.repeat(24))) {
       break
     }
-    const facet = EthereumAddress('0x' + bytes32.slice(24))
+    const facet = ChainSpecificAddress.fromLong(
+      provider.chain,
+      '0x' + bytes32.slice(24),
+    )
     const name = await provider.callMethod<string>(
       facet,
       'function identify() view returns (string)',
@@ -236,6 +303,32 @@ async function getStarkWareDiamond(
     facets[name] = facet
   }
 
+  return facets
+}
+
+// if returns false, it means that the proxy is not a StarkWare diamond
+async function getStarkWareDiamond(
+  provider: IProvider,
+  address: ChainSpecificAddress,
+  implementation: ChainSpecificAddress,
+  upgradeDelay: number,
+  isFinal: boolean,
+  proxyGovernance: ChainSpecificAddress[],
+): Promise<ProxyDetails | false> {
+  // TODO: (sz-piotr) new provider Promise.all
+  const upgrades = await provider.getLogs(address, [
+    [
+      abi.getEventTopic('Upgraded'),
+      abi.getEventTopic('ImplementationUpgraded'),
+    ],
+  ])
+
+  const lastUpgrade = upgrades.at(-1)
+  if (!lastUpgrade) {
+    return false
+  }
+
+  const facets = await getStarkWareDiamondFacets(provider, address, lastUpgrade)
   if (Object.keys(facets).length <= 1) {
     // no facets found, this is not a StarkWare diamond
     // 1 facet is the implementation itself
@@ -244,13 +337,16 @@ async function getStarkWareDiamond(
   }
 
   const implementations = [implementation, ...Object.values(facets)]
+  const pastUpgrades = await getPastDiamondUpgrades(provider, address)
 
   return {
     type: 'StarkWare diamond',
     values: {
       $immutable: isFinal,
-      $admin: proxyGovernance,
-      $implementation: implementations,
+      $admin: proxyGovernance.map((g) => g.toString()),
+      $implementation: implementations.map((i) => i.toString()),
+      $pastUpgrades: pastUpgrades as ContractValue,
+      $upgradeCount: pastUpgrades.length,
       // TODO: (sz-piotr) should be a property of the $admin permission
       StarkWareDiamond_upgradeDelay: upgradeDelay,
     },

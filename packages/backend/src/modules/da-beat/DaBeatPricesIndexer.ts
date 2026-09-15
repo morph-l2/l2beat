@@ -1,0 +1,90 @@
+import type { Logger } from '@l2beat/backend-tools'
+import type { PriceProvider } from '@l2beat/shared'
+import { assert, type CoingeckoId } from '@l2beat/shared-pure'
+import { Indexer } from '@l2beat/uif'
+import { ManagedMultiIndexer } from '../../tools/uif/multi/ManagedMultiIndexer'
+import type {
+  Configuration,
+  ManagedMultiIndexerOptions,
+  WipeRemovalConfiguration,
+} from '../../tools/uif/multi/types'
+
+interface DaBeatPricesConfig {
+  coingeckoIds: string[]
+}
+
+interface DaBeatPricesIndexerDeps
+  extends Omit<ManagedMultiIndexerOptions<DaBeatPricesConfig>, 'name'> {
+  priceProvider: PriceProvider
+}
+
+export class DaBeatPricesIndexer extends ManagedMultiIndexer<DaBeatPricesConfig> {
+  constructor(
+    private readonly $: DaBeatPricesIndexerDeps,
+    logger: Logger,
+  ) {
+    assert(
+      $.configurations.length === 1,
+      'This indexer should take only one configuration',
+    )
+    super(
+      {
+        ...$,
+        name: 'dabeat_prices_indexer',
+        updateRetryStrategy: Indexer.getInfiniteRetryStrategy(),
+      },
+      logger,
+    )
+  }
+
+  override async multiUpdate(
+    from: number,
+    to: number,
+    configurations: Configuration<DaBeatPricesConfig>[],
+  ) {
+    const configuration = configurations[0]
+
+    const latestPrices = await this.$.priceProvider.getLatestPrices(
+      configuration.properties.coingeckoIds as CoingeckoId[],
+    )
+
+    if (latestPrices.size === 0) {
+      this.logger.info('No prices found', {
+        from,
+        to,
+      })
+      return () => Promise.resolve(to)
+    }
+
+    const result = Array.from(latestPrices.entries()).map(
+      ([coingeckoId, priceUsd]) => ({
+        coingeckoId,
+        priceUsd,
+      }),
+    )
+
+    return async () => {
+      await this.$.db.currentPrice.upsertMany(result)
+      this.logger.info('Saved DABEAT prices values into DB', {
+        records: result.length,
+      })
+
+      return to
+    }
+  }
+
+  override async wipeData(configurations: WipeRemovalConfiguration[]) {
+    assert(configurations.length === 1)
+
+    const coingeckoIds = this.$.configurations[0].properties.coingeckoIds
+
+    const deletedRecords =
+      await this.$.db.currentPrice.deleteByCoingeckoIds(coingeckoIds)
+
+    if (deletedRecords > 0) {
+      this.logger.info('Deleted records for configuration', {
+        deletedRecords,
+      })
+    }
+  }
+}

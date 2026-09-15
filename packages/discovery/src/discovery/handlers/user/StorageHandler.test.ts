@@ -1,16 +1,14 @@
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
+import { Bytes, ChainSpecificAddress } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
 import { utils } from 'ethers'
-
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { HandlerResult } from '../Handler'
-import { StorageHandler, StorageHandlerDefinition } from './StorageHandler'
+import type { IProvider } from '../../provider/IProvider'
+import type { HandlerResult } from '../Handler'
+import { StorageHandler, type StorageHandlerDefinition } from './StorageHandler'
 
 describe(StorageHandler.name, () => {
   describe('return types', () => {
     it('can returns storage as bytes', async () => {
-      const address = EthereumAddress.random()
+      const address = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
         async getStorage(passedAddress, slot) {
           expect(passedAddress).toEqual(address)
@@ -23,14 +21,10 @@ describe(StorageHandler.name, () => {
         chain: 'foo',
       })
 
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: 1,
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: 1,
+      })
       expect(handler.field).toEqual('someName')
 
       const result = await handler.execute(provider, address, {})
@@ -43,7 +37,7 @@ describe(StorageHandler.name, () => {
     })
 
     it('can returns storage as number', async () => {
-      const address = EthereumAddress.random()
+      const address = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
         async getStorage() {
           return Bytes.fromHex(
@@ -54,15 +48,11 @@ describe(StorageHandler.name, () => {
         chain: 'foo',
       })
 
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: 1,
-          returnType: 'number',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: 1,
+        returnType: 'number',
+      })
       expect(handler.field).toEqual('someName')
 
       const result = await handler.execute(provider, address, {})
@@ -74,34 +64,60 @@ describe(StorageHandler.name, () => {
     })
 
     it('can returns storage as address', async () => {
-      const address = EthereumAddress.random()
-      const resultAddress = EthereumAddress.random()
+      const address = ChainSpecificAddress.random()
+      const resultAddress = ChainSpecificAddress.random()
 
       const provider = mockObject<IProvider>({
         async getStorage() {
           return Bytes.fromHex(
-            '0x000000000000000000000000' + resultAddress.slice(2).toLowerCase(),
+            '0x000000000000000000000000' +
+              ChainSpecificAddress.address(resultAddress)
+                .slice(2)
+                .toLowerCase(),
           )
         },
         blockNumber: 123,
         chain: 'foo',
       })
 
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: 1,
-          returnType: 'address',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: 1,
+        returnType: 'address',
+      })
       expect(handler.field).toEqual('someName')
 
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'someName',
-        value: resultAddress.toString(),
+        value: ChainSpecificAddress.address(resultAddress).toString(),
+        ignoreRelative: undefined,
+      })
+    })
+
+    it('can returns storage as uint8', async () => {
+      const address = ChainSpecificAddress.random()
+      const provider = mockObject<IProvider>({
+        async getStorage() {
+          return Bytes.fromHex(
+            '0x0000000000000000000000000000000000000000000000000000000000000123',
+          )
+        },
+        blockNumber: 123,
+        chain: 'foo',
+      })
+
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: 1,
+        returnType: 'uint8',
+      })
+      expect(handler.field).toEqual('someName')
+
+      const result = await handler.execute(provider, address, {})
+      expect(result).toEqual({
+        field: 'someName',
+        value: 0x23,
         ignoreRelative: undefined,
       })
     })
@@ -109,85 +125,71 @@ describe(StorageHandler.name, () => {
 
   describe('dependencies', () => {
     it('detects no dependencies for a simple definition', () => {
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: 1,
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: 1,
+      })
 
       expect(handler.dependencies).toEqual([])
     })
 
     it('detects no dependencies for a complex definition', () => {
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: [1, '0x1234'],
-          offset: 25,
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: [1, '0x1234'],
+        offset: 25,
+      })
 
       expect(handler.dependencies).toEqual([])
     })
 
     it('detects dependency from the slot field', () => {
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: '{{ foo }}',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: '{{ foo }}',
+      })
 
       expect(handler.dependencies).toEqual(['foo'])
     })
 
     it('detects dependency from the offset field', () => {
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: 1,
-          offset: '{{ foo }}',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: 1,
+        offset: '{{ foo }}',
+      })
 
       expect(handler.dependencies).toEqual(['foo'])
     })
 
     it('detects dependency from the both fields at the same time', () => {
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: '{{ foo }}',
-          offset: '{{ bar }}',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: '{{ foo }}',
+        offset: '{{ bar }}',
+      })
 
       expect(handler.dependencies).toEqual(['bar', 'foo'])
     })
 
     it('detects from a complex slot field', () => {
-      const handler = new StorageHandler(
-        'someName',
-        {
-          type: 'storage',
-          slot: [1, '{{ foo }}', 2, '{{ baz }}'],
-          offset: '{{ bar }}',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: [1, '{{ foo }}', 2, '{{ baz }}'],
+        offset: '{{ bar }}',
+      })
 
       expect(handler.dependencies).toEqual(['bar', 'foo', 'baz'])
+    })
+
+    it('detects the base field of a nested reference', () => {
+      const handler = new StorageHandler('someName', {
+        type: 'storage',
+        slot: [1, '{{ constructorArgs._slot }}'],
+        offset: '{{ owner }}',
+      })
+
+      expect(handler.dependencies).toEqual(['owner', 'constructorArgs'])
     })
   })
 
@@ -201,11 +203,7 @@ describe(StorageHandler.name, () => {
       expectedSlot?: bigint
       expectedError?: string
     }) {
-      const handler = new StorageHandler(
-        'someName',
-        options.definition,
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StorageHandler('someName', options.definition)
       let slot: bigint | number | Bytes | undefined
       const provider = mockObject<IProvider>({
         async getStorage(_passedAddress, receivedSlot) {
@@ -217,7 +215,7 @@ describe(StorageHandler.name, () => {
       })
       const result = await handler.execute(
         provider,
-        EthereumAddress.random(),
+        ChainSpecificAddress.random(),
         options.previousResults ?? {},
       )
       if (options.expectedSlot !== undefined) {
@@ -254,12 +252,12 @@ describe(StorageHandler.name, () => {
     })
 
     it('computes a mapping entry', async () => {
-      const address = EthereumAddress.random()
+      const address = ChainSpecificAddress.random()
 
       await testComputeSlot({
         definition: {
           type: 'storage',
-          slot: [1, address.toString()],
+          slot: [1, ChainSpecificAddress.address(address).toString()],
           offset: 1,
         },
         expectedSlot:
@@ -267,7 +265,7 @@ describe(StorageHandler.name, () => {
             utils.keccak256(
               utils.defaultAbiCoder.encode(
                 ['address', 'uint256'],
-                [address, 1],
+                [ChainSpecificAddress.address(address), 1],
               ),
             ),
           ) + 1n,
@@ -275,12 +273,12 @@ describe(StorageHandler.name, () => {
     })
 
     it('computes a nested mapping entry', async () => {
-      const address = EthereumAddress.random()
+      const address = ChainSpecificAddress.random()
 
       await testComputeSlot({
         definition: {
           type: 'storage',
-          slot: [1, address.toString(), 5],
+          slot: [1, ChainSpecificAddress.address(address).toString(), 5],
           offset: 1,
         },
         expectedSlot:
@@ -293,7 +291,7 @@ describe(StorageHandler.name, () => {
                   utils.keccak256(
                     utils.defaultAbiCoder.encode(
                       ['address', 'uint256'],
-                      [address, 1],
+                      [ChainSpecificAddress.address(address), 1],
                     ),
                   ),
                 ],
@@ -338,14 +336,10 @@ describe(StorageHandler.name, () => {
   })
 
   it('handles provider errors', async () => {
-    const handler = new StorageHandler(
-      'someName',
-      {
-        type: 'storage',
-        slot: 1,
-      },
-      DiscoveryLogger.SILENT,
-    )
+    const handler = new StorageHandler('someName', {
+      type: 'storage',
+      slot: 1,
+    })
 
     const provider = mockObject<IProvider>({
       async getStorage() {
@@ -354,7 +348,7 @@ describe(StorageHandler.name, () => {
       blockNumber: 123,
       chain: 'foo',
     })
-    const address = EthereumAddress.random()
+    const address = ChainSpecificAddress.random()
     const result = await handler.execute(provider, address, {})
     expect(result).toEqual({
       field: 'someName',

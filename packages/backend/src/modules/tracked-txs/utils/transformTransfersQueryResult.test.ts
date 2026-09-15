@@ -1,18 +1,20 @@
-import {
-  EthereumAddress,
-  ProjectId,
-  TrackedTxsConfigSubtype,
-  UnixTime,
-} from '@l2beat/shared-pure'
-import { expect } from 'earl'
-
-import {
+import type {
   TrackedTxConfigEntry,
   TrackedTxId,
   TrackedTxTransferConfig,
 } from '@l2beat/shared'
-import { Configuration } from '../../../tools/uif/multi/types'
-import { BigQueryTransferResult, TrackedTxTransferResult } from '../types/model'
+import {
+  EthereumAddress,
+  ProjectId,
+  type TrackedTxsConfigSubtype,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import { expect } from 'earl'
+import type { Configuration } from '../../../tools/uif/multi/types'
+import type {
+  DuneTransferResult,
+  TrackedTxTransferResult,
+} from '../types/model'
 import { transformTransfersQueryResult } from './transformTransfersQueryResult'
 
 const ADDRESS_1 = EthereumAddress.random()
@@ -71,45 +73,42 @@ describe(transformTransfersQueryResult.name, () => {
       '0x90d5e81b40d6a6fa6f34b3dc67d3fce6',
     ]
 
-    const queryResults: BigQueryTransferResult[] = [
+    const queryResults: DuneTransferResult[] = [
       {
-        from_address: ADDRESS_1,
-        to_address: ADDRESS_2,
+        from: ADDRESS_1,
+        to: ADDRESS_2,
         hash: txHashes[0],
         block_number: block,
-        block_timestamp: RESULT_TIMESTAMP,
+        block_time: RESULT_TIMESTAMP,
         gas_price: 10n,
-        receipt_gas_used: 100,
-        calldata_gas_used: 100,
+        gas_used: 100,
         data_length: 100,
-        receipt_blob_gas_price: 1n,
-        receipt_blob_gas_used: 123,
+        non_zero_bytes: 60,
+        blob_versioned_hashes: ['0x1'],
       },
       {
-        from_address: ADDRESS_3,
-        to_address: ADDRESS_4,
+        from: ADDRESS_3,
+        to: ADDRESS_4,
         hash: txHashes[1],
         block_number: block,
-        block_timestamp: RESULT_TIMESTAMP,
+        block_time: RESULT_TIMESTAMP,
         gas_price: 20n,
-        receipt_gas_used: 200,
-        calldata_gas_used: 200,
+        gas_used: 200,
         data_length: 200,
-        receipt_blob_gas_price: null,
-        receipt_blob_gas_used: null,
+        non_zero_bytes: 150,
+        blob_versioned_hashes: null,
       },
       {
-        from_address: ADDRESS_5,
-        to_address: ADDRESS_6,
+        from: ADDRESS_5,
+        to: ADDRESS_6,
         hash: txHashes[2],
         block_number: block,
-        block_timestamp: RESULT_TIMESTAMP,
+        block_time: RESULT_TIMESTAMP,
         gas_price: 30n,
-        receipt_gas_used: 300,
-        calldata_gas_used: 300,
+        gas_used: 300,
         data_length: 300,
-        receipt_blob_gas_price: 1324n,
-        receipt_blob_gas_used: 123,
+        non_zero_bytes: 200,
+        blob_versioned_hashes: ['0x1'],
       },
     ]
     const expected: TrackedTxTransferResult[] = [
@@ -124,12 +123,11 @@ describe(transformTransfersQueryResult.name, () => {
         blockTimestamp: RESULT_TIMESTAMP,
         fromAddress: ADDRESS_1,
         toAddress: ADDRESS_2,
-        receiptGasUsed: 100,
+        gasUsed: 100,
         gasPrice: 10n,
-        calldataGasUsed: 100,
+        calldataGasUsed: 16 * 60 + 4 * (100 - 60),
         dataLength: 100,
-        receiptBlobGasPrice: 1n,
-        receiptBlobGasUsed: 123,
+        blobVersionedHashes: ['0x1'],
       },
       {
         formula: 'transfer',
@@ -142,12 +140,11 @@ describe(transformTransfersQueryResult.name, () => {
         blockTimestamp: RESULT_TIMESTAMP,
         fromAddress: ADDRESS_1,
         toAddress: ADDRESS_2,
-        receiptGasUsed: 100,
+        gasUsed: 100,
         gasPrice: 10n,
-        calldataGasUsed: 100,
+        calldataGasUsed: 16 * 60 + 4 * (100 - 60),
         dataLength: 100,
-        receiptBlobGasPrice: 1n,
-        receiptBlobGasUsed: 123,
+        blobVersionedHashes: ['0x1'],
       },
       {
         formula: 'transfer',
@@ -160,12 +157,11 @@ describe(transformTransfersQueryResult.name, () => {
         blockTimestamp: RESULT_TIMESTAMP,
         fromAddress: ADDRESS_3,
         toAddress: ADDRESS_4,
-        receiptGasUsed: 200,
+        gasUsed: 200,
         gasPrice: 20n,
-        calldataGasUsed: 200,
+        calldataGasUsed: 16 * 150 + 4 * (200 - 150),
         dataLength: 200,
-        receiptBlobGasPrice: null,
-        receiptBlobGasUsed: null,
+        blobVersionedHashes: null,
       },
       {
         formula: 'transfer',
@@ -178,12 +174,148 @@ describe(transformTransfersQueryResult.name, () => {
         blockTimestamp: RESULT_TIMESTAMP,
         fromAddress: ADDRESS_5,
         toAddress: ADDRESS_6,
-        receiptGasUsed: 300,
+        gasUsed: 300,
         gasPrice: 30n,
-        calldataGasUsed: 300,
+        calldataGasUsed: 16 * 200 + 4 * (300 - 200),
         dataLength: 300,
-        receiptBlobGasPrice: 1324n,
-        receiptBlobGasUsed: 123,
+        blobVersionedHashes: ['0x1'],
+      },
+    ]
+
+    expect(transformTransfersQueryResult(config, queryResults)).toEqual(
+      expected,
+    )
+  })
+
+  it('should calculate calldata gas used correctly', () => {
+    const config: Configuration<
+      TrackedTxConfigEntry & { params: TrackedTxTransferConfig }
+    >[] = [
+      mock({
+        id: '0x1',
+        projectId: ProjectId('project1'),
+        from: ADDRESS_1,
+        to: ADDRESS_2,
+        subtype: 'batchSubmissions',
+        sinceTimestamp: SINCE_TIMESTAMP,
+      }),
+      mock({
+        id: '0x2',
+        projectId: ProjectId('project1'),
+        from: ADDRESS_3,
+        to: ADDRESS_4,
+        subtype: 'stateUpdates',
+        sinceTimestamp: SINCE_TIMESTAMP,
+      }),
+      mock({
+        id: '0x3',
+        projectId: ProjectId('project2'),
+        from: ADDRESS_5,
+        to: ADDRESS_6,
+        subtype: 'proofSubmissions',
+        sinceTimestamp: SINCE_TIMESTAMP,
+      }),
+    ]
+
+    const block = 1
+    const txHashes = [
+      '0x095e4e9ee709e353ad7849cf30e4dc19',
+      '0x915d9ed63e196d8c612aad5d6f5cd1ba',
+      '0x90d5e81b40d6a6fa6f34b3dc67d3fce6',
+    ]
+
+    const queryResults: DuneTransferResult[] = [
+      // Before Pectra
+      {
+        from: ADDRESS_1,
+        to: ADDRESS_2,
+        hash: txHashes[0],
+        block_number: block,
+        block_time: RESULT_TIMESTAMP,
+        gas_price: 10n,
+        gas_used: 100,
+        data_length: 100,
+        non_zero_bytes: 60,
+        blob_versioned_hashes: ['0x1'],
+      },
+      // After Pectra - high compute
+      {
+        from: ADDRESS_3,
+        to: ADDRESS_4,
+        hash: txHashes[1],
+        block_number: 22431085,
+        block_time: RESULT_TIMESTAMP,
+        gas_price: 20n,
+        gas_used: 200,
+        data_length: 200,
+        non_zero_bytes: 150,
+        blob_versioned_hashes: null,
+      },
+      // After Pectra - low compute
+      {
+        from: ADDRESS_5,
+        to: ADDRESS_6,
+        hash: txHashes[2],
+        block_number: 22431085,
+        block_time: RESULT_TIMESTAMP,
+        gas_price: 30n,
+        gas_used: 300,
+        data_length: 10_000,
+        non_zero_bytes: 200,
+        blob_versioned_hashes: ['0x1'],
+      },
+    ]
+    const expected: TrackedTxTransferResult[] = [
+      {
+        formula: 'transfer',
+        projectId: config[0].properties.projectId,
+        id: config[0].id,
+        type: config[0].properties.type,
+        subtype: config[0].properties.subtype,
+        hash: txHashes[0],
+        blockNumber: block,
+        blockTimestamp: RESULT_TIMESTAMP,
+        fromAddress: ADDRESS_1,
+        toAddress: ADDRESS_2,
+        gasUsed: 100,
+        gasPrice: 10n,
+        calldataGasUsed: 16 * 60 + 4 * (100 - 60),
+        dataLength: 100,
+        blobVersionedHashes: ['0x1'],
+      },
+      {
+        formula: 'transfer',
+        projectId: config[1].properties.projectId,
+        id: config[1].id,
+        type: config[1].properties.type,
+        subtype: config[1].properties.subtype,
+        hash: txHashes[1],
+        blockNumber: 22431085,
+        blockTimestamp: RESULT_TIMESTAMP,
+        fromAddress: ADDRESS_3,
+        toAddress: ADDRESS_4,
+        gasPrice: 20n,
+        gasUsed: 200,
+        calldataGasUsed: 40 * 150 + 10 * (200 - 150),
+        dataLength: 200,
+        blobVersionedHashes: null,
+      },
+      {
+        formula: 'transfer',
+        projectId: config[2].properties.projectId,
+        id: config[2].id,
+        subtype: config[2].properties.subtype,
+        type: config[2].properties.type,
+        hash: txHashes[2],
+        blockNumber: 22431085,
+        blockTimestamp: RESULT_TIMESTAMP,
+        fromAddress: ADDRESS_5,
+        toAddress: ADDRESS_6,
+        gasPrice: 30n,
+        gasUsed: 300,
+        calldataGasUsed: 40 * 200 + 10 * (10_000 - 200),
+        dataLength: 10_000,
+        blobVersionedHashes: ['0x1'],
       },
     ]
 
@@ -204,19 +336,18 @@ describe(transformTransfersQueryResult.name, () => {
       }),
     ]
 
-    const queryResults: BigQueryTransferResult[] = [
+    const queryResults: DuneTransferResult[] = [
       {
         hash: '',
         block_number: 1,
-        block_timestamp: RESULT_TIMESTAMP,
-        from_address: EthereumAddress.random(),
-        to_address: EthereumAddress.random(),
+        block_time: RESULT_TIMESTAMP,
+        from: EthereumAddress.random(),
+        to: EthereumAddress.random(),
         gas_price: 10n,
-        receipt_gas_used: 100,
-        calldata_gas_used: 100,
+        gas_used: 100,
         data_length: 100,
-        receipt_blob_gas_price: 1n,
-        receipt_blob_gas_used: 123,
+        non_zero_bytes: 60,
+        blob_versioned_hashes: ['0x1'],
       },
     ]
 
@@ -239,7 +370,7 @@ function mock({
   subtype: TrackedTxsConfigSubtype
   from: EthereumAddress
   to: EthereumAddress
-  sinceTimestamp: UnixTime
+  sinceTimestamp: number
 }): Configuration<TrackedTxConfigEntry & { params: TrackedTxTransferConfig }> {
   return {
     id,

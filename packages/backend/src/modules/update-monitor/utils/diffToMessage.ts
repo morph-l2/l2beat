@@ -1,40 +1,36 @@
-import { DiscoveryDiff, discoveryDiffToMarkdown } from '@l2beat/discovery'
-
-import { MAX_MESSAGE_LENGTH } from '../../../peripherals/discord/DiscordClient'
+import { type DiscoveryDiff, discoveryDiffToMarkdown } from '@l2beat/discovery'
+import { DISCORD_MAX_MESSAGE_LENGTH } from '@l2beat/shared'
+import type { UnixTime } from '@l2beat/shared-pure'
 
 export function diffToMessage(
   name: string,
   diffs: DiscoveryDiff[],
-  blockNumber: number,
-  chain: string,
+  timestamp: number,
   dependents: string[],
   nonce?: number,
+  trackedTxsAffected?: boolean,
 ): string {
-  const header = getHeader(name, chain, blockNumber, nonce)
+  const header = getHeader(name, timestamp, nonce)
   const dependentsMessage = getDependentsMessage(dependents)
+  const trackedTxsMessage = trackedTxsAffected
+    ? getTrackedTxsMessage()
+    : undefined
 
-  const overheadLength = header.length + dependentsMessage.length
-  const maxLength = MAX_MESSAGE_LENGTH - overheadLength
+  const overheadLength =
+    header.length + dependentsMessage.length + (trackedTxsMessage?.length ?? 0)
+  const maxLength = DISCORD_MAX_MESSAGE_LENGTH - overheadLength
 
   const message = discoveryDiffToMarkdown(diffs, maxLength)
 
-  return `${header}${dependentsMessage}${message}`
+  return `${header}${dependentsMessage}${trackedTxsMessage || ''}${message}`
 }
 
-function getHeader(
-  name: string,
-  chain: string,
-  blockNumber: number,
-  nonce?: number,
-) {
+function getHeader(name: string, timestamp: UnixTime, nonce?: number) {
   name = wrapBoldAndItalic(name)
-  chain = wrapBoldAndItalic(chain)
   if (nonce === undefined) {
-    return `${name} | detected changes on chain: ${chain}`
+    return `${name} | detected changes`
   }
-  return `> ${formatNonce(
-    nonce,
-  )} (block_number=${blockNumber})\n\n${name} | detected changes on chain: ${chain}`
+  return `Changes: ${name} at timestamp ${timestamp}`
 }
 
 function getDependentsMessage(dependents: string[]) {
@@ -43,10 +39,14 @@ function getDependentsMessage(dependents: string[]) {
   }
   return (
     '\n' +
-    wrapItalic('This is a shared module, used by the following projects:') +
+    wrapItalic('This module is referenced by the following projects:') +
     ' ' +
     wrapBoldAndItalic(dependents.join(', ') + '.')
   )
+}
+
+function getTrackedTxsMessage(): string {
+  return '\n' + wrapItalic('Tracked transactions might be affected.')
 }
 
 export function formatNonce(nonce: number): string {

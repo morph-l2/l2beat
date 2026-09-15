@@ -1,11 +1,7 @@
-import { z } from 'zod'
+import { v } from '@l2beat/validate'
 
-const Response = z.object({
-  results: z.array(
-    z.object({
-      text_signature: z.string(),
-    }),
-  ),
+const Response = v.object({
+  results: v.array(v.object({ id: v.number(), text_signature: v.string() })),
 })
 
 export class FourByteClient {
@@ -14,6 +10,8 @@ export class FourByteClient {
     const res = await fetch(url)
     const data = await res.json()
     const parsed = Response.parse(data)
-    return parsed.results[0]?.text_signature
+
+    const lowestIdResult = parsed.results.sort((a, b) => a.id - b.id)[0]
+    return lowestIdResult?.text_signature
   }
 }

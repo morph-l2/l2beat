@@ -1,95 +1,138 @@
-import {
-  assert,
-  ProjectId,
-  Sentiment,
-  WarningValueWithSentiment,
-  formatSeconds,
-} from '@l2beat/shared-pure'
+import { assert, formatSeconds, type ProjectId } from '@l2beat/shared-pure'
 import { utils } from 'ethers'
-
-import { ScalingProjectRiskViewEntry } from './ScalingProjectRisk'
-import { ScalingProjectRiskView } from './ScalingProjectRiskView'
-import { DATA_AVAILABILITY } from './dataAvailability'
-
-export function makeBridgeCompatible(
-  entry: Omit<ScalingProjectRiskView, 'sourceUpgradeability'>,
-): ScalingProjectRiskView {
-  return {
-    ...entry,
-    sourceUpgradeability: entry.exitWindow,
-  }
-}
+import type { ProjectScalingRiskView } from '../internalTypes'
+import type { ExitWindowRisk, Sentiment, TableReadyValue } from '../types'
+import { getDacSentiment } from './dataAvailability'
 
 // State validation
 
-export const STATE_NONE: ScalingProjectRiskViewEntry = {
-  value: 'In development',
+export const STATE_NONE: ProjectScalingRiskView['stateValidation'] = {
+  value: 'None',
   description:
     'Currently the system permits invalid state roots. More details in project overview.',
   sentiment: 'bad',
-  definingMetric: -Infinity,
+  orderHint: Number.NEGATIVE_INFINITY,
 }
 
-export const STATE_FP: ScalingProjectRiskViewEntry = {
+export const STATE_FP: ProjectScalingRiskView['stateValidation'] = {
   value: 'Fraud proofs',
   description:
     'Fraud proofs allow actors watching the chain to prove that the state is incorrect.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const STATE_FP_1R: ScalingProjectRiskViewEntry = {
+export const STATE_FP_1R: ProjectScalingRiskView['stateValidation'] = {
   value: 'Fraud proofs (1R)',
   description:
     'Fraud proofs allow actors watching the chain to prove that the state is incorrect. Single round proofs (1R) only require a single transaction to resolve.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const STATE_FP_INT: ScalingProjectRiskViewEntry = {
-  value: 'Fraud proofs (INT)',
-  description:
-    'Fraud proofs allow actors watching the chain to prove that the state is incorrect. Interactive proofs (INT) require multiple transactions over time to resolve.',
-  sentiment: 'good',
-  definingMetric: Infinity,
+export function STATE_FP_INT(
+  challengePeriodSeconds?: number,
+  executionDelaySeconds = 0,
+  executionDelayMode?: 'always' | 'if-challenged',
+): ProjectScalingRiskView['stateValidation'] {
+  return {
+    value: 'Fraud proofs (INT)',
+    description:
+      'Fraud proofs allow actors watching the chain to prove that the state is incorrect. Interactive proofs (INT) require multiple transactions over time to resolve.',
+    executionDelay: executionDelaySeconds,
+    executionDelayMode,
+    challengeDelay: challengePeriodSeconds,
+    sentiment: 'good',
+    orderHint: Number.POSITIVE_INFINITY,
+  }
 }
 
-export const STATE_FP_INT_ZK: ScalingProjectRiskViewEntry = {
+export const STATE_FP_INT_ZK: ProjectScalingRiskView['stateValidation'] = {
   value: 'Fraud proofs (INT, ZK)',
   description:
     'Fraud proofs allow actors watching the chain to prove that the state is incorrect. Interactive proofs (INT) require multiple transactions over time to resolve. ZK proofs are used to adjudicate the correctness of the last step.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const STATE_ZKP_SN: ScalingProjectRiskViewEntry = {
-  value: 'ZK proofs (SN)',
+export const STATE_FP_1R_ZK: ProjectScalingRiskView['stateValidation'] = {
+  value: 'Fraud proofs (1R, ZK)',
   description:
-    'zkSNARKS are zero knowledge proofs that ensure state correctness, but require trusted setup.',
+    'Fraud proofs allow actors watching the chain to prove that the state is incorrect. Single round proofs (1R) only require a single transaction to resolve. ZK proofs are used to prove the correctness of the state transition.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const STATE_ZKP_ST: ScalingProjectRiskViewEntry = {
-  value: 'ZK proofs (ST)',
+export const STATE_FP_HYBRID_ZK: ProjectScalingRiskView['stateValidation'] = {
+  value: 'Fraud proofs (1R, ZK)',
   description:
-    'zkSTARKS are zero knowledge proofs that ensure state correctness.',
+    'Fraud proofs allow actors watching the chain to prove that the state is incorrect. Single round proofs (1R) prove the validity of a state proposal, only requiring a single transaction to resolve. A fault proof eliminates a state proposal by proving that any intermediate state transition in the proposal results in a different state root. For either, a ZK proof is used.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const STATE_EXITS_ONLY: ScalingProjectRiskViewEntry = {
+export const STATE_ZKP_OPTIMISTIC: ProjectScalingRiskView['stateValidation'] = {
+  value: 'Fraud proofs (1R, ZK)',
+  description:
+    'Actors watching the chain can challenge state proposals, and challenged proposals must provide ZK proofs. SNARKs are zero knowledge proofs that ensure state correctness, but require trusted setup.',
+  sentiment: 'good',
+  orderHint: Number.POSITIVE_INFINITY,
+}
+
+export const STATE_ZKP_SN: ProjectScalingRiskView['stateValidation'] = {
+  value: 'Validity proofs (SN)',
+  description:
+    'SNARKs are succinct zero knowledge proofs that ensure state correctness, but require trusted setup.',
+  sentiment: 'good',
+  orderHint: Number.POSITIVE_INFINITY,
+  permissioned: true,
+}
+
+export const STATE_ZKP_ST: ProjectScalingRiskView['stateValidation'] = {
+  value: 'Validity proofs (ST)',
+  description:
+    'STARKs are zero knowledge proofs that ensure state correctness.',
+  sentiment: 'good',
+  orderHint: Number.POSITIVE_INFINITY,
+  permissioned: true,
+}
+
+export const STATE_ZKP_ST_SN_WRAP: ProjectScalingRiskView['stateValidation'] = {
+  value: 'Validity proofs (ST, SN)',
+  description:
+    'STARKs and SNARKs are zero knowledge proofs that ensure state correctness. STARKs proofs are wrapped in SNARKs proofs for efficiency. SNARKs require a trusted setup.',
+  sentiment: 'good',
+  orderHint: Number.POSITIVE_INFINITY,
+  permissioned: true,
+}
+
+export function STATE_ZKP_L3(
+  L2: string,
+): ProjectScalingRiskView['stateValidation'] {
+  return {
+    value: 'Validity proofs',
+    description: `Zero knowledge cryptography is used to ensure state correctness. Proofs are first verified on ${L2} and finally on Ethereum.`,
+    sentiment: 'good',
+    orderHint: Number.POSITIVE_INFINITY,
+    permissioned: true,
+  }
+}
+
+export const STATE_EXITS_ONLY: ProjectScalingRiskView['stateValidation'] = {
   value: 'Exits only',
   description:
     'Exits from the network are subject to a period when they can be challenged. The internal network state is left unchecked.',
   sentiment: 'bad',
-  definingMetric: -Infinity,
+  orderHint: Number.NEGATIVE_INFINITY,
 }
 
-export function STATE_ARBITRUM_FRAUD_PROOFS(
+export function STATE_ARBITRUM_PERMISSIONED_FRAUD_PROOFS(
   nOfChallengers: number,
+  hasAtLeastFiveExternalChallengers?: boolean,
   challengeWindowSeconds?: number,
-): ScalingProjectRiskViewEntry {
+  executionDelaySeconds?: number,
+  executionDelayMode?: 'always' | 'if-challenged',
+): ProjectScalingRiskView['stateValidation'] {
   const challengePeriod = challengeWindowSeconds
     ? ` There is a ${formatSeconds(challengeWindowSeconds)} challenge period.`
     : ''
@@ -109,104 +152,208 @@ export function STATE_ARBITRUM_FRAUD_PROOFS(
       'Interactive proofs (INT) require multiple transactions over time to resolve. ' +
       'The challenge protocol can be subject to delay attacks.'
     sentiment = 'bad'
-  } else {
+  } else if (hasAtLeastFiveExternalChallengers) {
     descriptionBase =
-      `Fraud proofs allow ${nOfChallengers} WHITELISTED actors watching the chain to prove that the state is incorrect. ` +
+      `Fraud proofs allow ${nOfChallengers} WHITELISTED actors watching the chain to prove that the state is incorrect. At least 5 Challengers are external to the Operator. ` +
       'Interactive proofs (INT) require multiple transactions over time to resolve.'
     sentiment = 'warning'
+  } else {
+    descriptionBase =
+      `Fraud proofs allow ${nOfChallengers} WHITELISTED actors watching the chain to prove that the state is incorrect. There are fewer than 5 Challengers external to the Operator among these. ` +
+      'Interactive proofs (INT) require multiple transactions over time to resolve.'
+    sentiment = 'bad'
   }
 
   return {
     value: 'Fraud proofs (INT)',
     description: descriptionBase + challengePeriod,
+    executionDelay: executionDelaySeconds,
+    executionDelayMode,
+    challengeDelay: challengeWindowSeconds,
+    permissioned: true,
+    defenderAdvantage: 'not-applicable',
     sentiment: sentiment,
-    definingMetric: nOfChallengers,
+    orderHint: nOfChallengers,
   }
+}
+
+export function computeBoldDefenderAdvantage(
+  baseStake: number | string | bigint,
+  stakeAmounts: (number | string | bigint)[],
+): { multiplier: number; shape: 'linear' } {
+  const levels = [BigInt(baseStake), ...stakeAmounts.slice(1).map(BigInt)]
+  let worstRatio = 0
+  for (let i = 1; i < levels.length; i++) {
+    const ratio = Number(levels[i]) / Number(levels[i - 1])
+    if (ratio > worstRatio) worstRatio = ratio
+  }
+  return { multiplier: 1 / worstRatio, shape: 'linear' }
 }
 
 // Data availability
 
-export const DATA_ON_CHAIN: ScalingProjectRiskViewEntry = {
-  value: 'On chain',
+export const DATA_ON_CHAIN: TableReadyValue = {
+  value: 'Onchain',
   description:
     'All of the data needed for proof construction is published on Ethereum L1.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const DATA_ON_CHAIN_L3: ScalingProjectRiskViewEntry = {
-  value: 'On chain',
+export const DATA_ON_CHAIN_L3: TableReadyValue = {
+  value: 'Onchain',
   description:
     'All of the data needed for proof construction is published on the base chain, which ultimately gets published on Ethereum.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const DATA_ON_CHAIN_STATE_DIFFS: ScalingProjectRiskViewEntry = {
-  value: 'On chain (SD)',
+export const DATA_ON_CHAIN_STATE_DIFFS: TableReadyValue = {
+  value: 'Onchain (SD)',
   description:
-    'All of the data (SD = state diffs) needed for proof construction is published on chain.',
+    'All of the data (SD = state diffs) needed for proof construction is published onchain.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const DATA_MIXED: ScalingProjectRiskViewEntry = {
+export const DATA_MIXED: TableReadyValue = {
   value: 'Mixed',
   description:
-    'Some of the data needed for proof construction is not published on chain.',
+    'Some of the data needed for proof construction is not published onchain.',
   sentiment: 'warning',
-  definingMetric: 0,
+  orderHint: 0,
 }
 
-export const DATA_EXTERNAL_MEMO: ScalingProjectRiskViewEntry = {
+export const DATA_EXTERNAL_MEMO: TableReadyValue = {
   value: 'External (MEMO)',
   description: 'Transaction data is kept in MEMO decentralized storage.',
   sentiment: 'bad',
-  definingMetric: -Infinity,
+  orderHint: Number.NEGATIVE_INFINITY,
 }
 
 export function DATA_EXTERNAL_DAC(DAC?: {
   membersCount: number
   requiredSignatures: number
-}): ScalingProjectRiskViewEntry {
+}): TableReadyValue {
   const additionalString =
     DAC !== undefined
       ? ` with a threshold of ${DAC.requiredSignatures}/${DAC.membersCount}`
-      : ``
+      : ''
 
   return {
     value: 'External (DAC)',
-    description: `Proof construction relies fully on data that is NOT published on chain. There exists a Data Availability Committee (DAC)${additionalString} that is tasked with protecting and supplying the data.`,
-    sentiment: DATA_AVAILABILITY.DAC_SENTIMENT(DAC),
-    definingMetric: DAC ? DAC.requiredSignatures / DAC.membersCount : -Infinity,
+    description: `Proof construction relies fully on data that is NOT published onchain. There exists a Data Availability Committee (DAC)${additionalString} that is tasked with protecting and supplying the data.`,
+    sentiment: getDacSentiment(DAC),
+    orderHint: DAC
+      ? DAC.requiredSignatures / DAC.membersCount
+      : Number.NEGATIVE_INFINITY,
   }
 }
 
-export const DATA_EXTERNAL: ScalingProjectRiskViewEntry = {
+export const DATA_EXTERNAL: TableReadyValue = {
   value: 'External',
   description:
-    'Proof construction and state derivation rely fully on data that is NOT published on chain.',
+    'Proof construction and state derivation rely fully on data that is NOT published onchain.',
   sentiment: 'bad',
 }
 
-export function DATA_CELESTIA(
-  isUsingBlobstream: boolean,
-): ScalingProjectRiskViewEntry {
+export const DATA_EXTERNAL_L3: TableReadyValue = {
+  value: 'External',
+  description:
+    'Proof construction and state derivation rely fully on data that is ultimately NOT published on Ethereum.',
+  sentiment: 'bad',
+}
+
+export const DATA_EXTERNAL_CHALLENGES: TableReadyValue = {
+  value: 'External',
+  description:
+    'Proof construction and state derivation rely fully on data that is NOT published onchain. A custom data availability (DA) provider without attestations is used, but data unavailability can be challenged.',
+  sentiment: 'bad',
+}
+
+export function DATA_CELESTIA(isUsingBlobstream: boolean): TableReadyValue {
   const additional = isUsingBlobstream
     ? ' Sequencer tx roots are checked against the Blobstream bridge data roots, signed off by Celestia validators.'
     : ' Sequencer tx roots are not checked against the Blobstream bridge data roots onchain, but L2 nodes can verify data availability by running a Celestia light client.'
   return {
     value: 'External',
     description:
-      `Proof construction and state derivation fully rely on data that is posted on Celestia.` +
+      'Proof construction and state derivation fully rely on data that is posted on Celestia.' +
       additional,
-    sentiment: 'bad',
+    sentiment: isUsingBlobstream ? 'warning' : 'bad',
+  }
+}
+
+export function DATA_AVAIL(isUsingVector: boolean): TableReadyValue {
+  const additional = isUsingVector
+    ? ' Transaction data is checked against the Vector bridge data roots, signed off by Avail validators.'
+    : ' Transaction data is not checked against the Vector bridge data roots onchain, but L2 nodes can verify data availability by running an Avail light client.'
+  return {
+    value: 'External',
+    description:
+      'Proof construction and state derivation fully rely on data that is posted on Avail.' +
+      additional,
+    sentiment: isUsingVector ? 'warning' : 'bad',
+  }
+}
+
+export function DATA_EIGENDA(
+  isUsingDACertVerifier: boolean,
+  eigenDACertVersion: string,
+): TableReadyValue {
+  let additional: string
+
+  if (eigenDACertVersion === 'v1') {
+    additional = isUsingDACertVerifier
+      ? ' Sequencer transaction data roots are checked against the ServiceManager DA bridge data roots, signed off by EigenDA operators.'
+      : ' Sequencer transaction data roots are not checked against the ServiceManager DA bridge data roots onchain.'
+  } else {
+    // v2 and v3 both use EigenDA v2
+    additional = isUsingDACertVerifier
+      ? ' The sequencer is publishing data to EigenDA v2. Sequencer transaction data roots are checked against the DACert Verifier data roots, signed off by EigenDA operators.'
+      : ' The sequencer is publishing data to EigenDA v2. Sequencer transaction data roots are not checked against the DACert Verifier onchain.'
+  }
+
+  return {
+    value: 'External',
+    description:
+      'Proof construction and state derivation fully rely on data that is posted on EigenDA.' +
+      additional,
+    sentiment: isUsingDACertVerifier ? 'warning' : 'bad',
+  }
+}
+
+export const DATA_POS: TableReadyValue = {
+  value: 'PoS network',
+  description:
+    'Data is guaranteed to be available by an external proof of stake network of validators. On Ethereum, DA is attested via signed block headers.',
+  sentiment: 'warning',
+}
+
+export const DATA_POS_NOBRIDGE: TableReadyValue = {
+  value: 'PoS network',
+  description:
+    'Data is made available by an external proof of stake network of validators. Since there is no DA bridge, Ethereum cannot verify whether any data was made available on Gnosis Chain or whether incoming messages originate from state that was attested to by the PoS network.',
+  sentiment: 'bad',
+}
+
+export function DATA_ESPRESSO(isUsingLightClient: boolean): TableReadyValue {
+  const additional = isUsingLightClient
+    ? ' Sequencer tx roots are checked against the HotShot light client bridge data roots, signed off by Espresso validators.'
+    : ' Sequencer tx roots are not checked against the HotShot light client bridge data roots onchain, but L2 nodes can verify data availability by running an Espresso node.'
+  return {
+    value: 'External',
+    description:
+      'Proof construction and state derivation fully rely on data that is posted on Espresso.' +
+      additional,
+    sentiment: isUsingLightClient ? 'warning' : 'bad',
+    orderHint: isUsingLightClient ? 0 : Number.NEGATIVE_INFINITY,
   }
 }
 
 // bridges
 
-export const VALIDATED_BY_ETHEREUM: ScalingProjectRiskViewEntry = {
+export const VALIDATED_BY_ETHEREUM: TableReadyValue = {
   value: 'Ethereum',
   description: 'Smart contracts on Ethereum validate all bridge transfers.',
   sentiment: 'good',
@@ -214,9 +361,7 @@ export const VALIDATED_BY_ETHEREUM: ScalingProjectRiskViewEntry = {
 
 type L2sWithL3Support = ProjectId
 
-export function VALIDATED_BY_L2(
-  chain: L2sWithL3Support,
-): ScalingProjectRiskViewEntry {
+export function VALIDATED_BY_L2(chain: L2sWithL3Support): TableReadyValue {
   return {
     value: capitalize(chain.toString()),
     description: `Smart contracts on ${chain.toString()} validate all bridge transfers. Additionally, the security of the system depends on the security of the base layer.`,
@@ -229,87 +374,69 @@ function capitalize(str: string): string {
 }
 
 export function NATIVE_AND_CANONICAL(
-  nativeTokens = 'ETH',
+  gasTokens = ['ETH'],
   isAre: 'is' | 'are' = 'is',
-): ScalingProjectRiskViewEntry {
+): TableReadyValue {
   return {
     value: 'Native & Canonical',
-    description: `${nativeTokens} transferred via this bridge ${isAre} used to pay for gas and other tokens transferred are considered canonical on the destination chain.`,
+    description: `${gasTokens.join(', ')} transferred via this bridge ${isAre} used to pay for gas and other tokens transferred are considered canonical on the destination chain.`,
     sentiment: 'good',
   }
 }
 
-export const CANONICAL: ScalingProjectRiskViewEntry = {
+export const CANONICAL: TableReadyValue = {
   value: 'Canonical',
   description:
     'Tokens transferred are considered canonical on the destination chain.',
   sentiment: 'good',
 }
 
-export const CANONICAL_USDC: ScalingProjectRiskViewEntry = {
+export const CANONICAL_USDC: TableReadyValue = {
   value: 'Canonical',
   description:
     'USDC transferred is considered canonical as it is the basis of the perpetual protocol on the chain.',
   sentiment: 'good',
 }
 
-export const UPCOMING_RISK: ScalingProjectRiskViewEntry = {
-  value: '',
-  description: 'No information available.',
-  sentiment: 'neutral',
-}
-
-export const UPCOMING_RISK_VIEW: ScalingProjectRiskView = makeBridgeCompatible({
-  stateValidation: UPCOMING_RISK,
-  dataAvailability: UPCOMING_RISK,
-  exitWindow: UPCOMING_RISK,
-  sequencerFailure: UPCOMING_RISK,
-  proposerFailure: UPCOMING_RISK,
-  destinationToken: UPCOMING_RISK,
-  validatedBy: UPCOMING_RISK,
-})
-
-export const UNDER_REVIEW_RISK: ScalingProjectRiskViewEntry = {
+export const UNDER_REVIEW_RISK: TableReadyValue = {
   value: 'Under Review',
   description: 'This risk is currently under review.',
   sentiment: 'UnderReview',
 }
 
-export const UNDER_REVIEW_RISK_VIEW: ScalingProjectRiskView =
-  makeBridgeCompatible({
-    stateValidation: UNDER_REVIEW_RISK,
-    dataAvailability: UNDER_REVIEW_RISK,
-    exitWindow: UNDER_REVIEW_RISK,
-    sequencerFailure: UNDER_REVIEW_RISK,
-    proposerFailure: UNDER_REVIEW_RISK,
-    destinationToken: UNDER_REVIEW_RISK,
-    validatedBy: UNDER_REVIEW_RISK,
-  })
-
-/* New risks for stages */
+export const UNDER_REVIEW_RISK_VIEW: ProjectScalingRiskView = {
+  stateValidation: UNDER_REVIEW_RISK,
+  dataAvailability: UNDER_REVIEW_RISK,
+  exitWindow: UNDER_REVIEW_RISK,
+  sequencerFailure: UNDER_REVIEW_RISK,
+  proposerFailure: UNDER_REVIEW_RISK,
+}
 
 // SEQUENCER COLUMN
 
-export function SEQUENCER_SELF_SEQUENCE(
-  delay?: number,
-): ScalingProjectRiskViewEntry {
+export function SEQUENCER_SELF_SEQUENCE(delay?: number): TableReadyValue {
   const delayString =
     delay !== undefined
       ? delay === 0
         ? ' There is no delay on this operation.'
-        : ` There is a ${formatSeconds(delay)} delay on this operation.`
+        : ` There can be up to a ${formatSeconds(delay)} delay on this operation.`
       : ''
   return {
     value: 'Self sequence',
     description: `In the event of a sequencer failure, users can force transactions to be included in the project's chain by sending them to L1.${delayString}`,
     sentiment: 'good',
-    definingMetric: delay,
+    orderHint: delay,
   }
 }
 
-export function SEQUENCER_SELF_SEQUENCE_ZK(
-  delay?: number,
-): ScalingProjectRiskViewEntry {
+const SEQUENCER_SELF_SEQUENCE_NO_SEQUENCER: TableReadyValue = {
+  value: 'Self sequence',
+  description:
+    'Users can self sequence transactions by sending them on L1. There is no privileged operator.',
+  sentiment: 'good',
+}
+
+export function SEQUENCER_SELF_SEQUENCE_ZK(delay?: number): TableReadyValue {
   return {
     ...SEQUENCER_SELF_SEQUENCE(delay),
     description:
@@ -318,28 +445,26 @@ export function SEQUENCER_SELF_SEQUENCE_ZK(
   }
 }
 
-export function SEQUENCER_FORCE_VIA_L1(
-  delay?: number,
-): ScalingProjectRiskViewEntry {
+export function SEQUENCER_FORCE_VIA_L1(delay?: number): TableReadyValue {
   const delayString =
     delay !== undefined ? ' for more than ' + formatSeconds(delay) : ''
   return {
     value: 'Force via L1',
-    description: `Users can force the sequencer to include a withdrawal transaction by submitting a request through L1. If the sequencer censors or is down for ${delayString}, users can use the exit hatch to withdraw their funds.`,
+    description: `Users can force the sequencer to include a transaction by submitting a request through L1. If the sequencer censors or is down for ${delayString}, users can use the exit hatch to withdraw their funds.`,
     sentiment: 'good',
-    definingMetric: delay,
+    orderHint: delay,
   }
 }
 
 export function SEQUENCER_FORCE_VIA_L1_STARKEX_PERPETUAL(
   delay: number,
-): ScalingProjectRiskViewEntry {
+): TableReadyValue {
   const delayString = formatSeconds(delay)
   return {
     value: 'Force via L1',
     description: `Users can force the sequencer to include a trade or a withdrawal transaction by submitting a request through L1. If the sequencer censors or is down for ${delayString}, users can use the exit hatch to withdraw their funds. Users are required to find a counterparty for the trade by out of system means.`,
     sentiment: 'good',
-    definingMetric: delay,
+    orderHint: delay,
   }
 }
 
@@ -347,7 +472,7 @@ export function SEQUENCER_FORCE_VIA_L1_LOOPRING(
   delay: number,
   forcedWithdrawalFee: number,
   maxAgeDepositUntilWithdrawable: number,
-): ScalingProjectRiskViewEntry {
+): TableReadyValue {
   const delayString = formatSeconds(delay)
   const maxAgeDepositUntilWithdrawableString = formatSeconds(
     maxAgeDepositUntilWithdrawable,
@@ -359,25 +484,31 @@ export function SEQUENCER_FORCE_VIA_L1_LOOPRING(
     value: 'Force via L1',
     description: `Users can force the sequencer to include a withdrawal transaction by submitting a request through L1 with a ${forcedWithdrawalFeeString} fee. If the sequencer is down for more than ${delayString}, users can use the exit hatch to withdraw their funds. The sequencer can censor individual deposits, but in such case after ${maxAgeDepositUntilWithdrawableString} users can get their funds back.`,
     sentiment: 'good',
-    definingMetric: delay,
+    orderHint: delay,
   }
 }
 
-export function SEQUENCER_ENQUEUE_VIA(
-  layer: 'L1' | 'L2',
-): ScalingProjectRiskViewEntry {
+export function SEQUENCER_ENQUEUE_VIA(layer: 'L1' | 'L2'): TableReadyValue {
   return {
     value: `Enqueue via ${layer}`,
-    description: `Users can submit transactions to an ${layer} queue, but can't force them. The sequencer cannot selectively skip transactions but can stop processing the queue entirely. In other words, if the sequencer censors or is down, it is so for everyone.`,
+    description: `Users can submit transactions to an ${layer} queue, but can't force them. The sequencers cannot selectively skip transactions but can stop processing the queue entirely. In other words, if the sequencers censor or are down, they are so for everyone.`,
+    sentiment: 'warning',
+  }
+}
+
+export function SEQUENCER_CAN_SKIP(layer: 'L1' | 'L2'): TableReadyValue {
+  return {
+    value: `Log via ${layer}`,
+    description: `Users can submit transactions to an ${layer} map, but can't force them. When users “complain” that their transaction is stuck on L1 and not picked up by the sequencer, the Security Council minority can bypass the sequencer by posting a state root that includes it.`,
     sentiment: 'warning',
   }
 }
 
 export function SEQUENCER_NO_MECHANISM(
-  disabled?: boolean,
-): ScalingProjectRiskViewEntry {
+  isItThereButJustDisabled?: boolean,
+): TableReadyValue {
   const additional =
-    disabled === true
+    isItThereButJustDisabled === true
       ? ' Although the functionality exists in the code, it is currently disabled.'
       : ''
   return {
@@ -391,83 +522,144 @@ export function SEQUENCER_NO_MECHANISM(
 
 // PROPOSER COLUMN
 
-export const PROPOSER_CANNOT_WITHDRAW: ScalingProjectRiskViewEntry = {
+export const PROPOSER_CANNOT_WITHDRAW: TableReadyValue = {
   value: 'Cannot withdraw',
   description:
     'Only the whitelisted proposers can publish state roots on L1, so in the event of failure the withdrawals are frozen.',
   sentiment: 'bad',
-  definingMetric: -Infinity,
+  orderHint: Number.NEGATIVE_INFINITY,
 }
 
-export const PROPOSER_USE_ESCAPE_HATCH_ZK: ScalingProjectRiskViewEntry = {
+export const PROPOSER_WHITELIST_GOVERNANCE: TableReadyValue = {
+  value: 'Replace proposer',
+  description:
+    'Only the whitelisted proposers can publish state roots on L1, so in the event of failure the withdrawals are frozen. There is a decentralized Governance system that can attempt changing Proposers with an upgrade.',
+  sentiment: 'warning',
+  orderHint: Number.NEGATIVE_INFINITY,
+}
+
+export function PROPOSER_WHITELIST_SECURITY_COUNCIL(
+  config?: 'METIS',
+): TableReadyValue {
+  const description =
+    config === 'METIS'
+      ? 'Only the whitelisted proposer can update state roots on L1, so in the event of failure the withdrawals are frozen. The Security Council minority can be alerted to enforce censorship resistance because they own the proposer registry, controlling the active whitelisted proposer.'
+      : 'Only the whitelisted proposer can update state roots on L1, so in the event of failure the withdrawals are frozen. The Security Council minority can be alerted to enforce censorship resistance because they are a permissioned Operator.'
+
+  return {
+    value: 'Security Council minority',
+    description,
+    sentiment: 'warning',
+    orderHint: Number.NEGATIVE_INFINITY,
+  }
+}
+
+export const PROPOSER_USE_ESCAPE_HATCH_ZK: TableReadyValue = {
   value: 'Use escape hatch',
   description:
     'Users are able to trustlessly exit by submitting a zero knowledge proof of funds.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const PROPOSER_USE_ESCAPE_HATCH_MP: ScalingProjectRiskViewEntry = {
+export const PROPOSER_USE_ESCAPE_HATCH_MP: TableReadyValue = {
   value: 'Use escape hatch',
   description:
     'Users are able to trustlessly exit by submitting a Merkle proof of funds.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const PROPOSER_USE_ESCAPE_HATCH_MP_NFT: ScalingProjectRiskViewEntry = {
+export const PROPOSER_USE_ESCAPE_HATCH_MP_NFT: TableReadyValue = {
   ...PROPOSER_USE_ESCAPE_HATCH_MP,
   description:
     PROPOSER_USE_ESCAPE_HATCH_MP.description +
     ' NFTs will be minted on L1 to exit.',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const PROPOSER_USE_ESCAPE_HATCH_MP_AVGPRICE: ScalingProjectRiskViewEntry =
-  {
-    ...PROPOSER_USE_ESCAPE_HATCH_MP,
-    description:
-      PROPOSER_USE_ESCAPE_HATCH_MP.description +
-      ' Positions will be closed using the average price from the last batch state update.',
-    definingMetric: Infinity,
-  }
+export const PROPOSER_USE_ESCAPE_HATCH_MP_AVGPRICE: TableReadyValue = {
+  ...PROPOSER_USE_ESCAPE_HATCH_MP,
+  description:
+    PROPOSER_USE_ESCAPE_HATCH_MP.description +
+    ' Positions will be closed using the average price from the last batch state update.',
+  orderHint: Number.POSITIVE_INFINITY,
+}
 
 export function PROPOSER_SELF_PROPOSE_WHITELIST_DROPPED(
   delay: number,
-): ScalingProjectRiskViewEntry {
+): TableReadyValue {
   const delayString = formatSeconds(delay)
   return {
     value: 'Self propose',
     description: `Anyone can become a Proposer after ${delayString} of inactivity from the currently whitelisted Proposers.`,
     sentiment: 'good',
-    definingMetric: delay,
+    orderHint: delay,
   }
 }
 
-export const PROPOSER_SELF_PROPOSE_ZK: ScalingProjectRiskViewEntry = {
+export function PROPOSER_SELF_PROPOSE_WHITELIST_DROPPED_ZK(
+  delay: number,
+): TableReadyValue {
+  const delayString = formatSeconds(delay)
+  return {
+    value: 'Self propose',
+    description: `The primary whitelisted proposer has an optimistic advantage, letting them win by default if no conflicting proposals are made. This privilege is dropped after ${delayString} of inactivity, and anyone can leverage the source available zk prover to prove a fault or a conflicting valid proposal to win against the privileged proposer and/or supply a bond and make a counter proposal at any time.`,
+    sentiment: 'good',
+    orderHint: delay,
+  }
+}
+
+export function PROPOSER_SELF_PROPOSE_WHITELIST_MAX_DELAY(
+  delay: number,
+): TableReadyValue {
+  const delayString = formatSeconds(delay)
+  return {
+    value: 'Self propose',
+    description: `Anyone can propose blocks if accompanied by a validity proof. Only the whitelisted proposers can propose state roots for recent blocks optimistically. Anyone can propose optimistically for L2 blocks that are older than ${delayString}.`,
+    sentiment: 'good',
+    orderHint: delay,
+  }
+}
+
+export const PROPOSER_SELF_PROPOSE_ZK: TableReadyValue = {
   value: 'Self propose',
   description:
     'If the Proposer fails, users can leverage the source available prover to submit proofs to the L1 bridge.',
   sentiment: 'good',
 }
 
-export const PROPOSER_SELF_PROPOSE_ROOTS: ScalingProjectRiskViewEntry = {
+export const PROPOSER_SELF_PROPOSE_ROOTS: TableReadyValue = {
   value: 'Self propose',
   description:
     'Anyone can be a Proposer and propose new roots to the L1 bridge.',
   sentiment: 'good',
+  orderHint: 0,
+}
+
+function PROPOSER_POS(
+  stakedValidatorSetSize: number,
+  validatorSetSizeCap: number,
+): TableReadyValue {
+  return {
+    value: 'Cannot withdraw',
+    description: `The PoS network is composed of ${stakedValidatorSetSize} validators. Blocks are included in the chain only if signed by 2/3+1 of the network stake. It's currently not possible to join the set if the validator cap is reached. The current validator cap is set to ${validatorSetSizeCap}. In the event of a failure in reaching consensus, withdrawals are frozen.`,
+    sentiment: 'warning',
+  }
 }
 
 export function EXIT_WINDOW(
   upgradeDelay: number,
   exitDelay: number,
-  upgradeDelay2?: number,
-  existsBlocklist: boolean = false,
-): ScalingProjectRiskViewEntry {
+  options: {
+    upgradeDelay2?: number
+    existsBlocklist?: boolean
+  } = {},
+): TableReadyValue & { seconds?: number } {
   let window: number = upgradeDelay - exitDelay
   const windowText = window <= 0 ? 'None' : formatSeconds(window)
-  if (upgradeDelay2 !== undefined) {
-    const window2: number = upgradeDelay2 - exitDelay
+  if (options.upgradeDelay2 !== undefined) {
+    const window2: number = options.upgradeDelay2 - exitDelay
     const windowString2 = window2 <= 0 ? 'None' : formatSeconds(window2)
     if (windowText !== windowString2) {
       window = Math.min(window, window2)
@@ -485,13 +677,13 @@ export function EXIT_WINDOW(
     upgradeDelay === 0 ? ' since contracts are instantly upgradable' : ''
   const description =
     (windowText === 'None'
-      ? `There is no window for users to exit in case of an unwanted regular upgrade${instantlyUpgradable}.`
-      : `Users have ${windowText} to exit funds in case of an unwanted regular upgrade. There is a ${formatSeconds(
+      ? `There is no window for users to exit in case of an unwanted upgrade${instantlyUpgradable}.`
+      : `Users have ${windowText} to exit funds in case of an unwanted upgrade. There is a ${formatSeconds(
           upgradeDelay,
-        )} delay before a regular upgrade is applied${instantlyUpgradable}, and withdrawals can take up to ${formatSeconds(
+        )} delay before a upgrade is applied${instantlyUpgradable}, and withdrawals can take up to ${formatSeconds(
           exitDelay,
         )} to be processed.`) +
-    (existsBlocklist
+    (options.existsBlocklist
       ? ' Users can be explicitly censored from withdrawing (Blocklist on L1).'
       : '')
 
@@ -499,7 +691,30 @@ export function EXIT_WINDOW(
     value: windowText,
     description: description,
     sentiment,
-    definingMetric: window,
+    orderHint: window,
+  }
+}
+
+export function EXIT_WINDOW_ZKSTACK(upgradeDelay: number): ExitWindowRisk {
+  if (upgradeDelay > 0) {
+    const regularValue = formatSeconds(upgradeDelay)
+    return {
+      ...EXIT_WINDOW(0, 0),
+      regular: {
+        value: regularValue,
+        sentiment: 'warning',
+        description: `Non-emergency upgrades go through a ${regularValue} delay, but the central operator can still censor withdrawal transactions by implementing a TransactionFilterer with no delay.`,
+      },
+    }
+  }
+
+  return {
+    ...EXIT_WINDOW(0, 0),
+    warning: {
+      value:
+        'The central operator can censor withdrawal transactions by implementing a TransactionFilterer with no delay.',
+      sentiment: 'warning',
+    },
   }
 }
 
@@ -509,67 +724,123 @@ export function EXIT_WINDOW_NITRO(
   challengeWindowSeconds: number,
   validatorAfkTime: number,
   l1TimelockDelay: number,
-): ScalingProjectRiskViewEntry {
+  isPostBoLD: boolean,
+): ExitWindowRisk {
+  const emergency = EXIT_WINDOW(0, selfSequencingDelay)
+  const regular = EXIT_WINDOW(l2TimelockDelay, selfSequencingDelay)
+  const regularExitWindow = formatExitWindowForDescription(
+    l2TimelockDelay,
+    selfSequencingDelay,
+  )
   const description = `Non-emergency upgrades are initiated on L2 and go through a ${formatSeconds(
     l2TimelockDelay,
   )} delay. Since there is a ${formatSeconds(
     selfSequencingDelay,
-  )} delay to force a tx (forcing the inclusion in the following state update), users have only ${formatSeconds(
-    l2TimelockDelay - selfSequencingDelay,
-  )} to exit. 
-    
+  )} delay to force a tx (forcing the inclusion in the following state update), users have only ${regularExitWindow} to exit.
+
   If users post a tx after that time, they would only be able to self propose a state root ${formatSeconds(
-    challengeWindowSeconds + validatorAfkTime, // see `_validatorIsAfk()` https://etherscan.io/address/0xA0Ed0562629D45B88A34a342f20dEb58c46C15ff#code#F1#L43
+    isPostBoLD ? validatorAfkTime : challengeWindowSeconds + validatorAfkTime, // see `_validatorIsAfk()` https://etherscan.io/address/0xA0Ed0562629D45B88A34a342f20dEb58c46C15ff#code#F1#L43
   )} after the last state root was proposed and then wait for the ${formatSeconds(
     challengeWindowSeconds,
   )} challenge window, while the upgrade would be confirmed just after the ${formatSeconds(
     challengeWindowSeconds,
   )} challenge window and the ${formatSeconds(l1TimelockDelay)} L1 timelock.`
-  const warning: WarningValueWithSentiment = {
-    value: 'The Security Council can upgrade with no delay.',
-    sentiment: 'bad',
-  }
   return {
-    ...EXIT_WINDOW(l2TimelockDelay, selfSequencingDelay),
-    description: description,
-    warning: warning,
+    ...withRegularExitWindow(emergency, regular, description),
   }
 }
 
-export const EXIT_WINDOW_NON_UPGRADABLE: ScalingProjectRiskViewEntry = {
+export function EXIT_WINDOW_PERMISSIONLESS_BOLD(
+  l2TimelockDelay: number,
+  selfSequencingDelay: number,
+  l1TimelockDelay: number,
+): ExitWindowRisk {
+  const emergency = EXIT_WINDOW(0, selfSequencingDelay)
+  const regular = EXIT_WINDOW(
+    l2TimelockDelay + l1TimelockDelay,
+    selfSequencingDelay,
+  )
+  const regularExitWindow = formatExitWindowForDescription(
+    l2TimelockDelay + l1TimelockDelay,
+    selfSequencingDelay,
+  )
+  const description = `Non-emergency upgrades are initiated on L2 and go through a ${formatSeconds(l2TimelockDelay)} delay on L2 and a ${formatSeconds(l1TimelockDelay)} delay on L1. Since there is a ${formatSeconds(selfSequencingDelay)} delay to force a tx (forcing the inclusion in the following state update), users have ${regularExitWindow} to exit.`
+  return {
+    ...withRegularExitWindow(emergency, regular, description),
+  }
+}
+
+export const EXIT_WINDOW_NON_UPGRADABLE: TableReadyValue = {
   value: '∞',
   description:
     'Users can exit funds at any time because contracts are not upgradeable.',
   sentiment: 'good',
-  definingMetric: Infinity,
+  orderHint: Number.POSITIVE_INFINITY,
 }
 
-export const EXIT_WINDOW_UNKNOWN: ScalingProjectRiskViewEntry = {
+export const EXIT_WINDOW_UNKNOWN: TableReadyValue = {
   value: 'Unknown',
   description:
     'Some contracts are not verified, so there is no way to assess the exit window.',
   sentiment: 'bad',
-  definingMetric: -Infinity,
+  orderHint: Number.NEGATIVE_INFINITY,
 }
 
-export const UPGRADABLE_YES: ScalingProjectRiskViewEntry = {
-  value: 'Yes',
-  description:
-    'The code that secures the system can be changed arbitrarily and without notice.',
-  sentiment: 'bad',
-  definingMetric: -Infinity,
+export function EXIT_WINDOW_STARKNET(upgradeDelay: number): ExitWindowRisk {
+  const scReactionTime = 60 * 60 * 24 * 1 // time needed for the sc minority to be alerted and prove/propose a new state root
+  const emergency = EXIT_WINDOW(0, scReactionTime)
+  const regular = EXIT_WINDOW(upgradeDelay, scReactionTime)
+  const regularExitWindow = formatExitWindowForDescription(
+    upgradeDelay,
+    scReactionTime,
+  )
+  const description = `Non-emergency upgrades are initiated on L1 and go through a ${formatSeconds(upgradeDelay)} delay. In case users are censored, the Security Council minority can be alerted to enforce censorship resistance by submitting a new state root. This process is assumed to take ${formatSeconds(scReactionTime)}, leaving users ${regularExitWindow} to exit.`
+  return {
+    ...withRegularExitWindow(emergency, regular, description),
+  }
+}
+
+function withRegularExitWindow(
+  emergency: TableReadyValue,
+  regular: TableReadyValue,
+  regularDescription: string,
+): ExitWindowRisk {
+  return {
+    ...emergency,
+    regular: {
+      value: regular.value,
+      sentiment: regular.sentiment,
+      description: regularDescription,
+    },
+  }
+}
+
+function formatExitWindowForDescription(
+  upgradeDelay: number,
+  exitDelay: number,
+): string {
+  const window = upgradeDelay - exitDelay
+  return window <= 0 ? 'no time' : formatSeconds(window)
 }
 
 export const RISK_VIEW = {
+  // stateValidation
   STATE_NONE,
   STATE_FP,
   STATE_FP_1R,
   STATE_FP_INT,
   STATE_FP_INT_ZK,
+  STATE_FP_1R_ZK,
+  STATE_FP_HYBRID_ZK,
   STATE_ZKP_SN,
+  STATE_ZKP_OPTIMISTIC,
   STATE_ZKP_ST,
+  STATE_ZKP_ST_SN_WRAP,
+  STATE_ZKP_L3,
   STATE_EXITS_ONLY,
-  STATE_ARBITRUM_FRAUD_PROOFS,
+  STATE_ARBITRUM_PERMISSIONED_FRAUD_PROOFS,
+
+  // dataAvailability
   DATA_ON_CHAIN,
   DATA_ON_CHAIN_STATE_DIFFS,
   DATA_ON_CHAIN_L3,
@@ -577,82 +848,122 @@ export const RISK_VIEW = {
   DATA_EXTERNAL_DAC,
   DATA_EXTERNAL_MEMO,
   DATA_EXTERNAL,
+  DATA_EXTERNAL_L3,
+  DATA_EXTERNAL_CHALLENGES,
   DATA_CELESTIA,
-  UPGRADABLE_YES,
+  DATA_AVAIL,
+  DATA_EIGENDA,
+  DATA_POS,
+  DATA_POS_NOBRIDGE,
+  DATA_ESPRESSO,
+
+  // validatedBy
   VALIDATED_BY_ETHEREUM,
   VALIDATED_BY_L2,
+
+  // destinationToken
   NATIVE_AND_CANONICAL,
   CANONICAL,
   CANONICAL_USDC,
+
+  // sequencerFailure
   SEQUENCER_SELF_SEQUENCE,
   SEQUENCER_SELF_SEQUENCE_ZK,
+  SEQUENCER_SELF_SEQUENCE_NO_SEQUENCER,
   SEQUENCER_FORCE_VIA_L1,
   SEQUENCER_FORCE_VIA_L1_STARKEX_PERPETUAL,
   SEQUENCER_FORCE_VIA_L1_LOOPRING,
   SEQUENCER_ENQUEUE_VIA,
+  SEQUENCER_CAN_SKIP,
   SEQUENCER_NO_MECHANISM,
+
+  // proposerFailure
   PROPOSER_CANNOT_WITHDRAW,
+  PROPOSER_WHITELIST_GOVERNANCE,
+  PROPOSER_WHITELIST_SECURITY_COUNCIL,
   PROPOSER_USE_ESCAPE_HATCH_ZK,
   PROPOSER_USE_ESCAPE_HATCH_MP,
   PROPOSER_USE_ESCAPE_HATCH_MP_NFT,
   PROPOSER_USE_ESCAPE_HATCH_MP_AVGPRICE,
   PROPOSER_SELF_PROPOSE_WHITELIST_DROPPED,
+  PROPOSER_SELF_PROPOSE_WHITELIST_DROPPED_ZK,
+  PROPOSER_SELF_PROPOSE_WHITELIST_MAX_DELAY,
   PROPOSER_SELF_PROPOSE_ZK,
   PROPOSER_SELF_PROPOSE_ROOTS,
-  UNDER_REVIEW_RISK,
+  PROPOSER_POS,
+
+  // exitWindow
   EXIT_WINDOW,
   EXIT_WINDOW_NITRO,
+  EXIT_WINDOW_PERMISSIONLESS_BOLD,
+  EXIT_WINDOW_ZKSTACK,
   EXIT_WINDOW_NON_UPGRADABLE,
   EXIT_WINDOW_UNKNOWN,
+  EXIT_WINDOW_STARKNET,
+
+  UNDER_REVIEW_RISK,
 }
 
-export function pickWorseRisk(
-  a: ScalingProjectRiskViewEntry,
-  b: ScalingProjectRiskViewEntry,
-): ScalingProjectRiskViewEntry {
-  if (a.sentiment === 'UnderReview' || b.sentiment === 'UnderReview') {
-    return a.sentiment === 'UnderReview' ? a : b
-  }
+const SENTIMENT_VALUE: Record<Sentiment, number> = {
+  good: 0,
+  neutral: 1,
+  warning: 2,
+  bad: 3,
+  UnderReview: 4,
+}
 
-  const sentimentValue: Record<Sentiment, number> = {
-    good: 0,
-    neutral: 1,
-    warning: 2,
-    bad: 3,
-    UnderReview: 4,
-  }
+// This is a comparison function to be used in "sort"
+// -1 means `a` is *more* risky
+// 1 means `b` is *more* risky`
+export function compareRisk(a: TableReadyValue, b: TableReadyValue): -1 | 1 {
+  const aVal = SENTIMENT_VALUE[a.sentiment ?? 'neutral']
+  const bVal = SENTIMENT_VALUE[b.sentiment ?? 'neutral']
+  const RESULT_A = -1
+  const RESULT_B = 1
 
-  const aVal = sentimentValue[a.sentiment]
-  const bVal = sentimentValue[b.sentiment]
   if (aVal === bVal) {
     assert(
-      a.definingMetric !== undefined && b.definingMetric !== undefined,
+      a.orderHint !== undefined && b.orderHint !== undefined,
       'Unable to pick worse risk without a defining metric',
     )
-    return a.definingMetric < b.definingMetric ? a : b
+    return a.orderHint < b.orderHint ? RESULT_A : RESULT_B
   }
-  if (aVal > bVal) {
-    return a
-  }
+  return aVal > bVal ? RESULT_A : RESULT_B
+}
 
-  return b
+export const pickWorseRisk = (a: TableReadyValue, b: TableReadyValue) =>
+  compareRisk(a, b) === -1 ? a : b
+
+export function stackExitWindowRisk(
+  common: ExitWindowRisk,
+  baseChain: ExitWindowRisk,
+): ExitWindowRisk {
+  const worse = pickWorseRisk(common, baseChain) as ExitWindowRisk
+  // The stacked regular exit window only exists if BOTH layers have one.
+  // If either layer can be upgraded instantly on its regular path, the
+  // stacked regular path collapses to no exit window.
+  if (common.regular && baseChain.regular) {
+    return worse
+  }
+  const { regular: _regular, ...rest } = worse
+  return rest
 }
 
 export function sumRisk(
-  a: ScalingProjectRiskViewEntry,
-  b: ScalingProjectRiskViewEntry,
-  formattingFunction: (delay: number) => ScalingProjectRiskViewEntry,
-): ScalingProjectRiskViewEntry {
+  a: TableReadyValue,
+  b: TableReadyValue,
+  formattingFunction: (delay: number) => TableReadyValue,
+): TableReadyValue {
   if (
     a.sentiment !== 'bad' &&
     b.sentiment !== 'bad' &&
     a.sentiment === b.sentiment
   ) {
     assert(
-      a.definingMetric !== undefined && b.definingMetric !== undefined,
+      a.orderHint !== undefined && b.orderHint !== undefined,
       'Cannot sum good risks without delaySeconds',
     )
-    return formattingFunction(a.definingMetric + b.definingMetric)
+    return formattingFunction(a.orderHint + b.orderHint)
   }
 
   return pickWorseRisk(a, b)

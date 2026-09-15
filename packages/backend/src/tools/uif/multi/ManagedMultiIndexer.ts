@@ -1,33 +1,47 @@
-import { assert } from '@l2beat/backend-tools'
-import { ChildIndexer, Indexer } from '@l2beat/uif'
+import type { Logger } from '@l2beat/backend-tools'
+import { assert } from '@l2beat/shared-pure'
+import { ChildIndexer } from '@l2beat/uif'
 import { assertUniqueConfigId, assertUniqueIndexerId } from '../ids'
-import { ConfigurationsDiff, mergeConfigurations } from './mergeConfigurations'
-import { toRanges } from './toRanges'
+import { createIndexerId } from '../indexerIdentity'
 import {
+  type ConfigurationsDiff,
+  mergeConfigurations,
+} from './mergeConfigurations'
+import { toRanges } from './toRanges'
+import type {
   Configuration,
   ConfigurationRange,
   ManagedMultiIndexerOptions,
-  RemovalConfiguration,
+  TrimRemovalConfiguration,
+  WipeRemovalConfiguration,
 } from './types'
 
 export abstract class ManagedMultiIndexer<T> extends ChildIndexer {
   private ranges: ConfigurationRange<T>[] = []
   private readonly indexerId: string
+  private serializeConfiguration: (value: T) => string
 
-  constructor(readonly options: ManagedMultiIndexerOptions<T>) {
-    const logger = options.logger.tag(options.tag)
-    super(logger, options.parents, options)
+  constructor(
+    readonly options: ManagedMultiIndexerOptions<T>,
+    logger: Logger,
+  ) {
+    const taggedLogger = logger.tag(options.tags ?? {})
+    super(taggedLogger, options.parents, options)
 
     assert(
       options.configurations.length > 0,
-      `Configurations should not be empty ${options.tag}`,
+      `Configurations should not be empty ${options.tags?.tag}`,
     )
 
-    this.indexerId = Indexer.createId(options.name, options.tag)
+    this.indexerId = createIndexerId(options.name, options.tags?.tag)
     assertUniqueIndexerId(this.indexerId)
     for (const configuration of options.configurations) {
-      assertUniqueConfigId(configuration.id)
+      assertUniqueConfigId(configuration.id, this.indexerId)
     }
+
+    this.serializeConfiguration = this.options.serializeConfiguration
+      ? this.options.serializeConfiguration
+      : (value) => JSON.stringify(value)
   }
 
   // #region initialize
@@ -39,60 +53,63 @@ export abstract class ManagedMultiIndexer<T> extends ChildIndexer {
     const state = mergeConfigurations(
       saved,
       this.options.configurations,
-      this.options.serializeConfiguration,
+      this.serializeConfiguration,
+      !this.isTrimDataImplemented(),
     )
     await this.updateSavedConfigurations(state.diff)
     this.ranges = toRanges(state.configurations)
     return { safeHeight: state.safeHeight }
   }
 
+  private isTrimDataImplemented(): boolean {
+    return this.trimData !== ManagedMultiIndexer.prototype.trimData
+  }
+
   async updateSavedConfigurations(diff: ConfigurationsDiff<T>) {
     if (
       diff.toAdd.length === 0 &&
       diff.toUpdate.length === 0 &&
-      diff.toDelete.length === 0 &&
-      diff.toRemoveData.length === 0
+      diff.toDelete.length === 0
     ) {
       return
     }
 
-    return await this.options.db.transaction(async () => {
-      if (diff.toAdd.length > 0) {
-        await this.options.indexerService.insertConfigurations(
-          this.indexerId,
-          diff.toAdd,
-          this.options.serializeConfiguration,
-        )
-        this.logger.info('Inserted configurations', {
-          configurations: diff.toAdd.length,
-        })
-      }
+    return await this.options.db
+      .transaction(async () => {
+        if (diff.toAdd.length > 0) {
+          await this.options.indexerService.insertConfigurations(
+            this.indexerId,
+            diff.toAdd,
+            this.serializeConfiguration,
+          )
+        }
 
-      if (diff.toUpdate.length > 0) {
-        await this.options.indexerService.upsertConfigurations(
-          this.indexerId,
-          diff.toUpdate,
-          this.options.serializeConfiguration,
-        )
-        this.logger.info('Updated configurations', {
-          configurations: diff.toUpdate.length,
-        })
-      }
+        if (diff.toUpdate.length > 0) {
+          await this.options.indexerService.upsertConfigurations(
+            this.indexerId,
+            diff.toUpdate,
+            this.serializeConfiguration,
+          )
+        }
 
-      if (diff.toDelete.length > 0) {
-        await this.options.indexerService.deleteConfigurations(
-          this.indexerId,
-          diff.toDelete,
-        )
-        this.logger.info('Deleted configurations', {
-          configurations: diff.toDelete.length,
-        })
-      }
+        if (diff.toTrimData.length > 0) {
+          await this.trimData(diff.toTrimData)
+        }
 
-      if (diff.toRemoveData.length > 0) {
-        await this.removeData(diff.toRemoveData)
-      }
-    })
+        if (diff.toDelete.length > 0) {
+          await this.options.indexerService.deleteConfigurations(
+            this.indexerId,
+            diff.toDelete,
+          )
+        }
+
+        if (diff.toWipeData.length > 0) {
+          await this.wipeData(diff.toWipeData)
+        }
+      })
+      .then(() => {
+        this.logConfigurationsChanges(diff)
+      })
   }
 
   // #endregion
@@ -119,7 +136,11 @@ export abstract class ManagedMultiIndexer<T> extends ChildIndexer {
       configurations: configurations.length,
     })
 
+    const start = Date.now()
     const saveData = await this.multiUpdate(from, adjustedTo, configurations)
+    this.logger.info('Update duration', {
+      duration: Math.round((Date.now() - start) / 1000),
+    })
 
     return await this.options.db.transaction(async () => {
       const safeHeight = await saveData()
@@ -193,7 +214,40 @@ export abstract class ManagedMultiIndexer<T> extends ChildIndexer {
     configurations: Configuration<T>[],
   ): Promise<() => Promise<number>>
 
-  abstract removeData(configurations: RemovalConfiguration[]): Promise<void>
+  abstract wipeData(configurations: WipeRemovalConfiguration[]): Promise<void>
+
+  trimData(_: TrimRemovalConfiguration[]): Promise<void> {
+    throw new Error(`trimData not implemented for ${this.indexerId}`)
+  }
 
   // #endregion
+
+  private logConfigurationsChanges(diff: ConfigurationsDiff<T>) {
+    if (diff.toAdd.length > 0) {
+      this.logger.info('Inserted configurations', {
+        configurations: diff.toAdd.length,
+      })
+    }
+    if (diff.toUpdate.length > 0) {
+      this.logger.info('Updated configurations', {
+        configurations: diff.toUpdate.length,
+      })
+    }
+    if (diff.toTrimData.length > 0) {
+      this.logger.info('Trimmed data after update', {
+        configurations: diff.toTrimData.length,
+      })
+    }
+
+    if (diff.toDelete.length > 0) {
+      this.logger.info('Deleted configurations', {
+        configurations: diff.toDelete.length,
+      })
+    }
+    if (diff.toWipeData.length > 0) {
+      this.logger.info('Wiped data after delete', {
+        configurations: diff.toWipeData.length,
+      })
+    }
+  }
 }

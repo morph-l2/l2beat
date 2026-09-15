@@ -1,0 +1,156 @@
+/* Wormhole Relayer is auxiliary contract for apps using WormholeCore not wanting to have their own relayer.
+
+On SRC it emits SendEvent with useless info - hence it's ignored and Wormhole Core LogMessagePublished is used instead.
+On DST it emits Delivery event which is used to match with LogMessagePublished on SRC.
+
+*/
+
+import { ChainSpecificAddress } from '@l2beat/shared-pure'
+import type { InteropConfigStore } from '../engine/config/InteropConfigStore'
+import {
+  createEventParser,
+  createInteropEventType,
+  type DataRequest,
+  type InteropEvent,
+  type InteropEventDb,
+  type InteropPluginResyncable,
+  type LogToCapture,
+  type MatchResult,
+  Result,
+} from './types'
+import { findWormholeChain, WormholeConfig } from './wormhole/wormhole.config'
+import { LogMessagePublished } from './wormhole/wormhole.plugin'
+
+const deliveryLog =
+  'event Delivery(address indexed recipientContract, uint16 indexed sourceChain, uint64 indexed sequence, bytes32 deliveryVaaHash,uint8 status,uint256 gasUsed,uint8 refundStatus,bytes additionalStatusInfo,bytes overridesInfo)'
+
+const parseDelivery = createEventParser(deliveryLog)
+
+/*
+const parseSendEvent = createEventParser(
+  'event SendEvent(uint64 indexed sequence, uint256 deliveryQuote, uint256 paymentForExtraReceiverValue)',
+)
+*/
+
+export const Delivery = createInteropEventType<{
+  recipientContract: string
+  sourceChain: number
+  sequence: bigint
+  deliveryVaaHash: `0x${string}`
+  $srcChain: string
+  status: number // 0: SUCCESS, 1: RECEIVER_FAILURE
+}>('wormhole-relayer.Delivery')
+
+/*
+export const SendEvent = createInteropEventType<{
+  sequence: string
+  $dstChain: string
+}>('wormhole-relayer.SendEvent')
+*/
+
+export class WormholeRelayerPlugin implements InteropPluginResyncable {
+  readonly name = 'wormhole-relayer'
+
+  constructor(private configs: InteropConfigStore) {}
+
+  getDataRequests(): DataRequest[] {
+    const networks = this.configs.get(WormholeConfig) ?? []
+    const relayerAddresses: ChainSpecificAddress[] = []
+    for (const network of networks) {
+      if (!network.relayer) continue
+      try {
+        relayerAddresses.push(
+          ChainSpecificAddress.fromLong(network.chain, network.relayer),
+        )
+      } catch {
+        // Chain not supported by ChainSpecificAddress, skip
+      }
+    }
+
+    return [
+      {
+        type: 'event',
+        signature: deliveryLog,
+        addresses: relayerAddresses,
+      },
+    ]
+  }
+
+  capture(input: LogToCapture) {
+    const wormholeNetworks = this.configs.get(WormholeConfig)
+    if (!wormholeNetworks) return
+
+    const parsed = parseDelivery(input.log, null)
+    if (parsed) {
+      // status 1 = RECEIVER_FAILURE — the relay failed on the destination chain.
+      // Return [] to claim the log (prevent other plugins from capturing it) but produce no events.
+      if (parsed.status === 1) return []
+
+      return [
+        Delivery.create(input, {
+          recipientContract: parsed.recipientContract,
+          sourceChain: parsed.sourceChain,
+          deliveryVaaHash: parsed.deliveryVaaHash,
+          $srcChain: findWormholeChain(
+            wormholeNetworks,
+            Number(parsed.sourceChain),
+          ),
+          sequence: parsed.sequence,
+          status: parsed.status,
+        }),
+      ]
+    }
+    /*
+        const send = parseSendEvent(input.log, null)
+        if (send) {
+          return SendEvent.create(input, {
+            sequence: send.sequence.toString(),
+            $dstChain: 'unknown yet',
+          })
+        }
+    */
+  }
+
+  matchTypes = [Delivery]
+
+  /* We match by sender (relayer address) in addition to sequence + chain.
+   * From Wormhole Relayer contract:
+   *
+   *   // Revert if the emitter of the VAA is not a Wormhole Relayer contract
+   *   bytes32 registeredWormholeRelayer = getRegisteredWormholeRelayerContract(vm.emitterChainId);
+   *   if (vm.emitterAddress != registeredWormholeRelayer) {
+   *     revert InvalidEmitter(vm.emitterAddress, registeredWormholeRelayer, vm.emitterChainId);
+   *   }
+   *
+   * Otherwise we risk matching with improper sender with same chain+sequence.
+   */
+  match(delivery: InteropEvent, db: InteropEventDb): MatchResult | undefined {
+    if (Delivery.checkType(delivery)) {
+      const wormholeNetworks = this.configs.get(WormholeConfig)
+      if (!wormholeNetworks) return
+
+      // Find the relayer address for the source chain
+      const srcNetwork = wormholeNetworks.find(
+        (n) => n.wormholeChainId === delivery.args.sourceChain,
+      )
+      if (!srcNetwork?.relayer) return
+
+      const logMessagePublished = db.find(LogMessagePublished, {
+        sequence: delivery.args.sequence,
+        wormholeChainId: delivery.args.sourceChain,
+        sender: srcNetwork.relayer,
+      })
+      if (!logMessagePublished) {
+        return
+      }
+
+      return [
+        Result.Message('wormhole.Message', {
+          app: 'unknown',
+          srcEvent: logMessagePublished,
+          dstEvent: delivery,
+        }),
+      ]
+    }
+  }
+}

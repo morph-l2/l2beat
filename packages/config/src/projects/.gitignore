@@ -1,0 +1,8 @@
+.code
+.code@*
+.flat
+.flat@*
+
+# Clingo debug files
+**/clingo.input.lp
+**/clingo.output.lp

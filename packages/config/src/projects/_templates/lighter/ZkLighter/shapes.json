@@ -1,0 +1,26 @@
+{
+  "ZkLighter.sol": {
+    "hash": "0xbc3fdc97ff2f20f18352edb74866fb76608890bd2ecef365bb8b69841e222670",
+    "address": [
+      "eth:0x1D2624A65F8aaD1c4Bc406b4D2418ba577D218cb",
+      "eth:0x4194D3847a0239d59a87bC82C1870CBE1FA99db1"
+    ],
+    "blockNumber": 23495073
+  },
+  "Proxy.sol": {
+    "hash": "0xa45ae1365246a57060210993b541d2400d291f86c826216931a68409412452ae",
+    "address": [
+      "eth:0x4FF23C6cA650166A95D854935a8b012B53ac59Bc",
+      "eth:0xf255FC8738a5c6Ee6E869A5b182a9Cd4F99a2ED6"
+    ],
+    "blockNumber": 23670579
+  },
+  "Proxy2.sol": {
+    "hash": "0xd11c146b7fd0203ac3339ac819b5e4dc7d8cbe81c6b29fea091b620f0bdbbd54",
+    "address": [
+      "eth:0x59e71dc90E662F17c4eB156A8cA1BCCD106aCfA0",
+      "eth:0xf255FC8738a5c6Ee6E869A5b182a9Cd4F99a2ED6"
+    ],
+    "blockNumber": 23720658
+  }
+}

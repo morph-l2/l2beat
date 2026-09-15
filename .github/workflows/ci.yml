@@ -1,10 +1,12 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
     branches:
-      - master
       - main
   merge_group:
 
@@ -12,93 +14,221 @@ jobs:
   build-backend:
     name: Build backend container image
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
+      - name: Set up Docker.io mirror
+        uses: docker/setup-buildx-action@v4
+        with:
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
       - name: Build container
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           push: false
-          file: Dockerfile.backend
+          file: packages/backend/Dockerfile
+          build-args: |
+            TURBO_TEAM=${{ vars.TURBO_TEAM }}
+          secrets: |
+            TURBO_TOKEN=${{ secrets.TURBO_TOKEN }}
+            TURBO_API=${{ secrets.TURBO_API_RO }}
 
   build-frontend:
     name: Build frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_API: ${{ secrets.TURBO_API_RO }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v3
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
         with:
-          node-version: 18.x
-          cache: 'yarn'
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: yarn --frozen-lockfile
+        run: pnpm install
 
-      - name: Build frontend
-        run: yarn build:frontend
+      - name: Build mocked frontend
+        run: pnpm build:frontend-ci
+        env:
+          MOCK: true
+
+      # We can get rid of it later, now it's used
+      # so we can more easily inspect occasional
+      # longer frontend build times
+      - name: Preserve frontend build summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-build-summary
+          path: .turbo/runs
 
   build-protocolbeat:
     name: Build protocolbeat
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_API: ${{ secrets.TURBO_API_RO }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v3
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
         with:
-          node-version: 18.x
-          cache: 'yarn'
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: yarn --frozen-lockfile
+        run: pnpm install
 
       - name: Build protocolbeat
-        run: yarn build:protocolbeat
+        run: pnpm build:protocolbeat
+
+  build-tools:
+    name: Build tools
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_API: ${{ secrets.TURBO_API_RO }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+        
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build tools
+        run: pnpm build:tools
+
+  build-uops-dashboard:
+    name: Build uops-dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_API: ${{ secrets.TURBO_API_RO }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+        
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build tx-decoder
+        run: pnpm build:uops-dashboard
+
+  build-token-backend:
+    name: Build token-backend container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+      - name: Set up Docker.io mirror
+        uses: docker/setup-buildx-action@v4
+        with:
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+      - name: Build container
+        uses: docker/build-push-action@v7
+        with:
+          push: false
+          file: packages/token-backend/Dockerfile
+          build-args: |
+            TURBO_TEAM=${{ vars.TURBO_TEAM }}
+          secrets: |
+            TURBO_TOKEN=${{ secrets.TURBO_TOKEN }}
+            TURBO_API=${{ secrets.TURBO_API_RO }}
 
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_API: ${{ secrets.TURBO_API_RO }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v3
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
         with:
-          node-version: 18.x
-          cache: 'yarn'
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: yarn --frozen-lockfile
+        run: pnpm install
 
       - name: Typecheck
-        run: yarn typecheck
+        run: pnpm typecheck
 
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_API: ${{ secrets.TURBO_API_RO }}
       COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
       TEST_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
       CONFIG_ALCHEMY_API_KEY: ${{ secrets.CONFIG_ALCHEMY_API_KEY }}
     services:
       postgres:
-        image: postgres:14
+        image: mirror.gcr.io/postgres:17
         env:
           POSTGRES_PASSWORD: postgres
         options: >-
@@ -110,29 +240,111 @@ jobs:
           - 5432:5432
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v3
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
         with:
-          node-version: 18.x
-          cache: 'yarn'
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: yarn --frozen-lockfile
+        run: pnpm install
 
       - name: Test
-        run: yarn test --reporter min
+        run: pnpm run test --reporter min
+
+  test-e2e:
+    name: E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_API: ${{ secrets.TURBO_API_RO }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        run: |
+          cd packages/frontend
+          sudo apt update
+          sudo apt install -y libnss3 libatk-bridge2.0-0 libdrm2 libxcomposite1 libxdamage1 libxrandr2 libgbm1
+          pnpm exec playwright install chromium
+
+      - name: Build dependencies
+        run: pnpm build:dependencies:frontend
+
+      - name: Run e2e tests
+        run: |
+          cd packages/frontend
+          pnpm test:e2e
 
   biome:
     name: Lint & Format
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Setup Biome CLI
         uses: biomejs/setup-biome@v2
+        with:
+          version: 2.3.8
 
       - name: Run Biome
-        run: ls packages/ | xargs -n 1 -I {} -- sh -c 'biome ci --config-path=packages/{} packages/{}'
+        run: biome ci
+
+  test-gha-timeouts:
+    name: Test if all GH Action jobs have timeout defined
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup yq
+        uses: dcarbone/install-yq-action@v1
+      - name: Test all workflow manifests
+        run: |
+          declare -a failed_files
+
+          echo "Scanning files for timeout definitions"
+          for file in .github/workflows/*.y*ml; do
+            out=$(yq -r '
+              (.jobs // {})
+              | to_entries[]
+              | select(.value | has("uses") | not)
+              | select(.value | has("timeout-minutes") | not)
+              | .key
+            ' "$file")
+            echo "$file: ${out:-"OK"}"
+            if [[ -n "$out" ]]; then
+              failed_files+=($file)
+            fi
+          done
+          if [[ ${#failed_files[@]} -gt 0 ]]; then
+            echo
+            echo "Some workflows are missing timeout definition. Files failing validation:"
+            echo "${failed_files[@]}"
+            exit 1
+          fi

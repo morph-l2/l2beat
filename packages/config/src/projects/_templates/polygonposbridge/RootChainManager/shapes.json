@@ -1,0 +1,12 @@
+{
+  "RootChainManager_polygonpos": {
+    "hash": "0x3d37106f7e57ee32370a64ee6952251c27f805a0ee1522a991b854960896e6f9",
+    "address": "eth:0x639f13D5f30B47c792b6851238c05D0b623C77DE",
+    "blockNumber": 22231805
+  },
+  "RootChainManager_shibarium": {
+    "hash": "0xcd889fd14e5179e2b6d3dabcbe104f028f164f0788a2ba61714fe397ee08c4c3",
+    "address": "eth:0x1b50d902F01ad1e6358FD6116BC115E0a43Fe925",
+    "blockNumber": 22231805
+  }
+}

@@ -1,10 +1,13 @@
-import { VariantProps, cva } from 'class-variance-authority'
-import React, { ReactNode } from 'react'
+import type { VariantProps } from 'class-variance-authority'
+import { cva } from 'class-variance-authority'
+import type { ReactNode } from 'react'
+import { cn } from '~/utils/cn'
 
-const calloutVariants = cva('flex rounded-lg', {
+const calloutVariants = cva('flex items-start rounded-lg', {
   variants: {
     color: {
-      red: 'bg-red-600/20 hover:bg-red-500/20',
+      red: 'bg-negative/20',
+      green: 'bg-positive/20',
       yellow: 'bg-yellow-700/20',
       blue: 'bg-blue-700/20',
       gray: 'bg-gray-500/20',
@@ -19,7 +22,7 @@ const calloutVariants = cva('flex rounded-lg', {
   },
 })
 
-export interface CalloutProps extends VariantProps<typeof calloutVariants> {
+interface CalloutProps extends VariantProps<typeof calloutVariants> {
   icon: ReactNode
   body: ReactNode
   message?: ReactNode
@@ -35,10 +38,10 @@ export function Callout({
   className,
 }: CalloutProps) {
   return (
-    <div className={calloutVariants({ color, small, className })}>
-      <span>{icon}</span>
+    <div className={cn(calloutVariants({ color, small }), className)}>
+      <span className="flex items-center">{icon}</span>
       <div className="flex flex-col gap-2">
-        {message && message}
+        {message}
         <div>{body}</div>
       </div>
     </div>

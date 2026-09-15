@@ -1,0 +1,5 @@
+{
+  "term": "Circuit",
+  "definition": "A program written for the purpose of being proven within a proving system. A circuit is a mathematical representation of the computation to be executed, arithmetic circuits and zkVM execution trace are examples of circuits. Circuits can be written in different languages, ranging from low-level to high-level.",
+  "isSpicy": false
+}

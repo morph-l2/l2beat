@@ -1,0 +1,35 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "snaxchain",
+  "archived": true,
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": ["eth:0x936D881b4760D5e9b6D55b774f65c509236b4743"],
+  "overrides": {
+    "eth:0x8aF5b3ED56D4a822532A07a84C499d600eCD5cf5": {
+      "ignoreDiscovery": true
+    },
+    "eth:0x0fD13C7f11d95070cE5CF31BAf1aCf9355BF4578": {
+      "ignoreInWatchMode": ["permissionedGamesTotal", "gameCount"]
+    },
+    "eth:0x1B780edfb393CB9f07Dcd7C699CBDF0fd663572b": {
+      "fields": {
+        "proposer": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to post new state roots of the current layer to the host chain."
+            }
+          ]
+        },
+        "challenger": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to challenge or delete state roots proposed by a Proposer."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,22 +1,21 @@
-import { ContractValue } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
+import type { ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
 import { utils } from 'ethers'
-import * as z from 'zod'
+import type { ContractValue } from '../../output/types'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
 import { callMethod } from '../utils/callMethod'
 import { getFunctionFragment } from '../utils/getFunctionFragment'
 import { toContractValue } from '../utils/toContractValue'
 import { toEventFragment } from '../utils/toEventFragment'
 
-export type StarkWareGovernanceHandlerDefinition = z.infer<
+export type StarkWareGovernanceHandlerDefinition = v.infer<
   typeof StarkWareGovernanceHandlerDefinition
 >
-export const StarkWareGovernanceHandlerDefinition = z.strictObject({
-  type: z.literal('starkWareGovernance'),
-  filterBy: z.string(),
+export const StarkWareGovernanceHandlerDefinition = v.strictObject({
+  type: v.literal('starkWareGovernance'),
+  filterBy: v.string(),
 })
 
 const EVENT_FRAGMENT = toEventFragment(
@@ -33,7 +32,6 @@ export class StarkWareGovernanceHandler implements Handler {
     readonly field: string,
     readonly definition: StarkWareGovernanceHandlerDefinition,
     abi: string[],
-    readonly logger: DiscoveryLogger,
   ) {
     this.filterBy = getFunctionFragment(
       definition.filterBy,
@@ -49,9 +47,8 @@ export class StarkWareGovernanceHandler implements Handler {
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, ['Querying ', EVENT_FRAGMENT.name])
     const logs = await provider.getLogs(address, [
       [ABI.getEventTopic(EVENT_FRAGMENT)],
     ])

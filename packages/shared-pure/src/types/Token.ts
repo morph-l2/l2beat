@@ -1,10 +1,10 @@
-import { AssetId } from './AssetId'
-import { ChainId } from './ChainId'
-import { CoingeckoId } from './CoingeckoId'
-import { EthereumAddress } from './EthereumAddress'
-import { UnixTime } from './UnixTime'
+import type { AssetId } from './AssetId.js'
+import type { ChainId } from './ChainId.js'
+import type { CoingeckoId } from './CoingeckoId.js'
+import type { EthereumAddress } from './EthereumAddress.js'
+import type { UnixTime } from './UnixTime.js'
 
-export interface Token {
+export interface LegacyToken {
   id: AssetId
   name: string
   coingeckoId: CoingeckoId
@@ -13,14 +13,30 @@ export interface Token {
   decimals: number
   sinceTimestamp: UnixTime
   untilTimestamp?: UnixTime
-  category: 'ether' | 'stablecoin' | 'other'
+  category:
+    | 'ether'
+    | 'stablecoin'
+    | 'btc'
+    | 'rwaRestricted'
+    | 'rwaPublic'
+    | 'other'
   iconUrl?: string
   chainId: ChainId
-  source: 'canonical' | 'external' | 'native'
+  chainName: string
+  url?: string
+  source: 'canonical' | 'custom-canonical' | 'external' | 'native'
   supply: 'totalSupply' | 'circulatingSupply' | 'zero'
-  bridgedUsing?: {
-    bridge: string
-    slug?: string
-    warning?: string
-  }
+  excludeFromTotal?: true
+  bridgedUsing?: LegacyTokenBridgedUsing
+  premint?: string
+}
+
+export interface LegacyTokenBridge {
+  name: string
+  slug?: string
+}
+
+export interface LegacyTokenBridgedUsing {
+  bridges: LegacyTokenBridge[]
+  warning?: string
 }

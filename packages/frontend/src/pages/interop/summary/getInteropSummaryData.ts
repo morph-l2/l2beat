@@ -1,0 +1,151 @@
+import type { InMemoryCache } from '@l2beat/shared-pure'
+import type { Request } from 'express'
+import { getAppLayoutProps } from '~/common/getAppLayoutProps'
+import { getInteropChains } from '~/server/features/layer2s/interop/utils/getInteropChains'
+import { ps } from '~/server/projects'
+import { getMetadata } from '~/ssr/head/getMetadata'
+import type { RenderData } from '~/ssr/types'
+import { getSsrHelpers } from '~/trpc/server'
+import { type Manifest, manifest } from '~/utils/Manifest'
+import { MAX_SELECTED_CHAINS } from '../components/flows/consts'
+import type { InteropQuery } from '../InteropRouter'
+import { getFlowChainOrderByVolume } from '../utils/getFlowChainOrderByVolume'
+import { getInitialInteropSelection } from '../utils/getInitialInteropSelection'
+import { getInteropChainHref } from '../utils/getInteropChainHref'
+import { mapInteropChainsToWithIcons } from '../utils/mapInteropChainsToWithIcons'
+import { selectDefaultFlowChains } from '../utils/selectDefaultFlowChains'
+import type { InteropSelection } from '../utils/types'
+
+export async function getInteropSummaryData(
+  req: Request<unknown, unknown, unknown, InteropQuery>,
+  manifest: Manifest,
+  cache: InMemoryCache,
+): Promise<RenderData> {
+  const appLayoutProps = await getAppLayoutProps()
+  const interopChains = getInteropChains()
+  const interopChainsIds = interopChains.map((chain) => chain.id)
+
+  const l2Projects = await ps.getProjects({
+    select: ['scalingInfo'],
+  })
+  const l2ProjectSlugById = new Map(l2Projects.map((p) => [p.id, p.slug]))
+
+  const interopChainsWithIcons = mapInteropChainsToWithIcons(
+    manifest,
+    interopChains,
+  ).map((chain) => ({
+    ...chain,
+    href: getInteropChainHref(chain.id, l2ProjectSlugById),
+  }))
+
+  const activeInteropChains = interopChainsWithIcons.filter(
+    (chain) => !chain.isUpcoming,
+  )
+
+  const initialSelection = getInitialInteropSelection({
+    query: req.query,
+    interopChainsIds,
+  })
+
+  const queryState = await cache.get(
+    {
+      key: [
+        'interop',
+        'summary',
+        'prefetch',
+        initialSelection.from.join(','),
+        initialSelection.to.join(','),
+      ],
+      ttl: 5 * 60,
+      staleWhileRevalidate: 25 * 60,
+    },
+    async () =>
+      getCachedData(
+        initialSelection,
+        activeInteropChains.map((chain) => chain.id),
+      ),
+  )
+
+  const {
+    sortedChains: activeInteropChainsSortedByVolume,
+    defaultSelectedFlowChains,
+  } = selectDefaultFlowChains(
+    activeInteropChains,
+    queryState.defaultFlowChainOrder,
+  )
+
+  return {
+    head: {
+      manifest,
+      metadata: getMetadata(manifest, {
+        title: 'Interoperability - L2BEAT',
+        description:
+          'Compare interoperability protocols across the Ethereum ecosystem. Track bridge volumes, transfer times & sizes, and explore how Non-minting, Lock & Mint, and Burn & Mint mechanisms affect cross-chain risk.',
+        url: req.originalUrl,
+        openGraph: {
+          image: '/meta-images/interop/summary/opengraph-image.png',
+        },
+      }),
+    },
+    ssr: {
+      page: 'InteropSummaryPage',
+      props: {
+        ...appLayoutProps,
+        ...queryState,
+        interopChains: activeInteropChainsSortedByVolume,
+        defaultSelectedFlowChains,
+        initialSelection,
+      },
+    },
+  }
+}
+
+async function getCachedData(
+  initialSelection: InteropSelection,
+  initialFlowsChains: string[],
+) {
+  const helpers = getSsrHelpers()
+  const [protocols] = await Promise.all([
+    ps.getProjects({
+      select: ['interopConfig'],
+    }),
+    initialSelection.from.length > 0 && initialSelection.to.length > 0
+      ? helpers.queryClient.prefetchQuery(
+          helpers.trpc.interop.dashboard.queryOptions({ ...initialSelection }),
+        )
+      : undefined,
+  ])
+
+  const shouldPrefetchFlows =
+    initialSelection.from.length === 0 && initialSelection.to.length === 0
+
+  let defaultFlowChainOrder = initialFlowsChains
+
+  if (shouldPrefetchFlows) {
+    const protocolIds = protocols.map((protocol) => protocol.id)
+    defaultFlowChainOrder = await getFlowChainOrderByVolume(
+      initialFlowsChains,
+      protocolIds,
+    )
+
+    // The client's flows chart defaults to the top chains by volume, so
+    // prefetch that exact query to hydrate it from cache.
+    await helpers.queryClient.prefetchQuery(
+      helpers.trpc.interop.flows.queryOptions({
+        chains: defaultFlowChainOrder.slice(0, MAX_SELECTED_CHAINS),
+        protocolIds,
+      }),
+    )
+  }
+
+  return {
+    queryState: helpers.dehydrate(),
+    protocols: protocols.map((protocol) => ({
+      id: protocol.id,
+      name: protocol.interopConfig.name ?? protocol.name,
+      slug: protocol.slug,
+      iconUrl: manifest.getUrl(`/icons/${protocol.slug}.png`),
+    })),
+    defaultFlowChainOrder,
+  }
+}

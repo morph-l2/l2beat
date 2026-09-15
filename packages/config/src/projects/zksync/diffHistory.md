@@ -1,0 +1,2557 @@
+Generated with discovered.json: 0x3be47c549f01631569fbe29e9b811667f57b2133
+
+# Diff at Mon, 07 Sep 2026 08:38:05 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@25578f132c6c06c4de07ab98ad602d8239829c04 block: 1784806565
+- current timestamp: 1784806565
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1784806565 (main branch discovery), not current.
+
+```diff
+    external contract Matter Labs Multisig (eth:0x4e4943346848c4867F81dFb37c4cA9C5715A7828) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0x303a465B659cBB0ab36eE643eA362c509EEb5213","description":"create new zk chains (based on the current version), register tokens (ZK cluster Admin role).","role":".admin","via":[{"address":"eth:0x2cf3bD6a9056b39999F3883955E183F655345063"}]},{"permission":"interact","from":"eth:0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C","description":"set the pending admin of this contract and the ServerNotifier contract address (ZK cluster Admin role).","role":".admin","via":[{"address":"eth:0x2cf3bD6a9056b39999F3883955E183F655345063"}]},{"permission":"upgrade","from":"eth:0xfca808A744735D9919EEBe4660B8Fd897456Ce31","role":"admin","via":[{"address":"eth:0x257FC0c3EB02F7ba8C0fd3eD57692A9c1ee6D29B"},{"address":"eth:0x2cf3bD6a9056b39999F3883955E183F655345063"}]}]
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"eth:0x2cf3bD6a9056b39999F3883955E183F655345063","role":".owner"}]
+    }
+```
+
+```diff
+    contract ProxyAdmin (eth:0xDc7009bCAabD4069391C0aa9445D58a759fE1c7d) [global/ProxyAdmin] {
+    +++ description: None
+      receivedPermissions:
+-        [{"permission":"upgrade","from":"eth:0x0a14B696350546110a0D8acDb86226983af9D2a0","role":"admin"}]
+      directlyReceivedPermissions:
++        [{"permission":"upgrade","from":"eth:0x0a14B696350546110a0D8acDb86226983af9D2a0","role":"admin"}]
+    }
+```
+
+```diff
+    external contract (eth:0x1e4c534e7ce1FF5621Ea506D99b367D7d8EFbE3e) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"upgrade","from":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3","role":"admin"}]
+    }
+```
+
+```diff
+    external contract (eth:0x257FC0c3EB02F7ba8C0fd3eD57692A9c1ee6D29B) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"upgrade","from":"eth:0xfca808A744735D9919EEBe4660B8Fd897456Ce31","role":"admin"}]
+    }
+```
+
+```diff
+    external contract (eth:0x2cf3bD6a9056b39999F3883955E183F655345063) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"eth:0x257FC0c3EB02F7ba8C0fd3eD57692A9c1ee6D29B","role":".owner"},{"permission":"interact","from":"eth:0x303a465B659cBB0ab36eE643eA362c509EEb5213","description":"create new zk chains (based on the current version), register tokens (ZK cluster Admin role).","role":".admin"},{"permission":"interact","from":"eth:0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C","description":"set the pending admin of this contract and the ServerNotifier contract address (ZK cluster Admin role).","role":".admin"}]
+    }
+```
+
+```diff
+    external contract (eth:0x59195219d1176E42f8e607e9AC114926D47f9035) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3","description":"soft freeze, hard freeze, approve a protocol upgrade.","role":".securityCouncil"},{"permission":"interact","from":"eth:0xF73a7dCfa68E52030ec39E41a23DCA51F3aAa111","description":"one of its 3/3 signers.","role":".SECURITY_COUNCIL"}]
+    }
+```
+
+```diff
+    external contract (eth:0x600dA620Ab29F41ABC6596a15981e14cE58c86b8) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3","description":"extend the legal veto period, approve a protocol upgrade.","role":".guardians"},{"permission":"interact","from":"eth:0xF73a7dCfa68E52030ec39E41a23DCA51F3aAa111","description":"one of its 3/3 signers.","role":".GUARDIANS"}]
+    }
+```
+
+```diff
+    external contract (eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"upgrade","from":"eth:0x303a465B659cBB0ab36eE643eA362c509EEb5213","role":"admin"},{"permission":"upgrade","from":"eth:0x5Ce9257755391D1509cD4eC1899d3F88A57BB4aD","role":"admin"},{"permission":"upgrade","from":"eth:0x6078F6B379f103de1Aa912dc46bb8Df0c8809860","role":"admin"},{"permission":"upgrade","from":"eth:0x8829AD80E425C646DAB305381ff105169FeEcE56","role":"admin"},{"permission":"upgrade","from":"eth:0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6","role":"admin"},{"permission":"upgrade","from":"eth:0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C","role":"admin"},{"permission":"upgrade","from":"eth:0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB","role":"admin"},{"permission":"upgrade","from":"eth:0xDd5CB8B9037357B4cD37391A073798f8aaB61076","role":"admin"}]
+    }
+```
+
+```diff
+    external contract (eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"eth:0x1e4c534e7ce1FF5621Ea506D99b367D7d8EFbE3e","role":".owner"},{"permission":"act","from":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1","role":".owner"},{"permission":"act","from":"eth:0xDc7009bCAabD4069391C0aa9445D58a759fE1c7d","role":".owner"},{"permission":"interact","from":"eth:0x303a465B659cBB0ab36eE643eA362c509EEb5213","description":"set critical contract addresses for the shared cluster, register settlement layers, pause and unpause migrations and the bridge and manage zk chain registration.","role":".owner"},{"permission":"interact","from":"eth:0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6","description":"pause / unpause the bridge.","role":".owner"},{"permission":"interact","from":"eth:0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C","description":"manage the shared ValidatorTimelock contract address and the admin role, register and execute upgrades (and set their deadlines), freeze, revert batches and set permissioned validators and fee params for all connected chains.","role":".owner"},{"permission":"interact","from":"eth:0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB","description":"pause, unpause and set critical escrow address references.","role":".owner"},{"permission":"interact","from":"eth:0xDd5CB8B9037357B4cD37391A073798f8aaB61076","description":"pause, resume chain migrations.","role":".owner"},{"permission":"interact","from":"eth:0xE689e79a06D3D09f99C21E534cCF6a8b7C9b3C45","description":"manage allowed rollup DA pairs (allowed to be used by rollups in permanent rollup mode).","role":".owner"}]
+    }
+```
+
+```diff
+    external contract (eth:0xF73a7dCfa68E52030ec39E41a23DCA51F3aAa111) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0x303a465B659cBB0ab36eE643eA362c509EEb5213","description":"set critical contract addresses for the shared cluster, register settlement layers, pause and unpause migrations and the bridge and manage zk chain registration.","role":".owner","via":[{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"interact","from":"eth:0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6","description":"pause / unpause the bridge.","role":".owner","via":[{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"interact","from":"eth:0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C","description":"manage the shared ValidatorTimelock contract address and the admin role, register and execute upgrades (and set their deadlines), freeze, revert batches and set permissioned validators and fee params for all connected chains.","role":".owner","via":[{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"interact","from":"eth:0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB","description":"pause, unpause and set critical escrow address references.","role":".owner","via":[{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"interact","from":"eth:0xDd5CB8B9037357B4cD37391A073798f8aaB61076","description":"pause, resume chain migrations.","role":".owner","via":[{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"interact","from":"eth:0xE689e79a06D3D09f99C21E534cCF6a8b7C9b3C45","description":"manage allowed rollup DA pairs (allowed to be used by rollups in permanent rollup mode).","role":".owner","via":[{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0x0a14B696350546110a0D8acDb86226983af9D2a0","role":"admin","via":[{"address":"eth:0xDc7009bCAabD4069391C0aa9445D58a759fE1c7d"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0x303a465B659cBB0ab36eE643eA362c509EEb5213","role":"admin","via":[{"address":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0x5Ce9257755391D1509cD4eC1899d3F88A57BB4aD","role":"admin","via":[{"address":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0x6078F6B379f103de1Aa912dc46bb8Df0c8809860","role":"admin","via":[{"address":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0x8829AD80E425C646DAB305381ff105169FeEcE56","role":"admin","via":[{"address":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0xbeD1EB542f9a5aA6419Ff3deb921A372681111f6","role":"admin","via":[{"address":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0xc2eE6b6af7d616f6e27ce7F4A451Aedc2b0F5f5C","role":"admin","via":[{"address":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0xD7f9f54194C633F36CCD5F3da84ad4a1c38cB2cB","role":"admin","via":[{"address":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0xDd5CB8B9037357B4cD37391A073798f8aaB61076","role":"admin","via":[{"address":"eth:0xC2a36181fB524a6bEfE639aFEd37A67e77d62cf1"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]},{"permission":"upgrade","from":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3","role":"admin","via":[{"address":"eth:0x1e4c534e7ce1FF5621Ea506D99b367D7d8EFbE3e"},{"address":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3"}]}]
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3","role":".emergencyUpgradeBoard"}]
+    }
+```
+
+```diff
+    external contract (eth:0xbC1653bd3829dfEc575AfC3816D4899cd103B51c) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0xF73a7dCfa68E52030ec39E41a23DCA51F3aAa111","description":"one of its 3/3 signers.","role":".ZK_FOUNDATION_SAFE"}]
+    }
+```
+
+```diff
+    external contract (zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"interact","from":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3","description":"start (queue) upgrades.","role":".L2_PROTOCOL_GOVERNOR"},{"permission":"interact","from":"zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714","description":"manage all access control roles and change the minimum delay.","role":".timelockAdminAC"}]
+    }
+```
+
+```diff
+    external contract (zksync:0x711ea620AB29f41AbC6596a15981e14ce58C97c9) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"zksync:0xb83FF6501214ddF40C91C9565d095400f3F45746","description":"cancel proposals while they are pending (after having been proposed) or active (during the voting period).","role":".VETO_GUARDIAN"},{"permission":"interact","from":"zksync:0xEEEa739a8b6fB1b8f703E23C9Be03CeeA643b160","description":"cancel proposals while they are pending (after having been proposed) or active (during the voting period).","role":".VETO_GUARDIAN"}]
+    }
+```
+
+```diff
+    external contract (zksync:0x76705327e682F2d96943280D99464Ab61219e34f) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0xE30Dca3047B37dc7d88849dE4A4Dc07937ad5Ab3","description":"start (queue) upgrades.","role":".L2_PROTOCOL_GOVERNOR","via":[{"address":"zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714"}]},{"permission":"interact","from":"zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714","description":"cancel queued transactions.","role":".Canceller"},{"permission":"interact","from":"zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714","description":"execute transactions that are ready.","role":".Executor"},{"permission":"interact","from":"zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714","description":"manage all access control roles and change the minimum delay.","role":".timelockAdminAC","via":[{"address":"zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714"}]},{"permission":"interact","from":"zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714","description":"propose transactions.","role":".Proposer"}]
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"zksync:0x085b8B6407f150D62adB1EF926F7f304600ec714","role":".Executor"}]
+    }
+```
+
+```diff
+    external contract (zksync:0xF41EcA3047B37dc7d88849de4a4dc07937Ad6bc4) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"zksync:0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E","description":"control all roles in the ZkToken access control, including the minter roles.","role":".DefaultAdmin"},{"permission":"upgrade","from":"zksync:0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E","role":"admin","via":[{"address":"zksync:0xdB1E46B448e68a5E35CB693a99D59f784aD115CC"}]}]
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"zksync:0xdB1E46B448e68a5E35CB693a99D59f784aD115CC","role":".owner"}]
+    }
+```
+
+```diff
+    external contract (zksync:0xb83FF6501214ddF40C91C9565d095400f3F45746) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"zksync:0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E","description":"grant the MINTER_ROLE to arbitrary addresses, thus controlling the minting of the ZK token.","role":".MinterAdmin","via":[{"address":"zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d","delay":259200}]},{"permission":"interact","from":"zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d","delay":259200,"description":"manage all access control roles and change the minimum delay.","role":".timelockAdminAC","via":[{"address":"zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d","delay":259200}]},{"permission":"interact","from":"zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d","description":"cancel queued transactions.","role":".Canceller"},{"permission":"interact","from":"zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d","description":"execute transactions that are ready.","role":".Executor"},{"permission":"interact","from":"zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d","description":"propose transactions.","role":".Proposer"}]
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d","delay":259200,"role":".Executor"}]
+    }
+```
+
+```diff
+    external contract (zksync:0xcd2753Bd3829dfeC575AFC3816d4899CD103C62D) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"zksync:0xb83FF6501214ddF40C91C9565d095400f3F45746","description":"make direct proposals without owning ZK tokens. In propose-guarded mode, this address is the ONLY allowed proposer. Propose-guarded mode is currently set to false.","role":".PROPOSE_GUARDIAN"}]
+    }
+```
+
+```diff
+    external contract (zksync:0xdB1E46B448e68a5E35CB693a99D59f784aD115CC) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"upgrade","from":"zksync:0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E","role":"admin"}]
+    }
+```
+
+```diff
+    external contract (zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"interact","from":"zksync:0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E","description":"grant the MINTER_ROLE to arbitrary addresses, thus controlling the minting of the ZK token.","role":".MinterAdmin"},{"permission":"interact","from":"zksync:0xe5d21A9179CA2E1F0F327d598D464CcF60d89c3d","delay":259200,"description":"manage all access control roles and change the minimum delay.","role":".timelockAdminAC"}]
+    }
+```
+
+Generated with discovered.json: 0xf5b58aecc9b60bc1761a6983cc086e0fc3f96212
+
+# Diff at Mon, 27 Jul 2026 11:02:46 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@887150af6d3edad6e5fde92995bb5ecc5e48cfde block: 1784806565
+- current timestamp: 1784806565
+
+## Description
+
+shared-zk-stack now uses entrypoints rediscovery
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1784806565 (main branch discovery), not current.
+
+```diff
+    reference Matter Labs Multisig (eth:0x4e4943346848c4867F81dFb37c4cA9C5715A7828) {
+    +++ description: None
+      type:
+-        "Contract"
++        "Reference"
+      template:
+-        "GnosisSafe"
+      sourceHashes:
+-        ["0x81a7349eebb98ac33b0bc6842e3cb258034a8f2a4ba004570bb8e2e25947f9ff","0x22c7fb8365a538c05d34b77dd9c1967d1ddb7427eda69f84989d4c56603312b7"]
+      proxyType:
+-        "gnosis safe"
+      deployerAddress:
+-        "eth:0xC301f8B2a2C08958E6e7a286AB49A986c1f7ef6A"
+      sinceTimestamp:
+-        1666872275
+      sinceBlock:
+-        15839298
+      values:
+-        {"$immutable":false,"$implementation":"eth:0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552","$members":["eth:0xEE7d66B84175cc423900595d1807A0371D66dE46","eth:0x3F0009D00cc78979d00Eb635490F23E8d6aCc481","eth:0xC9A814A4dFE108A4d2b0C01abb4c196Ed7FB3D83","eth:0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc","eth:0xFAdb20191Ab38362C50f52909817B74214CA79AE","eth:0xAf0B2B58289857e9A6Cf91Fd30410dDcad9D9B28","eth:0x7408A268e5E6e8F08917c5b71015F4B9044970C7"],"$threshold":4,"domainSeparator":"0xd3e32b4e9e95656dc35c609ae0fbcc0cea466ebecc8227025a2d3edc728b79fb","getChainId":1,"GnosisSafe_modules":[],"multisigThreshold":"4 of 7 (57%)","nonce":279,"VERSION":"1.3.0"}
+      targetType:
++        "Contract"
+      targetProject:
++        "shared-zk-stack"
+    }
+```
+
+Generated with discovered.json: 0x3ae3d586cac7869065fe582ac88fdcf2283e6392
+
+# Diff at Thu, 23 Jul 2026 11:37:10 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@efd03446560a8d585747f124c71622cbfa33fca4 block: 1784715153
+- current timestamp: 1784806565
+
+## Description
+
+Rotated one Matter Labs ms member.
+
+## Watched changes
+
+```diff
+    contract Matter Labs Multisig (eth:0x4e4943346848c4867F81dFb37c4cA9C5715A7828) [GnosisSafe] {
+    +++ description: None
+      values.$members.2:
+-        "eth:0x5C7E59Dba6557C7dAB3B69ccd3E309d1965Cf1B1"
++        "eth:0xC9A814A4dFE108A4d2b0C01abb4c196Ed7FB3D83"
+    }
+```
+
+Generated with discovered.json: 0x5dd9c22b64864cbdcda142ecfe8cfa6a86e87546
+
+# Diff at Wed, 22 Jul 2026 10:13:42 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@0fd88e8637e7f933fd36577548a83f1ac175841b block: 1778580426
+- current timestamp: 1784715153
+
+## Description
+
+Downgraded 5/8 owner multisig to 1/1. Note that the project is already sunset and entered the shutdown phase. 
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99) [GnosisSafe] {
+    +++ description: None
+      values.$members.0:
+-        "eth:0x4964D00fA975a7346ee6196a94b07c01ed1cD3CE"
+      values.$members.1:
+-        "eth:0x050b37a12451F188c7bA53D48b8A1adE6D138E71"
+      values.$members.2:
+-        "eth:0xeF4CcBDf8f91A001164149558106737A568e4912"
+      values.$members.3:
+-        "eth:0xC9474de11503D63D892cEDD12d6B93f6A25a9cbF"
+      values.$members.4:
+-        "eth:0x45F9AfCf9565051344aFb36e665f4d7bb2d18415"
+      values.$members.5:
+-        "eth:0x702caCafA54B88e9c54449563Fb2e496e85c78b7"
+      values.$members.6:
+-        "eth:0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA"
+      values.$members.7:
+-        "eth:0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc"
++        "eth:0x4e4943346848c4867F81dFb37c4cA9C5715A7828"
+      values.$threshold:
+-        5
++        1
+      values.multisigThreshold:
+-        "5 of 8 (63%)"
++        "1 of 1 (100%)"
+    }
+```
+
+```diff
++   Status: CREATED
+    contract Matter Labs Multisig (eth:0x4e4943346848c4867F81dFb37c4cA9C5715A7828) [GnosisSafe]
+    +++ description: None
+```
+
+## Source code changes
+
+```diff
+.../.flat/Matter Labs Multisig/GnosisSafe.sol      | 1026 ++++++++++++++++++++
+ .../Matter Labs Multisig/GnosisSafeProxy.p.sol     |   38 +
+ 2 files changed, 1064 insertions(+)
+```
+
+Generated with discovered.json: 0xeae73c8612b79d421883088639904b20981a6a7d
+
+# Diff at Tue, 12 May 2026 11:06:10 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@6e08a4d47318721a3851fee0bc0991367ebd1fb4 block: 1774020135
+- current timestamp: 1778580426
+
+## Description
+
+Paused deposits to zksync. Upgraded zksync contract by adding token migration to claim distributor: https://disco.l2beat.com/diff/eth:0x8e972b354E6933275513C355Ee14D44A832aD2d9/eth:0x803B96fA3cE086A722CB6C1e2C79D304c8a263Ff. More precisely, added:
+
+- `l1ClaimDistributor`. It's supposed to store Merkle root of all toknes `claimRoot` and let users permissionlessly claim their funds agains the root
+- `pauseDeposits` function that permanently halts deposits into zksync L2
+- `setClaimRoot` function that sets withdrawal smart contracts and activates exodus mode
+- `migrateToken` function that transfers given token to the registered claim distributor contract.
+
+Deposits to L2 were halted, claim distributor contract was set to 0x0a14B696350546110a0D8acDb86226983af9D2a0, exodus mode activated and several tokens were migrated to the claim contract. In the exodus mode, tokens could not be deposited and withdrawn, new blocks could not be committed, proven or executed.
+
+Config: use the new flattener implementation.
+
+## Watched changes
+
+```diff
+    contract Multisig 3 (eth:0x225d3822De44E58eE935440E0c0B829C4232086e) [GnosisSafe] {
+    +++ description: None
+      values.$members.2:
+-        "eth:0xB1A308e7F02798377b7acF685E997E3D774c5863"
++        "eth:0xd6970196Ff8CeF3Cdd61256C1841A085EEcD3ae8"
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (eth:0x38A43F4330f24fe920F943409709fc9A6084C939) [N/A] {
+    +++ description: None
+      values.versionId:
+-        12
++        13
+    }
+```
+
+```diff
+    contract ZkSync (eth:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) [N/A] {
+    +++ description: None
+      sourceHashes.1:
+-        "0xc9d63ef2a845873ca1ad004f9cf86cd0d77ee4a37cca41132c0dea73d460ea1c"
++        "0xb50bdd92f62f1f18bc1e695c5a1cb0467f936a3e8702454a02e5ef54c6f1e9a2"
+      values.$implementation.0:
+-        "eth:0x8e972b354E6933275513C355Ee14D44A832aD2d9"
++        "eth:0x803B96fA3cE086A722CB6C1e2C79D304c8a263Ff"
+      values.$implementation.1:
+-        "eth:0x2eaa1377e0fC95dE998B9fA7611E9D67ebA534fD"
++        "eth:0xBF8ee0141203A7986142000B85f7afaBeee1279d"
+      values.exodusMode:
+-        false
++        true
+      values.l1ClaimDistributor:
++        "eth:0x0a14B696350546110a0D8acDb86226983af9D2a0"
+      values.pausedDeposits:
++        true
+      errors:
+-        {"l1ClaimDistributor":"Processing error occurred.","migratedTokens":"Processing error occurred."}
+      implementationNames.eth:0x8e972b354E6933275513C355Ee14D44A832aD2d9:
+-        "ZkSync"
+      implementationNames.eth:0x2eaa1377e0fC95dE998B9fA7611E9D67ebA534fD:
+-        "AdditionalZkSync"
+      implementationNames.eth:0x803B96fA3cE086A722CB6C1e2C79D304c8a263Ff:
++        "ZkSync"
+      implementationNames.eth:0xBF8ee0141203A7986142000B85f7afaBeee1279d:
++        "AdditionalZkSync"
+    }
+```
+
+```diff
++   Status: CREATED
+    contract ZkSyncLiteSunsetClaimDistributorL1 (eth:0x0a14B696350546110a0D8acDb86226983af9D2a0) [N/A]
+    +++ description: Distributor smart contract that holds tokens migrated from zksync lite rollup contract and allows users withdrawing them.
+```
+
+```diff
++   Status: CREATED
+    contract ProxyAdmin (eth:0xDc7009bCAabD4069391C0aa9445D58a759fE1c7d) [global/ProxyAdmin]
+    +++ description: None
+```
+
+## Source code changes
+
+```diff
+.../src/projects/zksync/.flat/ProxyAdmin.sol       |  217 ++
+ .../ZkSync/AdditionalZkSync.2.sol                  | 2281 ++----------------
+ .../ZkSync/ZkSync.1.sol                            | 2484 ++------------------
+ .../TransparentUpgradeableProxy.p.sol              |  864 +++++++
+ .../ZkSyncLiteSunsetClaimDistributorL1.sol         | 1376 +++++++++++
+ 5 files changed, 2843 insertions(+), 4379 deletions(-)
+```
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1774020135 (main branch discovery), not current.
+
+```diff
+    contract Multisig 1 (eth:0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346) [GnosisSafe] {
+    +++ description: None
+      sourceHashes.1:
+-        "0x263aadde480629cd3ca5704cc7d4e7df809d437e68f8d9864039801ddf820367"
++        "0xf42960f0c75309d8d7eeb913a74aa31fbb2e07cfa48c7ebad54152a7194d2425"
+    }
+```
+
+```diff
+    contract Multisig 2 (eth:0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567) [GnosisSafe] {
+    +++ description: None
+      sourceHashes.1:
+-        "0x263aadde480629cd3ca5704cc7d4e7df809d437e68f8d9864039801ddf820367"
++        "0xf42960f0c75309d8d7eeb913a74aa31fbb2e07cfa48c7ebad54152a7194d2425"
+    }
+```
+
+```diff
+    contract Multisig 3 (eth:0x225d3822De44E58eE935440E0c0B829C4232086e) [GnosisSafe] {
+    +++ description: None
+      sourceHashes.1:
+-        "0x7d388119a66f3eae147d748f86136f073d907d6b36f7e87e9363c4c7a2899a8a"
++        "0xe23c519b7324d6dc9132c8567ac55ae72bdf168c914d22825c7614d822364b0f"
+    }
+```
+
+```diff
+    contract Governance (eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) [N/A] {
+    +++ description: None
+      sourceHashes.0:
+-        "0xa4356b8fe23f3499a5494bac2e9e1588ba6976f987fff80e2261aa7ebaa20ce6"
++        "0xf9e1c984e744e60cfb5ed67169192d8ee0ac5a3a47025cd3745aff2731b056cb"
+      sourceHashes.1:
+-        "0x56f13113f7f861d8b45c18702ac8aa2b4d13d510e35a53f063d80afb36d0785f"
++        "0x8b256e70f1a424e78154d0b59192efa167bc92875cb2a2903475dc8634867ebc"
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (eth:0x38A43F4330f24fe920F943409709fc9A6084C939) [N/A] {
+    +++ description: None
+      sourceHashes.0:
+-        "0x1359a771e28c9c71730920ab6bee9509009c60908022ff865419a483f74f702b"
++        "0x1ca17530ac7bfe9ac80835eb448afe9f50d372192b3c888b18ef837f4fec3e5f"
+    }
+```
+
+```diff
+    contract Verifier (eth:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) [N/A] {
+    +++ description: None
+      sourceHashes.0:
+-        "0xa4356b8fe23f3499a5494bac2e9e1588ba6976f987fff80e2261aa7ebaa20ce6"
++        "0xf9e1c984e744e60cfb5ed67169192d8ee0ac5a3a47025cd3745aff2731b056cb"
+      sourceHashes.1:
+-        "0xd2a07a5a9b9bf3e2f936b5530eabc67694e9fa89a92407b692f35c2a46175f39"
++        "0xf04e5cbb8de607ef8c857b7856623fbfcc2269e3a336afe6f274e58379e00f0b"
+    }
+```
+
+```diff
+    contract NftFactory (eth:0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D) [N/A] {
+    +++ description: None
+      sourceHashes.0:
+-        "0x92b72fece19e4149fd14048afb074cee743d6f3386911f19d109ab73a8cc0208"
++        "0x3b85b869ad66e703c06248e34fe3d8b7d32223884ace1b4d13cd850b6d07bbdb"
+    }
+```
+
+```diff
+    contract ZkSync (eth:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) [N/A] {
+    +++ description: None
+      sourceHashes.0:
+-        "0xa4356b8fe23f3499a5494bac2e9e1588ba6976f987fff80e2261aa7ebaa20ce6"
++        "0xf9e1c984e744e60cfb5ed67169192d8ee0ac5a3a47025cd3745aff2731b056cb"
+      sourceHashes.1:
+-        "0x8f3d4519effa17873ea109f5921890111b59d96da635e3691d4a7a96192d8d25"
++        "0xc9d63ef2a845873ca1ad004f9cf86cd0d77ee4a37cca41132c0dea73d460ea1c"
+      errors:
++        {"l1ClaimDistributor":"Processing error occurred.","migratedTokens":"Processing error occurred."}
+    }
+```
+
+```diff
+    contract ZkSync Multisig (eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99) [GnosisSafe] {
+    +++ description: None
+      sourceHashes.1:
+-        "0x263aadde480629cd3ca5704cc7d4e7df809d437e68f8d9864039801ddf820367"
++        "0xf42960f0c75309d8d7eeb913a74aa31fbb2e07cfa48c7ebad54152a7194d2425"
+    }
+```
+
+Generated with discovered.json: 0x3cbbde1f2ca447f09b89b862ce74ad2323f12f60
+
+# Diff at Tue, 05 May 2026 10:24:02 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@b6437082b3ea8fb0d97f4474b1c3452a1ce271b0 block: 1774020135
+- current timestamp: 1774020135
+
+## Description
+
+Include deployer address
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1774020135 (main branch discovery), not current.
+
+```diff
+    contract Multisig 1 (eth:0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346) {
+    +++ description: None
+      deployerAddress:
++        "eth:0xbEA07b01E8Fe3936A3D206158521A87addB65cfE"
+    }
+```
+
+```diff
+    contract Multisig 2 (eth:0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567) {
+    +++ description: None
+      deployerAddress:
++        "eth:0x1D08182eF64C4be7398d71bA62c409D37a677344"
+    }
+```
+
+```diff
+    contract Multisig 3 (eth:0x225d3822De44E58eE935440E0c0B829C4232086e) {
+    +++ description: None
+      deployerAddress:
++        "eth:0x083fc10cE7e97CaFBaE0fE332a9c4384c5f54E45"
+    }
+```
+
+```diff
+    contract Governance (eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      deployerAddress:
++        "eth:0xd6dfD811E06267b25472753c4e57C0B28652bFB8"
+    }
+```
+
+```diff
+    contract TokenGovernance (eth:0x35cc31f63deef017c38d51B038891bAE7d614e86) {
+    +++ description: None
+      deployerAddress:
++        "eth:0xA91c2d27AF465D09C8FE01255197d1d81148c136"
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (eth:0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      deployerAddress:
++        "eth:0xd6dfD811E06267b25472753c4e57C0B28652bFB8"
+    }
+```
+
+```diff
+    contract Verifier (eth:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      deployerAddress:
++        "eth:0xd6dfD811E06267b25472753c4e57C0B28652bFB8"
+    }
+```
+
+```diff
+    contract NftFactory (eth:0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D) {
+    +++ description: None
+      deployerAddress:
++        "eth:0x58BD2E164D119E48a9b07ceECA1c3D1A83e55d9b"
+    }
+```
+
+```diff
+    contract ZkSync (eth:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+    +++ description: None
+      deployerAddress:
++        "eth:0xd6dfD811E06267b25472753c4e57C0B28652bFB8"
+    }
+```
+
+```diff
+    contract Proxy (eth:0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6) {
+    +++ description: None
+      deployerAddress:
++        "eth:0x07F455F30e862E13E3E3D960762cB11c4F744d52"
+    }
+```
+
+```diff
+    contract ZkSync Multisig (eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      deployerAddress:
++        "eth:0x78199272621046Ef1569fc6AF229c18413ccE00f"
+    }
+```
+
+Generated with discovered.json: 0x39a366b037118b460d5e8940aad1cc833b59306f
+
+# Diff at Fri, 20 Mar 2026 15:23:18 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@6e8ea0b2bd2cedfd977918617d444e8201fbb4ac block: 1767007984
+- current timestamp: 1774020135
+
+## Description
+
+Rotated ms member.
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      values.$members.2:
+-        "eth:0x37A71E0C1A5808343D893Db40e12A74e0A387908"
++        "eth:0xeF4CcBDf8f91A001164149558106737A568e4912"
+    }
+```
+
+Generated with discovered.json: 0x6be21968e25f79d16c68a979ce6e95cc38748763
+
+# Diff at Mon, 29 Dec 2025 11:34:07 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@515d3131558dba4f5723e3914cca96f65c2d38d1 block: 1759932670
+- current timestamp: 1767007984
+
+## Description
+
+Upgraded Safe multisig to version 1.4.1. Also rotated one multisig member, added a new one and increased the threshold.
+
+## Watched changes
+
+```diff
+    contract Multisig 3 (eth:0x225d3822De44E58eE935440E0c0B829C4232086e) {
+    +++ description: None
+      sourceHashes.1:
+-        "0xd42bbf9f7dcd3720a7fc6bdc6edfdfae8800a37d6dd4decfa0ef6ca4a2e88940"
++        "0x7d388119a66f3eae147d748f86136f073d907d6b36f7e87e9363c4c7a2899a8a"
+      values.$implementation:
+-        "eth:0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552"
++        "eth:0x41675C099F32341bf84BFc5382aF534df5C7461a"
+      values.$members.0:
++        "eth:0xD8A6A3ca1739423de5F634dFAa8BA224EAf16d0e"
+      values.$members.1:
++        "eth:0x223c0EF36fEe905a40175d92704b1d3624218EE7"
+      values.$members.1:
+-        "eth:0x0d4E989c7620C8749c9417d2BF218896C767B606"
+      values.$threshold:
+-        2
++        3
+      values.multisigThreshold:
+-        "2 of 3 (67%)"
++        "3 of 4 (75%)"
+      values.VERSION:
+-        "1.3.0"
++        "1.4.1"
+      implementationNames.eth:0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552:
+-        "GnosisSafe"
+      implementationNames.eth:0x41675C099F32341bf84BFc5382aF534df5C7461a:
++        "Safe"
+    }
+```
+
+## Source code changes
+
+```diff
+.../GnosisSafe.sol => .flat/Multisig 3/Safe.sol}   | 685 ++++++++++++---------
+ 1 file changed, 410 insertions(+), 275 deletions(-)
+```
+
+Generated with discovered.json: 0x57db3e05b4808e8084a3e933a2bde465bbf78755
+
+# Diff at Tue, 07 Oct 2025 14:25:01 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@8565ff097fc0a7fe0355555b648b1799518c8f35 block: 1759759105
+- current timestamp: 1759847038
+
+## Description
+
+Removed old zksync validator.
+
+## Watched changes
+
+```diff
+    contract Governance (eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      values.validators.0:
+-        "eth:0x01c3A1a6890A146aC187A019F9863B3Ab2BfF91e"
+    }
+```
+
+Generated with discovered.json: 0x9a8fb769f5cf9b0fee62d9a6191c69db9d3703f6
+
+# Diff at Mon, 06 Oct 2025 13:59:28 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@af10d4e90bc0f1be21a0242f8327fccf9a01f37a block: 1751371847
+- current timestamp: 1759759105
+
+## Description
+
+Updated Verifier (diff https://disco.l2beat.com/diff/eth:0x6e95812C432F293b8045811F4B1758285EBDB206/eth:0x57B09100e6160503aBDEBC76012b6c358eA4e462): changed verifier key tree root; two constants not used in verifier aligned with the values used in the rollup contract. See this tweet: https://x.com/zkSyncDevs/status/1968062194832249336.
+
+Also added a new validator and changed one multisig member.
+
+## Watched changes
+
+```diff
+    contract Governance (eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      values.validators.1:
++        "eth:0x0C6E6F8bb16846a0E9E866F3B9b8ec071f885Df5"
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (eth:0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      values.versionId:
+-        11
++        12
+    }
+```
+
+```diff
+    contract Verifier (eth:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      sourceHashes.1:
+-        "0xcf125cd39e9e7620aea95320666f3e3c19a3ae1da200337d94d11de29e8d97af"
++        "0xd2a07a5a9b9bf3e2f936b5530eabc67694e9fa89a92407b692f35c2a46175f39"
+      values.$implementation:
+-        "eth:0x6e95812C432F293b8045811F4B1758285EBDB206"
++        "eth:0x57B09100e6160503aBDEBC76012b6c358eA4e462"
+      implementationNames.eth:0x6e95812C432F293b8045811F4B1758285EBDB206:
+-        "Verifier"
+      implementationNames.eth:0x57B09100e6160503aBDEBC76012b6c358eA4e462:
++        "Verifier"
+    }
+```
+
+```diff
+    contract ZkSync Multisig (eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      values.$members.3:
+-        "eth:0x890Da36c3dD697CbB88E616668BEDaFA369f3793"
++        "eth:0xC9474de11503D63D892cEDD12d6B93f6A25a9cbF"
+    }
+```
+
+## Source code changes
+
+```diff
+.../zksync/{.flat@1751371847 => .flat}/Verifier/Verifier.sol        | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+```
+
+Generated with discovered.json: 0x0c31b750bd6ecdbdbb7b0740525594da5b1cbe80
+
+# Diff at Mon, 01 Sep 2025 10:01:10 GMT:
+
+Merge mark
+
+Generated with discovered.json: 0xdd7dc7dfce7e80c35cff823036b6610deec420b7
+
+# Diff at Mon, 14 Jul 2025 12:46:51 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@9f4300dad2f3d080cd56fa311d4a848556c74e72 block: 22824302
+- current block number: 22824302
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22824302 (main branch discovery), not current.
+
+```diff
+    contract Multisig 1 (0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346) {
+    +++ description: None
+      address:
+-        "0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346"
++        "eth:0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346"
+      values.$implementation:
+-        "0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F"
++        "eth:0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F"
+      values.$members.0:
+-        "0x4326E446013908fBEEE4ce7b6935219c01854B21"
++        "eth:0x4326E446013908fBEEE4ce7b6935219c01854B21"
+      values.$members.1:
+-        "0x4F0eB7DBcF5410C7bA0Ad8D131956f0194Ea803B"
++        "eth:0x4F0eB7DBcF5410C7bA0Ad8D131956f0194Ea803B"
+      values.$members.2:
+-        "0x117Ab3A5D9eaF4F7105e30a757F150504733C3d8"
++        "eth:0x117Ab3A5D9eaF4F7105e30a757F150504733C3d8"
+      values.$members.3:
+-        "0xA0171d83E3C5F215491FcE4C0884E91674B3C8A3"
++        "eth:0xA0171d83E3C5F215491FcE4C0884E91674B3C8A3"
+      implementationNames.0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346:
+-        "Proxy"
+      implementationNames.0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F:
+-        "GnosisSafe"
+      implementationNames.eth:0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346:
++        "Proxy"
+      implementationNames.eth:0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F:
++        "GnosisSafe"
+    }
+```
+
+```diff
+    EOA  (0x01c3A1a6890A146aC187A019F9863B3Ab2BfF91e) {
+    +++ description: None
+      address:
+-        "0x01c3A1a6890A146aC187A019F9863B3Ab2BfF91e"
++        "eth:0x01c3A1a6890A146aC187A019F9863B3Ab2BfF91e"
+    }
+```
+
+```diff
+    EOA  (0x050b37a12451F188c7bA53D48b8A1adE6D138E71) {
+    +++ description: None
+      address:
+-        "0x050b37a12451F188c7bA53D48b8A1adE6D138E71"
++        "eth:0x050b37a12451F188c7bA53D48b8A1adE6D138E71"
+    }
+```
+
+```diff
+    EOA  (0x0d4E989c7620C8749c9417d2BF218896C767B606) {
+    +++ description: None
+      address:
+-        "0x0d4E989c7620C8749c9417d2BF218896C767B606"
++        "eth:0x0d4E989c7620C8749c9417d2BF218896C767B606"
+    }
+```
+
+```diff
+    EOA  (0x106fc088aBA908130fBC343F2F6d212Ff36150D1) {
+    +++ description: None
+      address:
+-        "0x106fc088aBA908130fBC343F2F6d212Ff36150D1"
++        "eth:0x106fc088aBA908130fBC343F2F6d212Ff36150D1"
+    }
+```
+
+```diff
+    EOA  (0x117Ab3A5D9eaF4F7105e30a757F150504733C3d8) {
+    +++ description: None
+      address:
+-        "0x117Ab3A5D9eaF4F7105e30a757F150504733C3d8"
++        "eth:0x117Ab3A5D9eaF4F7105e30a757F150504733C3d8"
+    }
+```
+
+```diff
+    EOA  (0x18B7ff0370456dB6b7710714D9DCC25a0A3b3016) {
+    +++ description: None
+      address:
+-        "0x18B7ff0370456dB6b7710714D9DCC25a0A3b3016"
++        "eth:0x18B7ff0370456dB6b7710714D9DCC25a0A3b3016"
+    }
+```
+
+```diff
+    contract Multisig 2 (0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567) {
+    +++ description: None
+      address:
+-        "0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567"
++        "eth:0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567"
+      values.$implementation:
+-        "0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F"
++        "eth:0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F"
+      values.$members.0:
+-        "0x1cAe37780Ad92801641d05BA5Bb7E978c99Fc5Da"
++        "eth:0x1cAe37780Ad92801641d05BA5Bb7E978c99Fc5Da"
+      values.$members.1:
+-        "0xD804aB3355a634aEBd45e1252d6208807defD554"
++        "eth:0xD804aB3355a634aEBd45e1252d6208807defD554"
+      values.$members.2:
+-        "0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193"
++        "eth:0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193"
+      values.$members.3:
+-        "0x106fc088aBA908130fBC343F2F6d212Ff36150D1"
++        "eth:0x106fc088aBA908130fBC343F2F6d212Ff36150D1"
+      values.$members.4:
+-        "0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe"
++        "eth:0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe"
+      values.$members.5:
+-        "0xf6dcD4d7141E06B916987C3C46220f6241278a30"
++        "eth:0xf6dcD4d7141E06B916987C3C46220f6241278a30"
+      implementationNames.0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567:
+-        "Proxy"
+      implementationNames.0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F:
+-        "GnosisSafe"
+      implementationNames.eth:0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567:
++        "Proxy"
+      implementationNames.eth:0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F:
++        "GnosisSafe"
+    }
+```
+
+```diff
+    EOA  (0x1cAe37780Ad92801641d05BA5Bb7E978c99Fc5Da) {
+    +++ description: None
+      address:
+-        "0x1cAe37780Ad92801641d05BA5Bb7E978c99Fc5Da"
++        "eth:0x1cAe37780Ad92801641d05BA5Bb7E978c99Fc5Da"
+    }
+```
+
+```diff
+    contract Multisig 3 (0x225d3822De44E58eE935440E0c0B829C4232086e) {
+    +++ description: None
+      address:
+-        "0x225d3822De44E58eE935440E0c0B829C4232086e"
++        "eth:0x225d3822De44E58eE935440E0c0B829C4232086e"
+      values.$implementation:
+-        "0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552"
++        "eth:0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552"
+      values.$members.0:
+-        "0xB1A308e7F02798377b7acF685E997E3D774c5863"
++        "eth:0xB1A308e7F02798377b7acF685E997E3D774c5863"
+      values.$members.1:
+-        "0x0d4E989c7620C8749c9417d2BF218896C767B606"
++        "eth:0x0d4E989c7620C8749c9417d2BF218896C767B606"
+      values.$members.2:
+-        "0x18B7ff0370456dB6b7710714D9DCC25a0A3b3016"
++        "eth:0x18B7ff0370456dB6b7710714D9DCC25a0A3b3016"
+      implementationNames.0x225d3822De44E58eE935440E0c0B829C4232086e:
+-        "Proxy"
+      implementationNames.0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552:
+-        "GnosisSafe"
+      implementationNames.eth:0x225d3822De44E58eE935440E0c0B829C4232086e:
++        "Proxy"
+      implementationNames.eth:0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552:
++        "GnosisSafe"
+    }
+```
+
+```diff
+    EOA  (0x2A0a81e257a2f5D6eD4F07b81DbDa09F107bd027) {
+    +++ description: None
+      address:
+-        "0x2A0a81e257a2f5D6eD4F07b81DbDa09F107bd027"
++        "eth:0x2A0a81e257a2f5D6eD4F07b81DbDa09F107bd027"
+    }
+```
+
+```diff
+    EOA  (0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc) {
+    +++ description: None
+      address:
+-        "0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc"
++        "eth:0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc"
+    }
+```
+
+```diff
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      address:
+-        "0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
++        "eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
+      values.$admin:
+-        "0x38A43F4330f24fe920F943409709fc9A6084C939"
++        "eth:0x38A43F4330f24fe920F943409709fc9A6084C939"
+      values.$implementation:
+-        "0x3FBc7C6c2437dE24F91b2Ca61Fc7AD3D2D62F4c8"
++        "eth:0x3FBc7C6c2437dE24F91b2Ca61Fc7AD3D2D62F4c8"
+      values.defaultFactory:
+-        "0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D"
++        "eth:0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D"
+      values.networkGovernor:
+-        "0xE24f4870Ab85DE8E356C5fC56138587206c70d99"
++        "eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99"
+      values.tokenGovernance:
+-        "0x35cc31f63deef017c38d51B038891bAE7d614e86"
++        "eth:0x35cc31f63deef017c38d51B038891bAE7d614e86"
+      values.validators.0:
+-        "0x01c3A1a6890A146aC187A019F9863B3Ab2BfF91e"
++        "eth:0x01c3A1a6890A146aC187A019F9863B3Ab2BfF91e"
+      implementationNames.0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01:
+-        "Proxy"
+      implementationNames.0x3FBc7C6c2437dE24F91b2Ca61Fc7AD3D2D62F4c8:
+-        "Governance"
+      implementationNames.eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01:
++        "Proxy"
+      implementationNames.eth:0x3FBc7C6c2437dE24F91b2Ca61Fc7AD3D2D62F4c8:
++        "Governance"
+    }
+```
+
+```diff
+    contract TokenGovernance (0x35cc31f63deef017c38d51B038891bAE7d614e86) {
+    +++ description: None
+      address:
+-        "0x35cc31f63deef017c38d51B038891bAE7d614e86"
++        "eth:0x35cc31f63deef017c38d51B038891bAE7d614e86"
+      values.governance:
+-        "0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
++        "eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
+      values.listingFeeToken:
+-        "0x6B175474E89094C44Da98b954EedeAC495271d0F"
++        "eth:0x6B175474E89094C44Da98b954EedeAC495271d0F"
+      values.tokenListers.0:
+-        "0xE24f4870Ab85DE8E356C5fC56138587206c70d99"
++        "eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99"
+      values.treasury:
+-        "0x2A0a81e257a2f5D6eD4F07b81DbDa09F107bd027"
++        "eth:0x2A0a81e257a2f5D6eD4F07b81DbDa09F107bd027"
+      implementationNames.0x35cc31f63deef017c38d51B038891bAE7d614e86:
+-        "TokenGovernance"
+      implementationNames.eth:0x35cc31f63deef017c38d51B038891bAE7d614e86:
++        "TokenGovernance"
+    }
+```
+
+```diff
+    EOA  (0x37A71E0C1A5808343D893Db40e12A74e0A387908) {
+    +++ description: None
+      address:
+-        "0x37A71E0C1A5808343D893Db40e12A74e0A387908"
++        "eth:0x37A71E0C1A5808343D893Db40e12A74e0A387908"
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      address:
+-        "0x38A43F4330f24fe920F943409709fc9A6084C939"
++        "eth:0x38A43F4330f24fe920F943409709fc9A6084C939"
+      values.getMaster:
+-        "0xE24f4870Ab85DE8E356C5fC56138587206c70d99"
++        "eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99"
+      values.mainContract:
+-        "0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
++        "eth:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
+      values.managedContracts.0:
+-        "0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
++        "eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
+      values.managedContracts.1:
+-        "0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
++        "eth:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
+      values.managedContracts.2:
+-        "0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
++        "eth:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
+      implementationNames.0x38A43F4330f24fe920F943409709fc9A6084C939:
+-        "UpgradeGatekeeper"
+      implementationNames.eth:0x38A43F4330f24fe920F943409709fc9A6084C939:
++        "UpgradeGatekeeper"
+    }
+```
+
+```diff
+    EOA  (0x39415255619783A2E71fcF7d8f708A951d92e1b6) {
+    +++ description: None
+      address:
+-        "0x39415255619783A2E71fcF7d8f708A951d92e1b6"
++        "eth:0x39415255619783A2E71fcF7d8f708A951d92e1b6"
+    }
+```
+
+```diff
+    EOA  (0x399a6a13D298CF3F41a562966C1a450136Ea52C2) {
+    +++ description: None
+      address:
+-        "0x399a6a13D298CF3F41a562966C1a450136Ea52C2"
++        "eth:0x399a6a13D298CF3F41a562966C1a450136Ea52C2"
+    }
+```
+
+```diff
+    EOA  (0x4326E446013908fBEEE4ce7b6935219c01854B21) {
+    +++ description: None
+      address:
+-        "0x4326E446013908fBEEE4ce7b6935219c01854B21"
++        "eth:0x4326E446013908fBEEE4ce7b6935219c01854B21"
+    }
+```
+
+```diff
+    EOA  (0x45F9AfCf9565051344aFb36e665f4d7bb2d18415) {
+    +++ description: None
+      address:
+-        "0x45F9AfCf9565051344aFb36e665f4d7bb2d18415"
++        "eth:0x45F9AfCf9565051344aFb36e665f4d7bb2d18415"
+    }
+```
+
+```diff
+    EOA  (0x4964D00fA975a7346ee6196a94b07c01ed1cD3CE) {
+    +++ description: None
+      address:
+-        "0x4964D00fA975a7346ee6196a94b07c01ed1cD3CE"
++        "eth:0x4964D00fA975a7346ee6196a94b07c01ed1cD3CE"
+    }
+```
+
+```diff
+    EOA  (0x4d1E3089042Ab3A93E03CA88B566b99Bd22438C6) {
+    +++ description: None
+      address:
+-        "0x4d1E3089042Ab3A93E03CA88B566b99Bd22438C6"
++        "eth:0x4d1E3089042Ab3A93E03CA88B566b99Bd22438C6"
+    }
+```
+
+```diff
+    EOA  (0x4F0eB7DBcF5410C7bA0Ad8D131956f0194Ea803B) {
+    +++ description: None
+      address:
+-        "0x4F0eB7DBcF5410C7bA0Ad8D131956f0194Ea803B"
++        "eth:0x4F0eB7DBcF5410C7bA0Ad8D131956f0194Ea803B"
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      address:
+-        "0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
++        "eth:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
+      values.$admin:
+-        "0x38A43F4330f24fe920F943409709fc9A6084C939"
++        "eth:0x38A43F4330f24fe920F943409709fc9A6084C939"
+      values.$implementation:
+-        "0x6e95812C432F293b8045811F4B1758285EBDB206"
++        "eth:0x6e95812C432F293b8045811F4B1758285EBDB206"
+      implementationNames.0x5290E9582B4FB706EaDf87BB1c129e897e04d06D:
+-        "Proxy"
+      implementationNames.0x6e95812C432F293b8045811F4B1758285EBDB206:
+-        "Verifier"
+      implementationNames.eth:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D:
++        "Proxy"
+      implementationNames.eth:0x6e95812C432F293b8045811F4B1758285EBDB206:
++        "Verifier"
+    }
+```
+
+```diff
+    EOA  (0x702caCafA54B88e9c54449563Fb2e496e85c78b7) {
+    +++ description: None
+      address:
+-        "0x702caCafA54B88e9c54449563Fb2e496e85c78b7"
++        "eth:0x702caCafA54B88e9c54449563Fb2e496e85c78b7"
+    }
+```
+
+```diff
+    EOA  (0x71E805aB236c945165b9Cd0bf95B9f2F0A0488c3) {
+    +++ description: None
+      address:
+-        "0x71E805aB236c945165b9Cd0bf95B9f2F0A0488c3"
++        "eth:0x71E805aB236c945165b9Cd0bf95B9f2F0A0488c3"
+    }
+```
+
+```diff
+    EOA  (0x76C6cE74EAb57254E785d1DcC3f812D274bCcB11) {
+    +++ description: None
+      address:
+-        "0x76C6cE74EAb57254E785d1DcC3f812D274bCcB11"
++        "eth:0x76C6cE74EAb57254E785d1DcC3f812D274bCcB11"
+    }
+```
+
+```diff
+    contract NftFactory (0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D) {
+    +++ description: None
+      address:
+-        "0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D"
++        "eth:0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D"
+      implementationNames.0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D:
+-        "ZkSyncNFTFactory"
+      implementationNames.eth:0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D:
++        "ZkSyncNFTFactory"
+    }
+```
+
+```diff
+    EOA  (0x890Da36c3dD697CbB88E616668BEDaFA369f3793) {
+    +++ description: None
+      address:
+-        "0x890Da36c3dD697CbB88E616668BEDaFA369f3793"
++        "eth:0x890Da36c3dD697CbB88E616668BEDaFA369f3793"
+    }
+```
+
+```diff
+    EOA  (0x9D5d6D4BaCCEDf6ECE1883456AA785dc996df607) {
+    +++ description: None
+      address:
+-        "0x9D5d6D4BaCCEDf6ECE1883456AA785dc996df607"
++        "eth:0x9D5d6D4BaCCEDf6ECE1883456AA785dc996df607"
+    }
+```
+
+```diff
+    EOA  (0xA0171d83E3C5F215491FcE4C0884E91674B3C8A3) {
+    +++ description: None
+      address:
+-        "0xA0171d83E3C5F215491FcE4C0884E91674B3C8A3"
++        "eth:0xA0171d83E3C5F215491FcE4C0884E91674B3C8A3"
+    }
+```
+
+```diff
+    EOA  (0xA093284c707e207C36E3FEf9e0B6325fd9d0e33B) {
+    +++ description: None
+      address:
+-        "0xA093284c707e207C36E3FEf9e0B6325fd9d0e33B"
++        "eth:0xA093284c707e207C36E3FEf9e0B6325fd9d0e33B"
+    }
+```
+
+```diff
+    EOA  (0xa2602ea835E03fb39CeD30B43d6b6EAf6aDe1769) {
+    +++ description: None
+      address:
+-        "0xa2602ea835E03fb39CeD30B43d6b6EAf6aDe1769"
++        "eth:0xa2602ea835E03fb39CeD30B43d6b6EAf6aDe1769"
+    }
+```
+
+```diff
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+    +++ description: None
+      address:
+-        "0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
++        "eth:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
+      values.$admin:
+-        "0x38A43F4330f24fe920F943409709fc9A6084C939"
++        "eth:0x38A43F4330f24fe920F943409709fc9A6084C939"
+      values.$implementation.0:
+-        "0x8e972b354E6933275513C355Ee14D44A832aD2d9"
++        "eth:0x8e972b354E6933275513C355Ee14D44A832aD2d9"
+      values.$implementation.1:
+-        "0x2eaa1377e0fC95dE998B9fA7611E9D67ebA534fD"
++        "eth:0x2eaa1377e0fC95dE998B9fA7611E9D67ebA534fD"
+      values.governance:
+-        "0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
++        "eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
+      values.securityCouncilMembers.0:
+-        "0xa2602ea835E03fb39CeD30B43d6b6EAf6aDe1769"
++        "eth:0xa2602ea835E03fb39CeD30B43d6b6EAf6aDe1769"
+      values.securityCouncilMembers.1:
+-        "0x9D5d6D4BaCCEDf6ECE1883456AA785dc996df607"
++        "eth:0x9D5d6D4BaCCEDf6ECE1883456AA785dc996df607"
+      values.securityCouncilMembers.2:
+-        "0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346"
++        "eth:0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346"
+      values.securityCouncilMembers.3:
+-        "0x71E805aB236c945165b9Cd0bf95B9f2F0A0488c3"
++        "eth:0x71E805aB236c945165b9Cd0bf95B9f2F0A0488c3"
+      values.securityCouncilMembers.4:
+-        "0x76C6cE74EAb57254E785d1DcC3f812D274bCcB11"
++        "eth:0x76C6cE74EAb57254E785d1DcC3f812D274bCcB11"
+      values.securityCouncilMembers.5:
+-        "0xFBfF3FF69D65A9103Bf4fdBf988f5271D12B3190"
++        "eth:0xFBfF3FF69D65A9103Bf4fdBf988f5271D12B3190"
+      values.securityCouncilMembers.6:
+-        "0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6"
++        "eth:0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6"
+      values.securityCouncilMembers.7:
+-        "0x4d1E3089042Ab3A93E03CA88B566b99Bd22438C6"
++        "eth:0x4d1E3089042Ab3A93E03CA88B566b99Bd22438C6"
+      values.securityCouncilMembers.8:
+-        "0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567"
++        "eth:0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567"
+      values.securityCouncilMembers.9:
+-        "0x39415255619783A2E71fcF7d8f708A951d92e1b6"
++        "eth:0x39415255619783A2E71fcF7d8f708A951d92e1b6"
+      values.securityCouncilMembers.10:
+-        "0x399a6a13D298CF3F41a562966C1a450136Ea52C2"
++        "eth:0x399a6a13D298CF3F41a562966C1a450136Ea52C2"
+      values.securityCouncilMembers.11:
+-        "0xee8AE1F1B4B1E1956C8Bda27eeBCE54Cf0bb5eaB"
++        "eth:0xee8AE1F1B4B1E1956C8Bda27eeBCE54Cf0bb5eaB"
+      values.securityCouncilMembers.12:
+-        "0xe7CCD4F3feA7df88Cf9B59B30f738ec1E049231f"
++        "eth:0xe7CCD4F3feA7df88Cf9B59B30f738ec1E049231f"
+      values.securityCouncilMembers.13:
+-        "0xA093284c707e207C36E3FEf9e0B6325fd9d0e33B"
++        "eth:0xA093284c707e207C36E3FEf9e0B6325fd9d0e33B"
+      values.securityCouncilMembers.14:
+-        "0x225d3822De44E58eE935440E0c0B829C4232086e"
++        "eth:0x225d3822De44E58eE935440E0c0B829C4232086e"
+      values.verifier:
+-        "0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
++        "eth:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
+      implementationNames.0xaBEA9132b05A70803a4E85094fD0e1800777fBEF:
+-        "Proxy"
+      implementationNames.0x8e972b354E6933275513C355Ee14D44A832aD2d9:
+-        "ZkSync"
+      implementationNames.0x2eaa1377e0fC95dE998B9fA7611E9D67ebA534fD:
+-        "AdditionalZkSync"
+      implementationNames.eth:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF:
++        "Proxy"
+      implementationNames.eth:0x8e972b354E6933275513C355Ee14D44A832aD2d9:
++        "ZkSync"
+      implementationNames.eth:0x2eaa1377e0fC95dE998B9fA7611E9D67ebA534fD:
++        "AdditionalZkSync"
+    }
+```
+
+```diff
+    contract Proxy (0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6) {
+    +++ description: None
+      address:
+-        "0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6"
++        "eth:0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6"
+      implementationNames.0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6:
+-        "Proxy"
+      implementationNames.eth:0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6:
++        "Proxy"
+    }
+```
+
+```diff
+    EOA  (0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193) {
+    +++ description: None
+      address:
+-        "0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193"
++        "eth:0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193"
+    }
+```
+
+```diff
+    EOA  (0xB1A308e7F02798377b7acF685E997E3D774c5863) {
+    +++ description: None
+      address:
+-        "0xB1A308e7F02798377b7acF685E997E3D774c5863"
++        "eth:0xB1A308e7F02798377b7acF685E997E3D774c5863"
+    }
+```
+
+```diff
+    EOA  (0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA) {
+    +++ description: None
+      address:
+-        "0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA"
++        "eth:0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA"
+    }
+```
+
+```diff
+    EOA  (0xD804aB3355a634aEBd45e1252d6208807defD554) {
+    +++ description: None
+      address:
+-        "0xD804aB3355a634aEBd45e1252d6208807defD554"
++        "eth:0xD804aB3355a634aEBd45e1252d6208807defD554"
+    }
+```
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      address:
+-        "0xE24f4870Ab85DE8E356C5fC56138587206c70d99"
++        "eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99"
+      values.$implementation:
+-        "0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F"
++        "eth:0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F"
+      values.$members.0:
+-        "0x4964D00fA975a7346ee6196a94b07c01ed1cD3CE"
++        "eth:0x4964D00fA975a7346ee6196a94b07c01ed1cD3CE"
+      values.$members.1:
+-        "0x050b37a12451F188c7bA53D48b8A1adE6D138E71"
++        "eth:0x050b37a12451F188c7bA53D48b8A1adE6D138E71"
+      values.$members.2:
+-        "0x37A71E0C1A5808343D893Db40e12A74e0A387908"
++        "eth:0x37A71E0C1A5808343D893Db40e12A74e0A387908"
+      values.$members.3:
+-        "0x890Da36c3dD697CbB88E616668BEDaFA369f3793"
++        "eth:0x890Da36c3dD697CbB88E616668BEDaFA369f3793"
+      values.$members.4:
+-        "0x45F9AfCf9565051344aFb36e665f4d7bb2d18415"
++        "eth:0x45F9AfCf9565051344aFb36e665f4d7bb2d18415"
+      values.$members.5:
+-        "0x702caCafA54B88e9c54449563Fb2e496e85c78b7"
++        "eth:0x702caCafA54B88e9c54449563Fb2e496e85c78b7"
+      values.$members.6:
+-        "0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA"
++        "eth:0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA"
+      values.$members.7:
+-        "0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc"
++        "eth:0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc"
+      implementationNames.0xE24f4870Ab85DE8E356C5fC56138587206c70d99:
+-        "Proxy"
+      implementationNames.0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F:
+-        "GnosisSafe"
+      implementationNames.eth:0xE24f4870Ab85DE8E356C5fC56138587206c70d99:
++        "Proxy"
+      implementationNames.eth:0x34CfAC646f301356fAa8B21e94227e3583Fe3F5F:
++        "GnosisSafe"
+    }
+```
+
+```diff
+    EOA  (0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe) {
+    +++ description: None
+      address:
+-        "0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe"
++        "eth:0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe"
+    }
+```
+
+```diff
+    EOA  (0xe7CCD4F3feA7df88Cf9B59B30f738ec1E049231f) {
+    +++ description: None
+      address:
+-        "0xe7CCD4F3feA7df88Cf9B59B30f738ec1E049231f"
++        "eth:0xe7CCD4F3feA7df88Cf9B59B30f738ec1E049231f"
+    }
+```
+
+```diff
+    EOA  (0xee8AE1F1B4B1E1956C8Bda27eeBCE54Cf0bb5eaB) {
+    +++ description: None
+      address:
+-        "0xee8AE1F1B4B1E1956C8Bda27eeBCE54Cf0bb5eaB"
++        "eth:0xee8AE1F1B4B1E1956C8Bda27eeBCE54Cf0bb5eaB"
+    }
+```
+
+```diff
+    EOA  (0xf6dcD4d7141E06B916987C3C46220f6241278a30) {
+    +++ description: None
+      address:
+-        "0xf6dcD4d7141E06B916987C3C46220f6241278a30"
++        "eth:0xf6dcD4d7141E06B916987C3C46220f6241278a30"
+    }
+```
+
+```diff
+    EOA  (0xFBfF3FF69D65A9103Bf4fdBf988f5271D12B3190) {
+    +++ description: None
+      address:
+-        "0xFBfF3FF69D65A9103Bf4fdBf988f5271D12B3190"
++        "eth:0xFBfF3FF69D65A9103Bf4fdBf988f5271D12B3190"
+    }
+```
+
+```diff
++   Status: CREATED
+    contract Multisig 1 (0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract Multisig 2 (0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract Multisig 3 (0x225d3822De44E58eE935440E0c0B829C4232086e)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract TokenGovernance (0x35cc31f63deef017c38d51B038891bAE7d614e86)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract NftFactory (0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract Proxy (0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99)
+    +++ description: None
+```
+
+Generated with discovered.json: 0xbc068f6a48615c73e1343481bd748d3086a54c63
+
+# Diff at Fri, 04 Jul 2025 12:19:31 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@1f56dc47fe915564d4555300304da4d3bcbc087f block: 22824302
+- current block number: 22824302
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22824302 (main branch discovery), not current.
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "ethereum:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
++        "eth:0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
+      receivedPermissions.1.from:
+-        "ethereum:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
++        "eth:0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
+      receivedPermissions.2.from:
+-        "ethereum:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
++        "eth:0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
+    }
+```
+
+Generated with discovered.json: 0x857200b3e1340c1f65c3c2370017878a51a80b0c
+
+# Diff at Tue, 01 Jul 2025 12:11:09 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@835b5bf291c209782da0924189d08305334497d4 block: 22081893
+- current block number: 22824302
+
+## Description
+
+ms signer change.
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      values.$members.4:
+-        "0xfB42eb487835B01cbF266f66750a7a89a7247F06"
++        "0x45F9AfCf9565051344aFb36e665f4d7bb2d18415"
+    }
+```
+
+Generated with discovered.json: 0xf41ca879baf469b40df6a03dbfb6a5aba64b0fb3
+
+# Diff at Tue, 27 May 2025 08:30:31 GMT:
+
+- chain: ethereum
+- author: Michał Podsiadły (<michal.podsiadly@l2beat.com>)
+- comparing to: main@fd658a9ed4bbd45fc5705d23b1906ca057d0d8b0 block: 22081893
+- current block number: 22081893
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22081893 (main branch discovery), not current.
+
+```diff
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+    +++ description: None
+      sourceHashes.2:
+-        "0xa4356b8fe23f3499a5494bac2e9e1588ba6976f987fff80e2261aa7ebaa20ce6"
+      sourceHashes.1:
+-        "0xa219a8a62191e08fe0803a9bee5d9b4cf73ae71a969ff2e1bcbc00330880de07"
++        "0xa4356b8fe23f3499a5494bac2e9e1588ba6976f987fff80e2261aa7ebaa20ce6"
+      sourceHashes.0:
+-        "0x51cc7e771fc0a90a4ac4c584004569333b8e5355dea67cb3b6a5e19d602e4a7c"
++        "0x8f3d4519effa17873ea109f5921890111b59d96da635e3691d4a7a96192d8d25"
+    }
+```
+
+Generated with discovered.json: 0x08d13975af97c042fec29f555cb0d09bf680de7d
+
+# Diff at Fri, 23 May 2025 09:41:09 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@69cd181abbc3c830a6caf2f4429b37cae72ffdb8 block: 22081893
+- current block number: 22081893
+
+## Description
+
+Introduced .role field on each permission, defaulting to field name on which it was defined (with '.' prefix)
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22081893 (main branch discovery), not current.
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      receivedPermissions.2.role:
++        "admin"
+      receivedPermissions.1.role:
++        "admin"
+      receivedPermissions.0.role:
++        "admin"
+    }
+```
+
+Generated with discovered.json: 0x73e02d45ddaf5071c84257373d1e1f75c4f2006a
+
+# Diff at Tue, 29 Apr 2025 08:19:17 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@ef7477af00fe0b57a2f7cacf7e958c12494af662 block: 22081893
+- current block number: 22081893
+
+## Description
+
+Field .issuedPermissions is removed from the output as no longer needed. Added 'permissionsConfigHash' due to refactoring of the modelling process (into a separate command).
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22081893 (main branch discovery), not current.
+
+```diff
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      issuedPermissions:
+-        [{"permission":"upgrade","to":"0x38A43F4330f24fe920F943409709fc9A6084C939","via":[]}]
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      issuedPermissions:
+-        [{"permission":"upgrade","to":"0x38A43F4330f24fe920F943409709fc9A6084C939","via":[]}]
+    }
+```
+
+```diff
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+    +++ description: None
+      issuedPermissions:
+-        [{"permission":"upgrade","to":"0x38A43F4330f24fe920F943409709fc9A6084C939","via":[]}]
+    }
+```
+
+Generated with discovered.json: 0x1a8826af057809ef6ebdcc850e6f97f499399f36
+
+# Diff at Wed, 19 Mar 2025 15:45:23 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@4609d8355d7594946b66bef47876090fce6b0842 block: 21365608
+- current block number: 22081893
+
+## Description
+
+MS signer change.
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      values.$members.7:
++        "0x702caCafA54B88e9c54449563Fb2e496e85c78b7"
+      values.$members.6:
+-        "0x702caCafA54B88e9c54449563Fb2e496e85c78b7"
++        "0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA"
+      values.$members.5:
+-        "0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA"
++        "0x890Da36c3dD697CbB88E616668BEDaFA369f3793"
+      values.$members.4:
+-        "0x890Da36c3dD697CbB88E616668BEDaFA369f3793"
++        "0x050b37a12451F188c7bA53D48b8A1adE6D138E71"
+      values.$members.3:
+-        "0x050b37a12451F188c7bA53D48b8A1adE6D138E71"
++        "0x4964D00fA975a7346ee6196a94b07c01ed1cD3CE"
+      values.$threshold:
+-        4
++        5
+      values.multisigThreshold:
+-        "4 of 7 (57%)"
++        "5 of 8 (63%)"
+    }
+```
+
+Generated with discovered.json: 0x052532493c3ea8641917f1a1b54624139777c7a0
+
+# Diff at Tue, 04 Mar 2025 10:40:19 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@98d260b45fe0d2195ce5e629bd7b200c8706e8ba block: 21365608
+- current block number: 21365608
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21365608 (main branch discovery), not current.
+
+```diff
+    contract Multisig 1 (0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346) {
+    +++ description: None
+      sinceBlock:
++        11807778
+    }
+```
+
+```diff
+    contract Multisig 2 (0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567) {
+    +++ description: None
+      sinceBlock:
++        12505303
+    }
+```
+
+```diff
+    contract Multisig 3 (0x225d3822De44E58eE935440E0c0B829C4232086e) {
+    +++ description: None
+      sinceBlock:
++        9907020
+    }
+```
+
+```diff
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      sinceBlock:
++        10269890
+    }
+```
+
+```diff
+    contract TokenGovernance (0x35cc31f63deef017c38d51B038891bAE7d614e86) {
+    +++ description: None
+      sinceBlock:
++        14229421
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      sinceBlock:
++        10269890
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      sinceBlock:
++        10269890
+    }
+```
+
+```diff
+    contract NftFactory (0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D) {
+    +++ description: None
+      sinceBlock:
++        12818185
+    }
+```
+
+```diff
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+    +++ description: None
+      sinceBlock:
++        10269890
+    }
+```
+
+```diff
+    contract Proxy (0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6) {
+    +++ description: None
+      sinceBlock:
++        7708066
+    }
+```
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      sinceBlock:
++        9773819
+    }
+```
+
+Generated with discovered.json: 0x6f25ffc8edca9c5b283f43b6024f52588163f0c2
+
+# Diff at Mon, 20 Jan 2025 11:10:26 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@2c8b4f3d9910bb6371be9b4df87b70856e7d8c64 block: 21365608
+- current block number: 21365608
+
+## Description
+
+Rerun on the same block number. Applies fixes to permissions and via field. Renames permission's target to to/from.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21365608 (main branch discovery), not current.
+
+```diff
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      issuedPermissions.0.target:
+-        "0x38A43F4330f24fe920F943409709fc9A6084C939"
+      issuedPermissions.0.to:
++        "0x38A43F4330f24fe920F943409709fc9A6084C939"
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      receivedPermissions.2.target:
+-        "0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
+      receivedPermissions.2.from:
++        "0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
+      receivedPermissions.1.target:
+-        "0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
+      receivedPermissions.1.from:
++        "0x5290E9582B4FB706EaDf87BB1c129e897e04d06D"
+      receivedPermissions.0.target:
+-        "0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
+      receivedPermissions.0.from:
++        "0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      issuedPermissions.0.target:
+-        "0x38A43F4330f24fe920F943409709fc9A6084C939"
+      issuedPermissions.0.to:
++        "0x38A43F4330f24fe920F943409709fc9A6084C939"
+    }
+```
+
+```diff
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+    +++ description: None
+      issuedPermissions.0.target:
+-        "0x38A43F4330f24fe920F943409709fc9A6084C939"
+      issuedPermissions.0.to:
++        "0x38A43F4330f24fe920F943409709fc9A6084C939"
+    }
+```
+
+Generated with discovered.json: 0x508e143b6c1eb25e0a450918be3b5846d8765cce
+
+# Diff at Mon, 09 Dec 2024 14:41:31 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@02974be0caac873bba9178e618086aa67aaf0b90 block: 20532597
+- current block number: 21365608
+
+## Description
+
+ZkSync Multisig signer replaced.
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      values.$members.2:
+-        "0x733F602bB867c643542cc807a3D32AD1A86cacc1"
++        "0x890Da36c3dD697CbB88E616668BEDaFA369f3793"
+    }
+```
+
+Generated with discovered.json: 0x8f01f894bad9f0f854d5972808549b8416ca4697
+
+# Diff at Mon, 14 Oct 2024 10:58:21 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@1afc77ff111ceb0970e7d09efcc7b2f376b0c281 block: 20532597
+- current block number: 20532597
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20532597 (main branch discovery), not current.
+
+```diff
+    contract Multisig 1 (0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346) {
+    +++ description: None
+      sourceHashes:
++        ["0xd5a33441170541b7df25812e0e3dff6562b2f09ab835a6b431cb9e7198a47605","0x263aadde480629cd3ca5704cc7d4e7df809d437e68f8d9864039801ddf820367"]
+    }
+```
+
+```diff
+    contract Multisig 2 (0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567) {
+    +++ description: None
+      sourceHashes:
++        ["0xd5a33441170541b7df25812e0e3dff6562b2f09ab835a6b431cb9e7198a47605","0x263aadde480629cd3ca5704cc7d4e7df809d437e68f8d9864039801ddf820367"]
+    }
+```
+
+```diff
+    contract Multisig 3 (0x225d3822De44E58eE935440E0c0B829C4232086e) {
+    +++ description: None
+      sourceHashes:
++        ["0xd5a33441170541b7df25812e0e3dff6562b2f09ab835a6b431cb9e7198a47605","0xd42bbf9f7dcd3720a7fc6bdc6edfdfae8800a37d6dd4decfa0ef6ca4a2e88940"]
+    }
+```
+
+```diff
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      sourceHashes:
++        ["0xa4356b8fe23f3499a5494bac2e9e1588ba6976f987fff80e2261aa7ebaa20ce6","0x56f13113f7f861d8b45c18702ac8aa2b4d13d510e35a53f063d80afb36d0785f"]
+    }
+```
+
+```diff
+    contract TokenGovernance (0x35cc31f63deef017c38d51B038891bAE7d614e86) {
+    +++ description: None
+      sourceHashes:
++        ["0xbc5215ffaf06b3d4f7facebe48a2d345c8b0cf97c800aa3f8e644d843a86ae03"]
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      sourceHashes:
++        ["0x1359a771e28c9c71730920ab6bee9509009c60908022ff865419a483f74f702b"]
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      sourceHashes:
++        ["0xa4356b8fe23f3499a5494bac2e9e1588ba6976f987fff80e2261aa7ebaa20ce6","0xcf125cd39e9e7620aea95320666f3e3c19a3ae1da200337d94d11de29e8d97af"]
+    }
+```
+
+```diff
+    contract NftFactory (0x7C770595a2Be9A87CF49B35eA9bC534f1a59552D) {
+    +++ description: None
+      sourceHashes:
++        ["0x92b72fece19e4149fd14048afb074cee743d6f3386911f19d109ab73a8cc0208"]
+    }
+```
+
+```diff
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+    +++ description: None
+      sourceHashes:
++        ["0xa4356b8fe23f3499a5494bac2e9e1588ba6976f987fff80e2261aa7ebaa20ce6","0xa219a8a62191e08fe0803a9bee5d9b4cf73ae71a969ff2e1bcbc00330880de07","0x51cc7e771fc0a90a4ac4c584004569333b8e5355dea67cb3b6a5e19d602e4a7c"]
+    }
+```
+
+```diff
+    contract Proxy (0xAfC2F2D803479A2AF3A72022D54cc0901a0ec0d6) {
+    +++ description: None
+      sourceHashes:
++        ["0x379cacebf61f1aa488b2a43b02fff3f8d7835d9dca8f342a13570553219e6e8c"]
+    }
+```
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      sourceHashes:
++        ["0xd5a33441170541b7df25812e0e3dff6562b2f09ab835a6b431cb9e7198a47605","0x263aadde480629cd3ca5704cc7d4e7df809d437e68f8d9864039801ddf820367"]
+    }
+```
+
+Generated with discovered.json: 0x21c05225811617af316de0e7f0c20f796292fb75
+
+# Diff at Tue, 01 Oct 2024 11:12:18 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@bd754dc73c66120164006054f8d25c5fae9cd910 block: 20532597
+- current block number: 20532597
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20532597 (main branch discovery), not current.
+
+```diff
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      values.$pastUpgrades:
++        []
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      values.$pastUpgrades:
++        []
+    }
+```
+
+Generated with discovered.json: 0x046fa96d96fd51cd8746e0df73ecd05381419119
+
+# Diff at Fri, 30 Aug 2024 08:01:53 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@6c1bd1f41fadf5f2cb1c1805b5a2c6138a3ed35a block: 20532597
+- current block number: 20532597
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20532597 (main branch discovery), not current.
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      receivedPermissions.2.via:
+-        []
+      receivedPermissions.1.via:
+-        []
+      receivedPermissions.0.via:
+-        []
+    }
+```
+
+Generated with discovered.json: 0xd2de767f061bd11047842dfb113f66896a9893bb
+
+# Diff at Fri, 23 Aug 2024 09:56:47 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@67597c7d6c810bc726594446890178150240711e block: 20532597
+- current block number: 20532597
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20532597 (main branch discovery), not current.
+
+```diff
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      values.$upgradeCount:
++        0
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      values.$upgradeCount:
++        0
+    }
+```
+
+Generated with discovered.json: 0xf08beb04559d5a4661c8efb1809292301a9910c4
+
+# Diff at Wed, 21 Aug 2024 10:07:15 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@2f6dde3357bf5d79196b6e94f79d853a6c4ec72b block: 20532597
+- current block number: 20532597
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20532597 (main branch discovery), not current.
+
+```diff
+    contract Governance (0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"upgrade","target":"0x38A43F4330f24fe920F943409709fc9A6084C939","via":[]}]
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      assignedPermissions:
+-        {"upgrade":["0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01","0x5290E9582B4FB706EaDf87BB1c129e897e04d06D","0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"]}
+      receivedPermissions:
++        [{"permission":"upgrade","target":"0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01","via":[]},{"permission":"upgrade","target":"0x5290E9582B4FB706EaDf87BB1c129e897e04d06D","via":[]},{"permission":"upgrade","target":"0xaBEA9132b05A70803a4E85094fD0e1800777fBEF","via":[]}]
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"upgrade","target":"0x38A43F4330f24fe920F943409709fc9A6084C939","via":[]}]
+    }
+```
+
+```diff
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"upgrade","target":"0x38A43F4330f24fe920F943409709fc9A6084C939","via":[]}]
+    }
+```
+
+Generated with discovered.json: 0x13dea30776c0b6c15c1c470dd6f5806ecdd4005c
+
+# Diff at Thu, 15 Aug 2024 07:40:27 GMT:
+
+- chain: ethereum
+- author: Radina Talanova (<nt.radina@gmail.com>)
+- comparing to: main@9a07aead4b3726cc622f66fe9a15e06e63af7acd block: 20525384
+- current block number: 20532597
+
+## Description
+
+Two members of the ZkSync Multisig were replaced.
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      values.$members.5:
+-        "0x9dF8bc0918F357c766A5697E031fF5237c05747A"
++        "0xD613b3a3924D0dE9B4a352ca0669e743cBC3C4AA"
+      values.$members.3:
+-        "0x84298D79ad2CD4eC0d9Ca1959F9d9f40Bc07152f"
++        "0xfB42eb487835B01cbF266f66750a7a89a7247F06"
+    }
+```
+
+Generated with discovered.json: 0x5772fd09bd8af1263c7960d0da910a71bcca5f78
+
+# Diff at Wed, 14 Aug 2024 07:30:30 GMT:
+
+- chain: ethereum
+- author: Radina Talanova (<nt.radina@gmail.com>)
+- comparing to: main@e32dcc268a9af9f45ad205490c9d650c487e04f1 block: 20432768
+- current block number: 20525384
+
+## Description
+
+One ZKsync Multisig member address is replaced with another.
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      values.$members.1:
+-        "0x1567AC0764142e91aB0A9C65C568f0DbE9E168BF"
++        "0x37A71E0C1A5808343D893Db40e12A74e0A387908"
+    }
+```
+
+Generated with discovered.json: 0xf835b3fbe50281f5386c981c6991da4be2560615
+
+# Diff at Fri, 09 Aug 2024 12:03:21 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@bf40aa32f030fd312056ca0ef198c8550467d1d7 block: 20432768
+- current block number: 20432768
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20432768 (main branch discovery), not current.
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      assignedPermissions.upgrade.2:
+-        "0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
++        "0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
+      assignedPermissions.upgrade.0:
+-        "0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"
++        "0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"
+    }
+```
+
+Generated with discovered.json: 0xf569dd45f28789ef24a7f28c9cc03542a20f82b8
+
+# Diff at Fri, 09 Aug 2024 10:13:20 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@1f0da1d0aab7bc6b3b5e54e7e93480bd98e57035 block: 20432768
+- current block number: 20432768
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20432768 (main branch discovery), not current.
+
+```diff
+    contract Multisig 1 (0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346) {
+    +++ description: None
+      values.$multisigThreshold:
+-        "2 of 4 (50%)"
+      values.getOwners:
+-        ["0x4326E446013908fBEEE4ce7b6935219c01854B21","0x4F0eB7DBcF5410C7bA0Ad8D131956f0194Ea803B","0x117Ab3A5D9eaF4F7105e30a757F150504733C3d8","0xA0171d83E3C5F215491FcE4C0884E91674B3C8A3"]
+      values.getThreshold:
+-        2
+      values.$members:
++        ["0x4326E446013908fBEEE4ce7b6935219c01854B21","0x4F0eB7DBcF5410C7bA0Ad8D131956f0194Ea803B","0x117Ab3A5D9eaF4F7105e30a757F150504733C3d8","0xA0171d83E3C5F215491FcE4C0884E91674B3C8A3"]
+      values.$threshold:
++        2
+      values.multisigThreshold:
++        "2 of 4 (50%)"
+    }
+```
+
+```diff
+    contract Multisig 2 (0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567) {
+    +++ description: None
+      values.$multisigThreshold:
+-        "2 of 6 (33%)"
+      values.getOwners:
+-        ["0x1cAe37780Ad92801641d05BA5Bb7E978c99Fc5Da","0xD804aB3355a634aEBd45e1252d6208807defD554","0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193","0x106fc088aBA908130fBC343F2F6d212Ff36150D1","0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe","0xf6dcD4d7141E06B916987C3C46220f6241278a30"]
+      values.getThreshold:
+-        2
+      values.$members:
++        ["0x1cAe37780Ad92801641d05BA5Bb7E978c99Fc5Da","0xD804aB3355a634aEBd45e1252d6208807defD554","0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193","0x106fc088aBA908130fBC343F2F6d212Ff36150D1","0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe","0xf6dcD4d7141E06B916987C3C46220f6241278a30"]
+      values.$threshold:
++        2
+      values.multisigThreshold:
++        "2 of 6 (33%)"
+    }
+```
+
+```diff
+    contract Multisig 3 (0x225d3822De44E58eE935440E0c0B829C4232086e) {
+    +++ description: None
+      values.$multisigThreshold:
+-        "2 of 3 (67%)"
+      values.getOwners:
+-        ["0xB1A308e7F02798377b7acF685E997E3D774c5863","0x0d4E989c7620C8749c9417d2BF218896C767B606","0x18B7ff0370456dB6b7710714D9DCC25a0A3b3016"]
+      values.getThreshold:
+-        2
+      values.$members:
++        ["0xB1A308e7F02798377b7acF685E997E3D774c5863","0x0d4E989c7620C8749c9417d2BF218896C767B606","0x18B7ff0370456dB6b7710714D9DCC25a0A3b3016"]
+      values.$threshold:
++        2
+      values.multisigThreshold:
++        "2 of 3 (67%)"
+    }
+```
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+    +++ description: None
+      assignedPermissions.admin:
+-        ["0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01","0x5290E9582B4FB706EaDf87BB1c129e897e04d06D","0xaBEA9132b05A70803a4E85094fD0e1800777fBEF"]
+      assignedPermissions.upgrade:
++        ["0xaBEA9132b05A70803a4E85094fD0e1800777fBEF","0x5290E9582B4FB706EaDf87BB1c129e897e04d06D","0x34460C0EB5074C29A9F6FE13b8e7E23A0D08aF01"]
+    }
+```
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      values.$multisigThreshold:
+-        "4 of 7 (57%)"
+      values.getOwners:
+-        ["0x050b37a12451F188c7bA53D48b8A1adE6D138E71","0x1567AC0764142e91aB0A9C65C568f0DbE9E168BF","0x733F602bB867c643542cc807a3D32AD1A86cacc1","0x84298D79ad2CD4eC0d9Ca1959F9d9f40Bc07152f","0x702caCafA54B88e9c54449563Fb2e496e85c78b7","0x9dF8bc0918F357c766A5697E031fF5237c05747A","0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc"]
+      values.getThreshold:
+-        4
+      values.$members:
++        ["0x050b37a12451F188c7bA53D48b8A1adE6D138E71","0x1567AC0764142e91aB0A9C65C568f0DbE9E168BF","0x733F602bB867c643542cc807a3D32AD1A86cacc1","0x84298D79ad2CD4eC0d9Ca1959F9d9f40Bc07152f","0x702caCafA54B88e9c54449563Fb2e496e85c78b7","0x9dF8bc0918F357c766A5697E031fF5237c05747A","0x3068415e0F857A5eEd03302A1F7E44f67468d2Bc"]
+      values.$threshold:
++        4
+      values.multisigThreshold:
++        "4 of 7 (57%)"
+    }
+```
+
+Generated with discovered.json: 0x16fdd1682d12a2412ec3cff5e2417644d8a33d5e
+
+# Diff at Thu, 01 Aug 2024 09:21:37 GMT:
+
+- chain: ethereum
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@621480ddcec5eb0839779913d874274122eaf08f block: 19532310
+- current block number: 20432768
+
+## Description
+
+ZKsync lite add one signer (`0xD804aB3355a634aEBd45e1252d6208807defD554`) to their MS2, who is itself just one signer of the SC.
+
+## Watched changes
+
+```diff
+    contract Multisig 2 (0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567) {
+    +++ description: None
+      values.$multisigThreshold:
+-        "2 of 5 (40%)"
++        "2 of 6 (33%)"
+      values.getOwners.5:
++        "0xf6dcD4d7141E06B916987C3C46220f6241278a30"
+      values.getOwners.4:
+-        "0xf6dcD4d7141E06B916987C3C46220f6241278a30"
++        "0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe"
+      values.getOwners.3:
+-        "0xE7A4F2b1772603170111BC633cbCF1AcEbD60BCe"
++        "0x106fc088aBA908130fBC343F2F6d212Ff36150D1"
+      values.getOwners.2:
+-        "0xCE990b1f86e954746AD3a57F5Aa6CFa9CC0c3348"
++        "0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193"
+      values.getOwners.1:
+-        "0x106fc088aBA908130fBC343F2F6d212Ff36150D1"
++        "0xD804aB3355a634aEBd45e1252d6208807defD554"
+      values.getOwners.0:
+-        "0xB0c9C5B5211dE3a75b61BB798887b76AcCD64193"
++        "0x1cAe37780Ad92801641d05BA5Bb7E978c99Fc5Da"
+    }
+```
+
+Generated with discovered.json: 0xbd4699a8b52a6b73b41273be603f65b645c4926e
+
+# Diff at Thu, 28 Mar 2024 11:28:26 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@21187e63b9b90823a55c461c331868a470ce17eb block: 18621109
+- current block number: 19532310
+
+## Description
+
+Update discovery to include the multisig threshold.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 18621109 (main branch discovery), not current.
+
+```diff
+    contract Multisig 1 (0x002A5dc50bbB8d5808e418Aeeb9F060a2Ca17346) {
+    +++ description: None
+      upgradeability.threshold:
++        "2 of 4 (50%)"
+    }
+```
+
+```diff
+    contract Multisig 2 (0x19eD6cc20D44e5cF4Bb4894F50162F72402d8567) {
+    +++ description: None
+      upgradeability.threshold:
++        "2 of 5 (40%)"
+    }
+```
+
+```diff
+    contract Multisig 3 (0x225d3822De44E58eE935440E0c0B829C4232086e) {
+    +++ description: None
+      upgradeability.threshold:
++        "2 of 3 (67%)"
+    }
+```
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+    +++ description: None
+      upgradeability.threshold:
++        "4 of 7 (57%)"
+    }
+```
+
+Generated with discovered.json: 0x458592c7ff46f3e95422b638c0a5a7e9033c8c53
+
+# Diff at Tue, 21 Nov 2023 15:45:04 GMT:
+
+- chain: ethereum
+- author: Radina Talanova (<nt.radina@gmail.com>)
+- comparing to: main@c91f8874e3c01dd4c477491e11cff7b3c664ef34
+
+## Description
+
+Change in the zkSync Era Multisig owners - one address is removed, which makes it a 4/7 Multisig.
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+      values.getOwners[7]:
+-        "0xa265146cA40F52cfC439888D0b4291b5440e6769"
+    }
+```
+
+# Diff at Fri, 13 Oct 2023 12:28:20 GMT:
+
+- chain: ethereum
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@94e530cf4d7e9cfd400a51f99572fc352ba85712
+
+## Description
+
+Updated verification keys. There are also some other changes in Config.sol, but they are an artefact of Etherscan verification and they are not used in practice.
+
+## Watched changes
+
+```diff
+    contract UpgradeGatekeeper (0x38A43F4330f24fe920F943409709fc9A6084C939) {
+      values.versionId:
+-        10
++        11
+    }
+```
+
+```diff
+    contract Verifier (0x5290E9582B4FB706EaDf87BB1c129e897e04d06D) {
+      upgradeability.implementation:
+-        "0xf7Bd436a05678B647D74a88ffcf4445Efc43BDfC"
++        "0x6e95812C432F293b8045811F4B1758285EBDB206"
+    }
+```
+
+## Source code changes
+
+```diff
+.../Verifier/implementation/Config.sol                   | 16 +++++++++++++---
+ .../Verifier/implementation/KeysWithPlonkVerifier.sol    |  2 +-
+ .../Verifier/implementation/Verifier.sol                 |  2 +-
+ .../Verifier/implementation/meta.txt                     |  2 +-
+ 4 files changed, 16 insertions(+), 6 deletions(-)
+```
+
+# Diff at Mon, 02 Oct 2023 13:57:17 GMT:
+
+- chain: ethereum
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@10dbc30af490bd7af5cfca51b827ce3f10182f4d
+
+## Watched changes
+
+```diff
+    contract ZkSync Multisig (0xE24f4870Ab85DE8E356C5fC56138587206c70d99) {
+      values.getOwners.2:
+-        "0xd7aF418d98C0F8EDbaa407fc30ad10382286F36F"
++        "0x733F602bB867c643542cc807a3D32AD1A86cacc1"
+    }
+```
+
+# Diff at Tue, 26 Sep 2023 13:05:32 GMT:
+
+- chain: ethereum
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@cfd4e281f2af40c7c69302b16c1308c0c5651be0
+
+## Watched changes
+
+```diff
+    contract ZkSync (0xaBEA9132b05A70803a4E85094fD0e1800777fBEF) {
+      values.revertedBlocks:
++        [{"totalBlocksCommitted":141,"totalBlocksVerified":141},{"totalBlocksCommitted":859,"totalBlocksVerified":859},{"totalBlocksCommitted":1341,"totalBlocksVerified":1341},{"totalBlocksCommitted":2387,"totalBlocksVerified":2387},{"totalBlocksCommitted":13054,"totalBlocksVerified":13042},{"totalBlocksCommitted":13047,"totalBlocksVerified":13042},{"totalBlocksCommitted":19646,"totalBlocksVerified":19646},{"totalBlocksCommitted":34518,"totalBlocksVerified":34504}]
+    }
+```
+

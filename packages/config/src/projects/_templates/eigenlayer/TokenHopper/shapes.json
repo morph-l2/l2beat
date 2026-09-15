@@ -1,0 +1,12 @@
+{
+  "TokenHopper": {
+    "hash": "0x7106e04c4fffe135ee6ac8257985b5b9b5ae2762440c71a0e6d23e0d905f4652",
+    "address": "eth:0x0ffC6AC10515EE0F83fEE71FCaf5Ea5805256563",
+    "blockNumber": 22188285
+  },
+  "TokenHopper.sol": {
+    "hash": "0xce8151360a224b0b73f56903848c04ca6ddb5b96132e7c2131dc791c824b6308",
+    "address": "eth:0x3374D2E654FFBFEcd35D3F2Ac3e915B394DD7E7d",
+    "blockNumber": 23569083
+  }
+}

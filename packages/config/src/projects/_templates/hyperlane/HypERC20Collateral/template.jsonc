@@ -1,0 +1,23 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "ignoreRelatives": ["wrappedToken", "asset", "feeRecipient", "token"],
+  "fields": {
+    "owner": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "change the ISM and hooks, whitelist new routes and update destination fees."
+        }
+      ]
+    }
+  },
+  "ignoreMethods": [
+    "convertToAssets",
+    "convertToShares",
+    "previewDeposit",
+    "previewMint",
+    "previewRedeem",
+    "previewWithdraw"
+  ],
+  "ignoreInWatchMode": ["totalAssets", "totalSupply"]
+}

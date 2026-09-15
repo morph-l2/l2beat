@@ -1,20 +1,27 @@
+import type {
+  TrackedTxConfigEntry,
+  TrackedTxTransferConfig,
+} from '@l2beat/shared'
 import { assert } from '@l2beat/shared-pure'
-
-import { TrackedTxConfigEntry, TrackedTxTransferConfig } from '@l2beat/shared'
-import { Configuration } from '../../../tools/uif/multi/types'
-import { BigQueryTransferResult, TrackedTxTransferResult } from '../types/model'
+import type { Configuration } from '../../../tools/uif/multi/types'
+import type {
+  DuneTransferResult,
+  TrackedTxTransferResult,
+} from '../types/model'
+import { calculateCalldataGasUsed } from './calculateCalldataGasUsed'
 
 export function transformTransfersQueryResult(
   configs: Configuration<
     TrackedTxConfigEntry & { params: TrackedTxTransferConfig }
   >[],
-  queryResults: BigQueryTransferResult[],
+  queryResults: DuneTransferResult[],
 ): TrackedTxTransferResult[] {
   return queryResults.flatMap((r) => {
     const matchingConfigs = configs.filter(
       (t) =>
-        t.properties.params.from === r.from_address &&
-        t.properties.params.to === r.to_address,
+        (t.properties.params.from
+          ? t.properties.params.from === r.from
+          : true) && t.properties.params.to === r.to,
     )
 
     assert(
@@ -32,15 +39,19 @@ export function transformTransfersQueryResult(
           subtype: matchingConfig.properties.subtype,
           hash: r.hash,
           blockNumber: r.block_number,
-          blockTimestamp: r.block_timestamp,
-          fromAddress: r.from_address,
-          toAddress: r.to_address,
-          receiptGasUsed: r.receipt_gas_used,
+          blockTimestamp: r.block_time,
+          fromAddress: r.from,
+          toAddress: r.to,
+          gasUsed: r.gas_used,
           gasPrice: r.gas_price,
           dataLength: r.data_length,
-          calldataGasUsed: r.calldata_gas_used,
-          receiptBlobGasUsed: r.receipt_blob_gas_used,
-          receiptBlobGasPrice: r.receipt_blob_gas_price,
+          calldataGasUsed: calculateCalldataGasUsed(
+            r.block_number,
+            r.data_length,
+            r.non_zero_bytes,
+            r.gas_used,
+          ),
+          blobVersionedHashes: r.blob_versioned_hashes,
         }) as const,
     )
   })

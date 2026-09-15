@@ -1,29 +1,30 @@
-import { ContractParameters } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { ChainSpecificAddress } from '@l2beat/shared-pure'
 import { expect } from 'earl'
 
 import { diffDiscovery } from './diffDiscovery'
+import type { EntryParameters } from './types'
 
 describe(diffDiscovery.name, () => {
-  const ADDRESS_A = EthereumAddress.random()
-  const ADDRESS_B = EthereumAddress.random()
-  const ADDRESS_C = EthereumAddress.random()
-  const ADDRESS_D = EthereumAddress.random()
-  const ADDRESS_E = EthereumAddress.random()
+  const ADDRESS_A = ChainSpecificAddress.random()
+  const ADDRESS_B = ChainSpecificAddress.random()
+  const ADDRESS_C = ChainSpecificAddress.random()
+  const ADDRESS_D = ChainSpecificAddress.random()
+  const ADDRESS_E = ChainSpecificAddress.random()
 
-  const ADMIN = EthereumAddress.random()
-  const IMPLEMENTATION = EthereumAddress.random()
+  const ADMIN = ChainSpecificAddress.random()
+  const IMPLEMENTATION = ChainSpecificAddress.random()
   it('finds changes, deleted and created contracts', () => {
-    const committed: ContractParameters[] = [
+    const committed: EntryParameters[] = [
       //finds changes
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
         ignoreInWatchMode: ['B'],
         values: {
-          $admin: ADMIN,
-          $implementation: IMPLEMENTATION,
+          $admin: ADMIN.toString(),
+          $implementation: IMPLEMENTATION.toString(),
           A: true,
           //ignores fields included in ignore in watch mode
           B: 'thisWillChange',
@@ -31,75 +32,82 @@ describe(diffDiscovery.name, () => {
       },
       //finds deleted contracts
       {
+        type: 'Contract',
         name: 'B',
         address: ADDRESS_B,
         proxyType: 'EIP1967 proxy',
         values: {
-          $admin: ADMIN,
-          $implementation: IMPLEMENTATION,
+          $admin: ADMIN.toString(),
+          $implementation: IMPLEMENTATION.toString(),
         },
       },
       //skips unchanged contracts
       {
+        type: 'Contract',
         name: 'D',
         address: ADDRESS_D,
         proxyType: 'EIP1967 proxy',
         values: {
-          $admin: ADMIN,
-          $implementation: IMPLEMENTATION,
+          $admin: ADMIN.toString(),
+          $implementation: IMPLEMENTATION.toString(),
         },
       },
       {
+        type: 'Contract',
         name: 'E',
         address: ADDRESS_E,
         unverified: true,
         proxyType: 'EIP1967 proxy',
         values: {
-          $admin: ADMIN,
-          $implementation: IMPLEMENTATION,
+          $admin: ADMIN.toString(),
+          $implementation: IMPLEMENTATION.toString(),
         },
       },
     ]
-    const discovered: ContractParameters[] = [
+    const discovered: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
         ignoreInWatchMode: ['B'],
         values: {
-          $admin: ADMIN,
-          $implementation: IMPLEMENTATION,
+          $admin: ADMIN.toString(),
+          $implementation: IMPLEMENTATION.toString(),
           A: false,
           B: 'itChanged',
         },
       },
       //finds new contracts
       {
+        type: 'Contract',
         name: 'C',
         address: ADDRESS_C,
         proxyType: 'EIP1967 proxy',
         values: {
-          $admin: ADMIN,
-          $implementation: IMPLEMENTATION,
+          $admin: ADMIN.toString(),
+          $implementation: IMPLEMENTATION.toString(),
         },
       },
       {
+        type: 'Contract',
         name: 'D',
         address: ADDRESS_D,
         proxyType: 'EIP1967 proxy',
         values: {
-          $admin: ADMIN,
-          $implementation: IMPLEMENTATION,
+          $admin: ADMIN.toString(),
+          $implementation: IMPLEMENTATION.toString(),
         },
       },
       {
+        type: 'Contract',
         name: 'E',
         address: ADDRESS_E,
         unverified: true,
         proxyType: 'EIP1967 proxy',
         values: {
-          $admin: ADMIN,
-          $implementation: IMPLEMENTATION,
+          $admin: ADMIN.toString(),
+          $implementation: IMPLEMENTATION.toString(),
         },
       },
     ]
@@ -110,7 +118,9 @@ describe(diffDiscovery.name, () => {
       {
         name: 'A',
         address: ADDRESS_A,
+        addressType: 'Contract',
         description: undefined,
+        template: undefined,
         diff: [
           {
             key: 'values.A',
@@ -118,36 +128,42 @@ describe(diffDiscovery.name, () => {
             after: 'false',
             description: undefined,
             severity: undefined,
+            type: undefined,
           },
         ],
       },
       {
         name: 'B',
         address: ADDRESS_B,
+        addressType: 'Contract',
         description: undefined,
+        template: undefined,
         type: 'deleted',
       },
       {
         name: 'C',
         address: ADDRESS_C,
+        addressType: 'Contract',
         description: undefined,
+        template: undefined,
         type: 'created',
       },
     ])
   })
 
   it('uses previous contract for description when deleted', () => {
-    const committed: ContractParameters[] = [
+    const committed: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
         ignoreInWatchMode: ['B'],
-        descriptions: ['hello', 'world'],
+        description: 'hello world',
         values: {},
       },
     ]
-    const discovered: ContractParameters[] = []
+    const discovered: EntryParameters[] = []
 
     const result = diffDiscovery(committed, discovered)
 
@@ -155,21 +171,24 @@ describe(diffDiscovery.name, () => {
       {
         name: 'A',
         address: ADDRESS_A,
+        addressType: 'Contract',
         description: 'hello world',
+        template: undefined,
         type: 'deleted',
       },
     ])
   })
 
   it('uses current contract for description when created', () => {
-    const committed: ContractParameters[] = []
-    const discovered: ContractParameters[] = [
+    const committed: EntryParameters[] = []
+    const discovered: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
         ignoreInWatchMode: ['B'],
-        descriptions: ['hello', 'world'],
+        description: 'hello world',
         values: {},
       },
     ]
@@ -180,30 +199,34 @@ describe(diffDiscovery.name, () => {
       {
         name: 'A',
         address: ADDRESS_A,
+        addressType: 'Contract',
         description: 'hello world',
+        template: undefined,
         type: 'created',
       },
     ])
   })
 
   it('uses current contract for description when modified', () => {
-    const committed: ContractParameters[] = [
+    const committed: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
         ignoreInWatchMode: ['B'],
-        descriptions: ['hello', 'world'],
+        description: 'hello world',
         values: { v: 1 },
       },
     ]
-    const discovered: ContractParameters[] = [
+    const discovered: EntryParameters[] = [
       {
+        type: 'Contract',
         name: 'A',
         address: ADDRESS_A,
         proxyType: 'EIP1967 proxy',
         ignoreInWatchMode: ['B'],
-        descriptions: ['hello', 'sailor'],
+        description: 'hello sailor',
         values: { v: 2 },
       },
     ]
@@ -214,13 +237,15 @@ describe(diffDiscovery.name, () => {
       {
         name: 'A',
         address: ADDRESS_A,
+        addressType: 'Contract',
         diff: [
           {
-            after: '"sailor"',
-            before: '"world"',
+            after: '"hello sailor"',
+            before: '"hello world"',
             description: undefined,
-            key: 'descriptions.1',
+            key: 'description',
             severity: undefined,
+            type: undefined,
           },
           {
             after: '2',
@@ -228,9 +253,11 @@ describe(diffDiscovery.name, () => {
             description: undefined,
             key: 'values.v',
             severity: undefined,
+            type: undefined,
           },
         ],
         description: 'hello sailor',
+        template: undefined,
       },
     ])
   })

@@ -1,12 +1,12 @@
-import { assert, EthereumAddress } from '@l2beat/shared-pure'
+import { assert, type ChainSpecificAddress } from '@l2beat/shared-pure'
 
-import { ScalingProjectPermission } from '../../common'
+import type { ProjectPermission } from '../../types'
 import { delayDescriptionFromSeconds } from '../../utils/delayDescription'
 import { ProjectDiscovery } from '../ProjectDiscovery'
 import { getProxyGovernance } from './getProxyGovernance'
 
 // NOTE(radomski): The way SHARPVerifier works after the upgrade is the
-// following: Everything goes through SHARPVerifierProxy which calls CallProxy
+// following: Everything goes through SHARPVerifierCallProxy which calls CallProxy
 // as a fallback. CallProxy then calls the new SHARPVerifier that still
 // references the old SHARPVerifier. When verifying a proof the new
 // SHARPVerifier checks if a fact is valid. Since the old fact registry has
@@ -40,7 +40,7 @@ import { getProxyGovernance } from './getProxyGovernance'
 const discovery = new ProjectDiscovery('shared-sharp-verifier')
 
 const SHARP_VERIFIER_PROXY = discovery.getContractDetails(
-  'SHARPVerifierProxy',
+  'SHARPVerifierCallProxy',
   'CallProxy for GpsStatementVerifier.',
 )
 
@@ -56,12 +56,7 @@ const CAIRO_BOOTLOADER_PROGRAM = discovery.getContractDetails(
 
 const MEMORY_FACT_REGISTRY = discovery.getContractDetails(
   'MemoryPageFactRegistry',
-  'MemoryPageFactRegistry is one of the many contracts used by SHARP verifier. This one is important as it registers all necessary on-chain data.',
-)
-
-const OLD_MEMORY_FACT_REGISTRY = discovery.getContractDetails(
-  'OldMemoryPageFactRegistry',
-  'Same as MemoryPageFactRegistry but stores facts proved by the old SHARP Verifier, used as a fallback.',
+  'MemoryPageFactRegistry is one of the many contracts used by SHARP verifier. This one is important as it registers all necessary onchain data.',
 )
 
 const FRI_STATEMENT_CONTRACT = discovery.getContractDetails(
@@ -75,7 +70,7 @@ const MERKLE_STATEMENT_CONTRACT = discovery.getContractDetails(
 )
 
 const upgradeDelay = discovery.getContractValue<number>(
-  'SHARPVerifierProxy',
+  'SHARPVerifierCallProxy',
   'StarkWareProxy_upgradeDelay',
 )
 
@@ -86,16 +81,15 @@ const SHARP_VERIFIER_CONTRACTS = [
   MERKLE_STATEMENT_CONTRACT,
   CAIRO_BOOTLOADER_PROGRAM,
   MEMORY_FACT_REGISTRY,
-  OLD_MEMORY_FACT_REGISTRY,
 ]
 
 export function getSHARPVerifierContracts(
   projectDiscovery: ProjectDiscovery,
-  verifierAddress: EthereumAddress,
+  verifierAddress: ChainSpecificAddress,
 ) {
   assert(
     verifierAddress === SHARP_VERIFIER_PROXY.address,
-    `SHARPVerifierProxy address mismatch. This project probably uses a different SHARP verifier (${projectDiscovery.projectName})`,
+    `SHARPVerifierCallProxy address mismatch. This project probably uses a different SHARP verifier (${projectDiscovery.projectName})`,
   )
 
   return SHARP_VERIFIER_CONTRACTS
@@ -103,23 +97,25 @@ export function getSHARPVerifierContracts(
 
 export function getSHARPVerifierGovernors(
   projectDiscovery: ProjectDiscovery,
-  verifierAddress: EthereumAddress,
-): ScalingProjectPermission[] {
+  verifierAddress: ChainSpecificAddress,
+): ProjectPermission[] {
   assert(
-    verifierAddress === SHARP_VERIFIER_PROXY.address,
-    `SHARPVerifierProxy address mismatch. This project probably uses a different SHARP verifier (${projectDiscovery.projectName})`,
+    verifierAddress === SHARP_VERIFIER_PROXY.address &&
+      getProxyGovernance(discovery, 'SHARPVerifierCallProxy')[0].address ===
+        discovery.getContract('SHARP Multisig').address &&
+      getProxyGovernance(discovery, 'SHARPVerifierCallProxy').length === 1,
+    `SHARPVerifierCallProxy or governance address mismatch. This project probably uses a different SHARP verifier or the admin has changed (${projectDiscovery.projectName})`,
   )
 
   return [
-    {
-      name: 'SHARP Verifier Governors',
-      accounts: getProxyGovernance(discovery, 'SHARPVerifierProxy'),
-      description:
-        'Can upgrade implementation of SHARP Verifier, potentially with code approving fraudulent state. ' +
+    projectDiscovery.getPermissionDetails(
+      'SHARP Verifier Governors',
+      getProxyGovernance(discovery, 'SHARPVerifierCallProxy'),
+      'Can upgrade implementation of SHARP Verifier, potentially with code approving fraudulent state. ' +
         delayDescriptionFromSeconds(upgradeDelay),
-    },
-    ...discovery.getMultisigPermission(
-      'SHARPVerifierGovernorMultisig',
+    ),
+    discovery.getMultisigPermission(
+      'SHARP Multisig',
       'SHARP Verifier Governor.',
     ),
   ]

@@ -1,0 +1,74 @@
+import type { ProjectScalingStage } from '@l2beat/config'
+
+import { StageBadge } from '~/components/badge/StageBadge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/core/tooltip/Tooltip'
+import { TableLink } from '~/components/table/TableLink'
+import { EmergencyIcon } from '~/icons/Emergency'
+import { StopwatchIcon } from '~/icons/Stopwatch'
+import { WalkAwayNotPassedIcon } from '~/icons/WalkAwayNotPassed'
+import { WalkAwayPassedIcon } from '~/icons/WalkAwayPassed'
+import { StageTooltip } from './StageTooltip'
+
+interface StageCellProps {
+  stageConfig: ProjectScalingStage
+  isAppchain: boolean
+  href?: string
+  emergencyWarning?: string
+  walkAway?: 'passed' | 'not-passed'
+}
+
+export function StageCell({
+  stageConfig,
+  isAppchain,
+  href,
+  emergencyWarning,
+  walkAway,
+}: StageCellProps) {
+  const content = (
+    <div className="flex gap-1">
+      <StageBadge
+        stage={stageConfig.stage}
+        isAppchain={isAppchain}
+        className="flex flex-col gap-px"
+      />
+      {stageConfig.stage !== 'NotApplicable' &&
+        stageConfig.stage !== 'UnderReview' &&
+        stageConfig.downgradePending &&
+        !emergencyWarning && <StopwatchIcon className="mt-px md:mt-[3px]" />}
+      {emergencyWarning && <EmergencyIcon className="mt-px md:mt-[3px]" />}
+      {walkAway === 'passed' && (
+        <WalkAwayPassedIcon className="-mt-px size-5 fill-positive md:size-6" />
+      )}
+      {walkAway === 'not-passed' && (
+        <WalkAwayNotPassedIcon className="-mt-px size-5 fill-negative md:size-6" />
+      )}
+    </div>
+  )
+
+  if (stageConfig.stage === 'NotApplicable') {
+    return content
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger disabledOnMobile className="h-full">
+        <TableLink href={href}>{content}</TableLink>
+      </TooltipTrigger>
+      <TooltipContent>
+        <StageTooltip
+          stageConfig={stageConfig}
+          isAppchain={isAppchain}
+          emergencyWarning={emergencyWarning}
+          walkAway={walkAway}
+        />
+        <p className="mt-3 text-label-value-13 text-secondary">
+          Click to view details
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  )
+}

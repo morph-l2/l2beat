@@ -1,37 +1,40 @@
-import { assert, Logger, RateLimiter } from '@l2beat/backend-tools'
+import { type Logger, RateLimiter } from '@l2beat/backend-tools'
+import type { HttpClient } from '@l2beat/shared'
 import {
+  assert,
   EthereumAddress,
   Hash256,
   Retries,
   UnixTime,
-  stringAsInt,
 } from '@l2beat/shared-pure'
-
-import { ContractSource } from './IEtherscanClient'
-
-import { z } from 'zod'
+import { v } from '@l2beat/validate'
 import {
   ContractCreatorAndCreationTxHashResult,
   ContractSourceResult,
   OneTransactionListResult,
-  TwentyTransactionListResult,
+  TransactionListResult,
   tryParseEtherscanResponse,
 } from './EtherscanModels'
-import { HttpClient } from './HttpClient'
-import {
+import type {
+  ContractSource,
   EtherscanUnsupportedMethods,
   IEtherscanClient,
 } from './IEtherscanClient'
-import { getErrorMessage } from './getErrorMessage'
 import { jsonToHumanReadableAbi } from './jsonToHumanReadableAbi'
 
 class EtherscanError extends Error {}
 
+function isRateLimitError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const message = (error as { message?: unknown }).message
+  return typeof message === 'string' && message.includes('rate limit reached')
+}
+
 const shouldRetry = Retries.exponentialBackOff({
   stepMs: 2000, // 4s, 8s, 16s, 32s, 64s, 128s, 256s, 512s, 1024s, 2048s
   maxAttempts: 10,
-  maxDistanceMs: Infinity,
-  notifyAfterAttempts: Infinity,
+  maxDistanceMs: Number.POSITIVE_INFINITY,
+  notifyAfterAttempts: Number.POSITIVE_INFINITY,
 })
 
 export class EtherscanClient implements IEtherscanClient {
@@ -42,11 +45,12 @@ export class EtherscanClient implements IEtherscanClient {
 
   constructor(
     protected readonly httpClient: HttpClient,
+    protected readonly logger: Logger,
     protected readonly url: string,
     protected readonly apiKey: string,
     protected readonly minTimestamp: UnixTime,
     protected readonly unsupportedMethods: EtherscanUnsupportedMethods = {},
-    protected readonly logger = Logger.SILENT,
+    protected readonly defaultParams: Record<string, string> = {},
   ) {
     this.callWithRetries = this.rateLimiter.wrap(
       this.callWithRetries.bind(this),
@@ -58,16 +62,20 @@ export class EtherscanClient implements IEtherscanClient {
    */
   static createForDiscovery(
     httpClient: HttpClient,
+    logger: Logger,
     url: string,
     apiKey: string,
     unsupportedMethods: EtherscanUnsupportedMethods = {},
+    defaultParams: Record<string, string> = {},
   ): EtherscanClient {
     return new EtherscanClient(
       httpClient,
+      logger,
       url,
       apiKey,
-      new UnixTime(0),
+      0,
       unsupportedMethods,
+      defaultParams,
     )
   }
 
@@ -79,16 +87,20 @@ export class EtherscanClient implements IEtherscanClient {
   //
   // To mitigate this, we need to go back in time by 10 minutes until we find a block
   async getBlockNumberAtOrBefore(timestamp: UnixTime): Promise<number> {
-    let current = new UnixTime(timestamp.toNumber())
+    let current = UnixTime(timestamp)
 
-    while (current.gte(this.minTimestamp)) {
+    while (current >= this.minTimestamp) {
       try {
         const result = await this.callWithRetries('block', 'getblocknobytime', {
           timestamp: current.toString(),
           closest: 'before',
         })
 
-        return stringAsInt().parse(result)
+        return v
+          .string()
+          .transform(Number)
+          .check(Number.isInteger)
+          .parse(result)
       } catch (error) {
         if (typeof error !== 'object') {
           const errorString =
@@ -101,11 +113,22 @@ export class EtherscanClient implements IEtherscanClient {
           throw new Error(errorObject.message)
         }
 
-        current = current.add(-10, 'minutes')
+        current = current - 10 * UnixTime.MINUTE
       }
     }
 
     throw new Error('Could not fetch block number')
+  }
+
+  private parseContractName(name: string): string {
+    if (name.includes(':')) {
+      const parts = name.split(':')
+      assert(parts.length === 2, 'Expected only a single colon')
+      // biome-ignore lint/style/noNonNullAssertion: we know it's there
+      return parts[1]!
+    }
+
+    return name
   }
 
   async getContractSource(address: EthereumAddress): Promise<ContractSource> {
@@ -121,6 +144,8 @@ export class EtherscanClient implements IEtherscanClient {
 
     let files: Record<string, string> = {}
     let remappings: string[] = []
+    let libraries: Record<string, EthereumAddress> = {}
+    let compilerSettings: ContractSource['compilerSettings'] | undefined
     const name = result.ContractName.trim()
     const solidityVersion = result.CompilerVersion
     const source = result.SourceCode
@@ -134,20 +159,26 @@ export class EtherscanClient implements IEtherscanClient {
         )
         files = Object.fromEntries(decodedSource.sources)
         remappings = decodedSource.remappings
+        libraries = decodedSource.libraries
+        compilerSettings = decodedSource.compilerSettings
       } catch (e) {
-        console.error(e)
-        console.log(source)
+        this.logger.error(e)
       }
+
+      compilerSettings ??= parseEtherscanCompilerSettings(result)
     }
 
     return {
-      name,
+      name: this.parseContractName(name),
+      rootFile: parsePath(result.ContractFileName),
       isVerified,
       abi: isVerified ? jsonToHumanReadableAbi(result.ABI) : [],
       solidityVersion,
       constructorArguments: result.ConstructorArguments,
       remappings,
+      libraries,
       files,
+      compilerSettings,
     }
   }
 
@@ -187,57 +218,32 @@ export class EtherscanClient implements IEtherscanClient {
     const resp = OneTransactionListResult.parse(response)[0]
     assert(resp)
 
-    return new UnixTime(parseInt(resp.timeStamp, 10))
+    return UnixTime(Number.parseInt(resp.timeStamp, 10))
   }
 
-  async getLast10OutgoingTxs(
+  async getAtMost10RecentOutgoingTxs(
     address: EthereumAddress,
     blockNumber: number,
   ): Promise<{ input: string; to: EthereumAddress; hash: Hash256 }[]> {
-    // NOTE(radomski): There is a retry here because Etherscan sometimes
-    // responds with 200, no error, everything is supposed to be fine but the
-    // amount of txs they returns is less then expected. This happens every
-    // so often, but makes our UpdateMonitor channel rife with processing
-    // errors
-    let attempts = 0
-    while (true) {
-      try {
-        const response = await this.callWithRetries('account', 'txlist', {
-          address: address.toString(),
-          startblock: '0',
-          endblock: blockNumber.toString(),
-          page: '1',
-          offset: '20',
-          sort: 'desc',
-        })
+    const response = await this.callWithRetries('account', 'txlist', {
+      address: address.toString(),
+      startblock: '0',
+      endblock: blockNumber.toString(),
+      page: '1',
+      offset: '50',
+      sort: 'desc',
+    })
 
-        const resp = TwentyTransactionListResult.parse(response)
-        assert(resp)
-        const outgoingTxs = resp
-          .filter((tx) => EthereumAddress(tx.from) === address)
-          .slice(0, 10)
+    const resp = TransactionListResult.parse(response)
+    const outgoingTxs = resp
+      .filter((tx) => EthereumAddress(tx.from) === address)
+      .slice(0, 10)
 
-        assert(
-          outgoingTxs.length === 10,
-          'Not enough outgoing transactions, expected 10, received ' +
-            outgoingTxs.length.toString(),
-        )
-
-        return outgoingTxs.map((r) => ({
-          input: r.input,
-          to: EthereumAddress(r.to),
-          hash: Hash256(r.hash),
-        }))
-      } catch (error) {
-        attempts++
-        const result = shouldRetry(attempts, error)
-        if (result.shouldStop) {
-          throw error
-        }
-        this.logger.warn('Retrying', { attempts, error })
-        await new Promise((resolve) => setTimeout(resolve, result.executeAfter))
-      }
-    }
+    return outgoingTxs.map((r) => ({
+      input: r.input,
+      to: EthereumAddress(r.to),
+      hash: Hash256(r.hash),
+    }))
   }
 
   async callWithRetries(
@@ -255,7 +261,9 @@ export class EtherscanClient implements IEtherscanClient {
         if (result.shouldStop) {
           throw error
         }
-        this.logger.warn('Retrying', { attempts, error })
+        if (!isRateLimitError(error)) {
+          this.logger.warn('Retrying', { attempts, error })
+        }
         await new Promise((resolve) => setTimeout(resolve, result.executeAfter))
       }
     }
@@ -266,71 +274,107 @@ export class EtherscanClient implements IEtherscanClient {
     action: string,
     params: Record<string, string>,
   ): Promise<unknown> {
+    const queryParams = {
+      ...this.defaultParams,
+      ...params,
+    }
+
     const query = new URLSearchParams({
       module,
       action,
-      ...params,
+      ...queryParams,
       apikey: this.apiKey,
     })
     const url = `${this.url}?${query.toString()}`
 
-    const start = Date.now()
-    const { httpResponse, error } = await this.httpClient
-      .fetch(url, { timeout: this.timeoutMs })
-      .then(
-        (httpResponse) => ({ httpResponse, error: undefined }),
-        (error: unknown) => ({ httpResponse: undefined, error }),
-      )
-    const timeMs = Date.now() - start
+    const response = await this.httpClient.fetch(url, {
+      timeout: this.timeoutMs,
+    })
 
-    if (!httpResponse) {
-      const message = getErrorMessage(error)
-      this.recordError(module, action, timeMs, message)
-      throw error
-    }
-
-    const text = await httpResponse.text()
-    const etherscanResponse = tryParseEtherscanResponse(text)
-
-    if (!httpResponse.ok) {
-      this.recordError(module, action, timeMs, text)
-      throw new Error(
-        `Server responded with non-2XX result: ${httpResponse.status} ${httpResponse.statusText}`,
-      )
-    }
+    const etherscanResponse = tryParseEtherscanResponse(response)
 
     if (!etherscanResponse) {
-      const message = `Invalid Etherscan response [${text}] for request [${url}].`
-      this.recordError(module, action, timeMs, message)
+      const message = `Invalid Etherscan response [${JSON.stringify(response)}] for request [${url}].`
       throw new TypeError(message)
     }
 
     if (etherscanResponse.message !== 'OK') {
-      this.recordError(module, action, timeMs, etherscanResponse.result)
       throw new EtherscanError(etherscanResponse.result)
     }
 
-    this.logger.debug({ type: 'success', timeMs, module, action })
     return etherscanResponse.result
-  }
-
-  protected recordError(
-    module: string,
-    action: string,
-    timeMs: number,
-    message: string,
-  ): void {
-    this.logger.debug({ type: 'error', message, timeMs, module, action })
   }
 }
 
-const Sources = z.record(z.object({ content: z.string() }))
-const Settings = z.object({ remappings: z.array(z.string()).optional() })
-const EtherscanSource = z.object({ sources: Sources, settings: Settings })
+const Sources = v.record(v.string(), v.object({ content: v.string() }))
+const Settings = v.object({
+  remappings: v.array(v.string()).optional(),
+  libraries: v.record(v.string(), v.record(v.string(), v.string())).optional(),
+  optimizer: v
+    .object({
+      enabled: v.boolean().optional(),
+      runs: v.number().optional(),
+    })
+    .optional(),
+  evmVersion: v.string().optional(),
+  viaIR: v.boolean().optional(),
+  metadata: v
+    .object({
+      bytecodeHash: v.string().optional(),
+      useLiteralContent: v.boolean().optional(),
+      appendCBOR: v.boolean().optional(),
+    })
+    .optional(),
+  debug: v
+    .object({
+      revertStrings: v.string(),
+      debugInfo: v.array(v.string()).optional(),
+    })
+    .optional(),
+})
+const EtherscanSource = v.object({ sources: Sources, settings: Settings })
 
-export interface DecodedSource {
+interface DecodedSource {
   sources: [string, string][]
   remappings: string[]
+  libraries: Record<string, EthereumAddress>
+  compilerSettings?: ContractSource['compilerSettings']
+}
+
+function parseEtherscanCompilerSettings(
+  result: import('./EtherscanModels').ContractSource,
+): ContractSource['compilerSettings'] | undefined {
+  const optimizerEnabled = result.OptimizationUsed === '1'
+  const optimizerRuns = Number(result.Runs)
+  const optimizer = {
+    enabled: result.OptimizationUsed === '' ? undefined : optimizerEnabled,
+    runs: Number.isInteger(optimizerRuns) ? optimizerRuns : undefined,
+  }
+  const hasOptimizer =
+    optimizer.enabled !== undefined || optimizer.runs !== undefined
+  const evmVersion = result.EVMVersion === '' ? undefined : result.EVMVersion
+
+  if (!hasOptimizer && evmVersion === undefined) {
+    return undefined
+  }
+
+  return {
+    optimizer: hasOptimizer ? optimizer : undefined,
+    evmVersion,
+  }
+}
+
+function parsePath(path: string | undefined): string | undefined {
+  if (path === undefined) return undefined
+
+  if (path.includes(':')) {
+    const parts = path.split(':')
+    assert(parts.length === 2, 'Expected only a single colon')
+    // biome-ignore lint/style/noNonNullAssertion: we know it's there
+    return parts[0]!
+  }
+
+  return path
 }
 
 function decodeEtherscanSource(
@@ -338,6 +382,7 @@ function decodeEtherscanSource(
   source: string,
   solidityVersion: string,
 ): DecodedSource {
+  source = source.trim()
   if (!source.startsWith('{')) {
     let extension = 'sol'
     if (solidityVersion.startsWith('vyper')) {
@@ -347,6 +392,7 @@ function decodeEtherscanSource(
     return {
       sources: [[`${name}.${extension}`, source]],
       remappings: [],
+      libraries: {},
     }
   }
 
@@ -358,19 +404,42 @@ function decodeEtherscanSource(
   const parsed: unknown = JSON.parse(source)
   let validated: Record<string, { content: string }>
   let remappings: string[] = []
+  let compilerSettings: ContractSource['compilerSettings'] | undefined
+  const libraries: Record<string, EthereumAddress> = {}
   try {
     const verified = EtherscanSource.parse(parsed)
+    if (verified.settings.libraries !== undefined) {
+      for (const [key, value] of Object.entries(verified.settings.libraries)) {
+        if (Object.keys(value).length === 0) {
+          continue
+        }
+
+        for (const [name, address] of Object.entries(value)) {
+          libraries[`${key}/${name}`] = EthereumAddress(address)
+        }
+      }
+    }
+
     validated = verified.sources
     remappings = verified.settings.remappings ?? []
+    compilerSettings = {
+      optimizer: verified.settings.optimizer,
+      evmVersion: verified.settings.evmVersion,
+      viaIR: verified.settings.viaIR,
+      metadata: verified.settings.metadata,
+      debug: verified.settings.debug,
+    }
   } catch {
     validated = Sources.parse(parsed)
   }
 
   return {
     sources: Object.entries(validated).map(([name, { content }]) => [
-      name,
+      parsePath(name) ?? name,
       content,
     ]),
     remappings,
+    libraries,
+    compilerSettings,
   }
 }

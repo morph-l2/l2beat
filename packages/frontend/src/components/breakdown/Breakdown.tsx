@@ -1,7 +1,8 @@
-import React from 'react'
+import { assert } from '@l2beat/shared-pure'
+import type { CSSProperties } from 'react'
 
-import { unifyPercentagesAsIntegers } from '../../utils'
-import { cn } from '../../utils/cn'
+import { cn } from '~/utils/cn'
+import { unifyPercentagesAsIntegers } from '~/utils/math'
 
 interface BreakdownProps {
   values: BreakdownValue[]
@@ -9,9 +10,10 @@ interface BreakdownProps {
   className?: string
 }
 
-interface BreakdownValue {
+export interface BreakdownValue {
   value: number
-  className: string
+  className?: string
+  style?: CSSProperties
 }
 
 export function Breakdown({ values, gap = 1, className }: BreakdownProps) {
@@ -23,12 +25,13 @@ export function Breakdown({ values, gap = 1, className }: BreakdownProps) {
         <div
           key={`breakdown-group-${i}`}
           className={cn(
-            'h-full last:mr-0 last:rounded-r first:rounded-l',
+            'h-full first:rounded-l last:mr-0 last:rounded-r',
             g.className,
           )}
           style={{
-            width: `calc(${g.weight}%)`,
-            margin: `0px ${gap / 2}px`,
+            ...g.style,
+            width: `${g.weight}%`,
+            marginRight: i !== groups.length - 1 ? `${gap}px` : undefined,
           }}
         />
       ))}
@@ -38,7 +41,8 @@ export function Breakdown({ values, gap = 1, className }: BreakdownProps) {
 
 interface BreakdownGroup {
   weight: number
-  className: string
+  className?: string
+  style?: CSSProperties
 }
 
 function getBreakdownGroups(values: BreakdownValue[]): BreakdownGroup[] {
@@ -55,6 +59,7 @@ function getBreakdownGroups(values: BreakdownValue[]): BreakdownGroup[] {
   const groups = values.map((v) => ({
     weight: (v.value / totalValue) * 100,
     className: v.className,
+    style: v.style,
   }))
 
   const toFilterOut = groups.filter((g) => g.weight < 2)
@@ -72,8 +77,13 @@ function getBreakdownGroups(values: BreakdownValue[]): BreakdownGroup[] {
   const weights = unifyPercentagesAsIntegers(
     filteredGroups.map((g) => g.weight),
   )
-  return filteredGroups.map((f, i) => ({
-    weight: weights[i],
-    className: f.className,
-  }))
+  return filteredGroups.map((f, i) => {
+    const weight = weights[i]
+    assert(weight !== undefined, 'Weights should not be undefined')
+    return {
+      weight,
+      className: f.className,
+      style: f.style,
+    }
+  })
 }

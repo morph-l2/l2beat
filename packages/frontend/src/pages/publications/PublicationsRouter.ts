@@ -1,0 +1,84 @@
+import type { InMemoryCache } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import express from 'express'
+import { getCollectionEntry } from '~/content/getCollection'
+import type { RenderData, RenderFunction } from '~/ssr/types'
+import { validateRoute } from '~/utils/validateRoute'
+import type { Manifest } from '../../utils/Manifest'
+import { sendNotFoundPage } from '../not-found/sendNotFoundPage'
+import { getPublicationsData } from './getPublicationsData'
+import { getGovernancePublicationData } from './governance/getGovernancePublicationData'
+import { getMonthlyUpdateData } from './monthly-updates/getMonthlyUpdateData'
+import { getOtherPublicationData } from './other-publications/getOtherPublicationData'
+
+export function createPublicationsRouter(
+  manifest: Manifest,
+  render: RenderFunction,
+  cache: InMemoryCache,
+) {
+  const router = express.Router()
+
+  router.get('/publications', async (req, res) => {
+    const data = await getPublicationsData(manifest, req.originalUrl)
+
+    if (!data) {
+      await sendNotFoundPage(manifest, render, req.originalUrl, res)
+      return
+    }
+    const html = await render(data, req.originalUrl)
+    res.status(200).send(html)
+  })
+
+  router.get(
+    '/publications/:id',
+    validateRoute({
+      params: v.object({ id: v.string() }),
+    }),
+    async (req, res) => {
+      const governancePublication = getCollectionEntry(
+        'governance-publications',
+        req.params.id,
+      )
+      const otherPublication = getCollectionEntry(
+        'other-publications',
+        req.params.id,
+      )
+
+      const monthlyUpdate = getCollectionEntry('monthly-updates', req.params.id)
+
+      let data: RenderData | undefined
+      if (governancePublication) {
+        data = await getGovernancePublicationData(
+          manifest,
+          governancePublication,
+          req.originalUrl,
+        )
+      }
+      if (otherPublication) {
+        data = await getOtherPublicationData(
+          manifest,
+          otherPublication,
+          req.originalUrl,
+        )
+      }
+
+      if (monthlyUpdate) {
+        data = await getMonthlyUpdateData(
+          manifest,
+          monthlyUpdate,
+          req.originalUrl,
+          cache,
+        )
+      }
+
+      if (!data) {
+        await sendNotFoundPage(manifest, render, req.originalUrl, res)
+        return
+      }
+      const html = await render(data, req.originalUrl)
+      res.status(200).send(html)
+    },
+  )
+
+  return router
+}

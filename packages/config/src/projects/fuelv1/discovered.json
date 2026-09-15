@@ -1,0 +1,32 @@
+{
+  "name": "fuelv1",
+  "timestamp": 1736518679,
+  "configHash": "0x8153a38e33793f340785ac1a2815251dd75e08d2d15d17867e76244a2a42a3d5",
+  "entries": [
+    {
+      "name": "Fuel",
+      "address": "eth:0x6880f6Fd960D1581C2730a451A22EED1081cfD72",
+      "type": "Contract",
+      "sourceHashes": [
+        "0x882649168abfdfff5ebf9fbcaa09f8d7025c4b394b2ca7f4f4325f3eba030292"
+      ],
+      "proxyType": "immutable",
+      "sinceTimestamp": 1612414780,
+      "sinceBlock": 11787727,
+      "values": { "$immutable": true },
+      "implementationNames": {
+        "eth:0x6880f6Fd960D1581C2730a451A22EED1081cfD72": ""
+      },
+      "references": [
+        {
+          "text": "Source Code",
+          "href": "https://github.com/FuelLabs/fuel-v1-contracts/blob/master/src/Fuel.yulp"
+        }
+      ]
+    }
+  ],
+  "abis": {},
+  "usedTemplates": {},
+  "usedBlockNumbers": { "ethereum": 21594621 },
+  "permissionsConfigHash": "0xefd6a0596c0ab49e195a12a1cb48cfff89d12818093f4b1f4c4ea1740be4a40e"
+}

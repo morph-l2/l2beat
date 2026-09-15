@@ -1,21 +1,28 @@
-import { VariantProps, cva } from 'class-variance-authority'
-import React from 'react'
+import type { VariantProps } from 'class-variance-authority'
+import { cva } from 'class-variance-authority'
 
 interface SquareProps extends VariantProps<typeof squareVariants> {
   className?: string
 }
 
-const squareVariants = cva('rounded', {
+const squareVariants = cva('shrink-0 rounded', {
   variants: {
     variant: {
       default: 'bg-black dark:bg-white',
+      calldata: 'bg-sky-550 dark:bg-sky-500',
+      blobs: 'bg-orange-400 dark:bg-yellow-100',
+      compute: 'bg-pink-100',
+      overhead: 'bg-purple-100',
       canonical: 'bg-purple-100',
       external: 'bg-yellow-200',
       native: 'bg-pink-100',
       associated: 'bg-rose-500 dark:bg-rose-700',
-      ether: 'bg-green-900 dark:bg-green-200',
+      ether: 'bg-chart-ethereum',
+      btc: 'bg-orange-400',
       stable: 'bg-teal-500 dark:bg-teal-400',
       other: 'bg-sky-600',
+      rwaPublic: 'bg-lime-650',
+      rwaRestricted: 'bg-pink-750',
     },
     size: {
       small: 'size-3',

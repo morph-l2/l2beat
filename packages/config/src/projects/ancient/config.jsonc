@@ -1,0 +1,40 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "ancient",
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": [
+    "eth:0x012c341506ee1939e56084F43Ae5dbCe224Ce2af",
+    "eth:0x132b3456300332d488f946B818eB9512931eBCAa",
+    "eth:0xd5e3eDf5b68135D559D572E26bF863FBC1950033",
+    "eth:0x639F2AECE398Aa76b07e59eF6abe2cFe32bacb68",
+    "eth:0x12d4E64E1B46d27A00fe392653A894C1dd36fb80"
+  ],
+  "names": {
+    "eth:0x1B1ecDdbd5F9601b34262Aa3Ca346209E61aA68f": "Ancient8GuardianMultisig"
+  },
+  "overrides": {
+    "eth:0x3CEa4B383D855208f5d06e5b1A602E4006a1d0E1": {
+      "ignoreInWatchMode": ["permissionedGamesTotal", "gameCount"]
+    },
+    "eth:0xF91357dCa2abDB3388600792d51CAe6644632Cd5": {
+      "fields": {
+        "proposer": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to post new state roots of the current layer to the host chain."
+            }
+          ]
+        },
+        "challenger": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to challenge or delete state roots proposed by a Proposer."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

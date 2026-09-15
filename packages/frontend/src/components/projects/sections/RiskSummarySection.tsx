@@ -1,0 +1,120 @@
+import type { ProjectRedWarning, ProjectRiskCategory } from '@l2beat/config'
+import type { HostChainRisksWarningProps } from '~/components/HostChainRisksWarning'
+import { HostChainRisksWarning } from '~/components/HostChainRisksWarning'
+import { WarningBar } from '~/components/WarningBar'
+import { ShieldIcon } from '~/icons/Shield'
+import { UnverifiedIcon } from '~/icons/Unverified'
+import type { ProjectVerificationWarnings } from '~/server/features/utils/getCommonProjectEntry'
+import { cn } from '~/utils/cn'
+import type { UnverifiedContractEntry } from '~/utils/project/contracts-and-permissions/getUnverifiedContractEntries'
+import { ProjectSection } from './ProjectSection'
+import type { ProjectSectionProps } from './types'
+import { UnverifiedContractsWarning } from './UnverifiedContractsWarning'
+
+export interface RiskSummarySectionProps extends ProjectSectionProps {
+  riskGroups: RiskGroup[]
+  warning: string | undefined
+  verificationWarnings: Pick<
+    ProjectVerificationWarnings,
+    'programHashes' | 'programHashesDescription'
+  >
+  redWarning: ProjectRedWarning | undefined
+  hostChainWarning?: HostChainRisksWarningProps
+  unverifiedContracts: UnverifiedContractEntry[]
+}
+
+export interface RiskGroup {
+  start: number
+  name: ProjectRiskCategory
+  items: RiskItem[]
+}
+
+interface RiskItem {
+  text: string
+  referencedId: string
+  isCritical: boolean
+}
+
+export function RiskSummarySection({
+  riskGroups,
+  verificationWarnings,
+  redWarning,
+  warning,
+  hostChainWarning,
+  unverifiedContracts,
+  ...sectionProps
+}: RiskSummarySectionProps) {
+  if (riskGroups.length === 0) {
+    return null
+  }
+  return (
+    <ProjectSection {...sectionProps}>
+      {hostChainWarning && <HostChainRisksWarning {...hostChainWarning} />}
+      {unverifiedContracts.length > 0 && (
+        <UnverifiedContractsWarning
+          entries={unverifiedContracts}
+          className="mt-4 text-paragraph-15 md:text-paragraph-16"
+        />
+      )}
+      {verificationWarnings.programHashes && (
+        <WarningBar
+          text={verificationWarnings.programHashes}
+          color="red"
+          isCritical={true}
+          className="mt-4 text-paragraph-15 md:text-paragraph-16"
+          icon={UnverifiedIcon}
+        />
+      )}
+      {redWarning && (
+        <WarningBar
+          text={redWarning.text}
+          color="red"
+          className="mt-4 text-paragraph-15 md:text-paragraph-16"
+          icon={ShieldIcon}
+        />
+      )}
+      {warning && (
+        <WarningBar
+          text={warning}
+          color="yellow"
+          isCritical={false}
+          className="mt-4 text-paragraph-15 md:text-paragraph-16"
+        />
+      )}
+      <div className="mt-4 md:mt-6">
+        <EnumeratedRisks risks={riskGroups} />
+      </div>
+    </ProjectSection>
+  )
+}
+
+export function EnumeratedRisks({ risks }: { risks: RiskGroup[] }) {
+  return risks.map((group, i) => (
+    <div
+      className={cn(
+        'text-paragraph-15 md:text-paragraph-16',
+        i !== 0 && 'mt-4',
+      )}
+      key={i}
+    >
+      <h3 className="font-bold text-red-300">{group.name}</h3>
+      <ol className="list-inside list-decimal px-1.5" start={group.start}>
+        {group.items.map((item, i) => (
+          <li key={i}>
+            <a href={`#${item.referencedId}`} className="underline">
+              {item.isCritical ? (
+                <>
+                  {item.text.slice(0, -1)}{' '}
+                  <span className="text-red-300 underline"> (CRITICAL)</span>
+                  {item.text.slice(-1)}
+                </>
+              ) : (
+                item.text
+              )}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </div>
+  ))
+}

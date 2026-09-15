@@ -1,15 +1,22 @@
-import { assert } from '@l2beat/shared-pure'
-
-import {
+import type { Logger } from '@l2beat/backend-tools'
+import type {
   TrackedTxConfigEntry,
   TrackedTxFunctionCallConfig,
+  TrackedTxSharedBridgeConfig,
   TrackedTxSharpSubmissionConfig,
 } from '@l2beat/shared'
-import { Configuration } from '../../../tools/uif/multi/types'
-import {
-  BigQueryFunctionCallResult,
+import { assert } from '@l2beat/shared-pure'
+import type { Configuration } from '../../../tools/uif/multi/types'
+import type {
+  DuneFunctionCallResult,
   TrackedTxFunctionCallResult,
 } from '../types/model'
+import { calculateCalldataGasUsed } from './calculateCalldataGasUsed'
+import {
+  getLivenessGroupingKey,
+  hasLivenessGrouping,
+} from './getLivenessGroupingKey'
+import { isFistParameterMatching } from './isFirstParameterMatching'
 import { isProgramHashProven } from './isProgramHashProven'
 
 export function transformFunctionCallsQueryResult(
@@ -19,7 +26,11 @@ export function transformFunctionCallsQueryResult(
   sharpSubmissions: Configuration<
     TrackedTxConfigEntry & { params: TrackedTxSharpSubmissionConfig }
   >[],
-  queryResults: BigQueryFunctionCallResult[],
+  sharedBridgesConfig: Configuration<
+    TrackedTxConfigEntry & { params: TrackedTxSharedBridgeConfig }
+  >[],
+  queryResults: DuneFunctionCallResult[],
+  logger: Logger,
 ): TrackedTxFunctionCallResult[] {
   return queryResults.flatMap((r) => {
     const selector = r.input.slice(0, 10)
@@ -27,16 +38,25 @@ export function transformFunctionCallsQueryResult(
     const matchingCalls = functionCalls.filter(
       (c) =>
         c.properties.params.selector === selector &&
-        c.properties.params.address === r.to_address,
+        c.properties.params.address === r.to,
     )
+
     const matchingSubmissions = sharpSubmissions.filter(
       (c) =>
         c.properties.params.selector === selector &&
-        c.properties.params.address === r.to_address,
+        c.properties.params.address === r.to,
+    )
+
+    const matchingSharedBridgeCalls = sharedBridgesConfig.filter(
+      (c) =>
+        c.properties.params.selector === selector &&
+        c.properties.params.address === r.to,
     )
 
     assert(
-      matchingCalls.length > 0 || matchingSubmissions.length > 0,
+      matchingCalls.length > 0 ||
+        matchingSubmissions.length > 0 ||
+        matchingSharedBridgeCalls.length > 0,
       'There should be at least one matching config',
     )
 
@@ -44,27 +64,68 @@ export function transformFunctionCallsQueryResult(
       isProgramHashProven(r, c.properties.params.programHashes),
     )
 
-    const results = [...matchingCalls, ...filteredSubmissions].map(
-      (config) =>
-        ({
-          id: config.id,
-          formula: 'functionCall',
-          projectId: config.properties.projectId,
-          hash: r.hash,
-          type: config.properties.type,
-          subtype: config.properties.subtype,
-          blockNumber: r.block_number,
-          blockTimestamp: r.block_timestamp,
-          toAddress: r.to_address,
-          input: r.input,
-          receiptGasUsed: r.receipt_gas_used,
-          gasPrice: r.gas_price,
-          dataLength: r.data_length,
-          calldataGasUsed: r.calldata_gas_used,
-          receiptBlobGasUsed: r.receipt_blob_gas_used,
-          receiptBlobGasPrice: r.receipt_blob_gas_price,
-        }) as const,
+    const filteredSharedBridgeCalls = matchingSharedBridgeCalls.filter((c) =>
+      isFistParameterMatching(r.input, c.properties.params),
     )
+
+    const results: TrackedTxFunctionCallResult[] = [
+      ...matchingCalls,
+      ...filteredSubmissions,
+      ...filteredSharedBridgeCalls,
+    ].flatMap((config): TrackedTxFunctionCallResult[] => {
+      const common = {
+        id: config.id,
+        formula: 'functionCall' as const,
+        projectId: config.properties.projectId,
+        subtype: config.properties.subtype,
+        hash: r.hash,
+        blockNumber: r.block_number,
+        blockTimestamp: r.block_time,
+        toAddress: r.to,
+        input: r.input,
+        gasUsed: r.gas_used,
+        gasPrice: r.gas_price,
+        dataLength: r.data_length,
+        calldataGasUsed: calculateCalldataGasUsed(
+          r.block_number,
+          r.data_length,
+          r.non_zero_bytes,
+          r.gas_used,
+        ),
+        blobVersionedHashes: r.blob_versioned_hashes,
+      }
+
+      if (hasLivenessGrouping(config.properties)) {
+        try {
+          return [
+            {
+              ...common,
+              type: 'liveness',
+              groupingKey: getLivenessGroupingKey(
+                r.input,
+                config.properties.params,
+                config.properties.groupBy,
+              ),
+            },
+          ]
+        } catch (error) {
+          logger.warn('Failed to derive liveness grouping key', {
+            error,
+            configurationId: config.id,
+            projectId: config.properties.projectId,
+            transactionHash: r.hash,
+            blockNumber: r.block_number,
+          })
+          return []
+        }
+      }
+
+      if (config.properties.type === 'liveness') {
+        return [{ ...common, type: 'liveness' }]
+      }
+
+      return [{ ...common, type: 'l2costs' }]
+    })
 
     return results
   })

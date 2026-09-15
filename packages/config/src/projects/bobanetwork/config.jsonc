@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "bobanetwork",
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": ["eth:0x158Fd5715F16Ac1F2Dc959A299B383aAaf9B59EB"],
+  "overrides": {
+    "eth:0xF45a5f1e36fCeA3Cc830A98c6c3C5ceA7d6af852": {
+      "ignoreInWatchMode": ["permissionedGamesTotal", "gameCount"]
+    },
+    "eth:0x97e8B3e46a251A657A56CEe8c24E4C0F1864be64": {
+      "fields": {
+        "proposer": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to post new state roots of the current layer to the host chain."
+            }
+          ]
+        },
+        "challenger": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to challenge or delete state roots proposed by a Proposer."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

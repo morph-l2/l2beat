@@ -1,47 +1,49 @@
 # @l2beat/frontend
 
-The legacy, statically generated frontend that is the face of L2BEAT.
-
-## Frontend migration
-
-This is the legacy frontend and most of the work is now happening in `../frontend2`. Some pages will return 404, in which case it (probably) means that the page has been migrated to the new Next.js codebase.
+The dynamic, public-facing Next.js frontend of L2BEAT.
 
 ## Setup
 
-To run or develop the frontend you need to install and build its dependencies. You can do it by running the following
+To run or develop frontend you need to install and build its dependencies. You can do it by running the following
 commands in the repository root:
 
 ```
-yarn
-yarn build:frontend
+pnpm install
+pnpm build:dependencies
 ```
 
 ## Scripts
-
-- `yarn start` - run the development server
-- `yarn build` - compile the production static site
-- `yarn format` - check if formatting is correct with biome
-- `yarn format:fix` - run biome automatic formatter
-- `yarn lint` - check if the code satisfies the biome configuration
-- `yarn lint:fix` - run biome automatic fixer
-- `yarn tinify-logos` - resizes and optimizes logos
-- `yarn typecheck` - check if the code satisfies the typescript compiler
+- `pnpm dev` - run the Next.js development server
+- `pnpm dev:mock` - run the Next.js development server with mock data
+- `pnpm build` - compile the production build
+- `pnpm start` - start the production server
+- `pnpm start:mock` - start the production server with mock data
+- `pnpm og-images` - generate OpenGraph images
+- `pnpm tinify` - optimize images
+- `pnpm new-project` - run og-images and tinify scripts (use after adding a new project in config)
+- `pnpm performance-test` - run performance tests
+- `pnpm size-test` - run data size tests
+- `pnpm build:dependencies` - builds the dependencies of frontend
+- `pnpm watch:dependencies` - watch and rebuild dependencies on changes
+- `pnpm lint` - run linter
+- `pnpm lint:fix` - run linter and fix issues
+- `pnpm format` - run biome formatter
+- `pnpm format:fix` - run biome formatter and fix issues
+- `pnpm test` - run the tests
+- `pnpm typecheck` - check if the code satisfies the typescript compiler
+- `pnpm test-all-pages` - test all pages
 
 ### Environment variables
+If you are running `pnpm dev:mock` you do not need any environment variables.
 
-- `TINIFY_API_KEY` - API key for Tinify, useful if you are adding/changing logo of a project (500 compressions per month are free)
+If you are running `pnpm dev` or `pnpm build` you need to set the following environment variables:
+- create file `.env` in frontend root folder
+- `DATABASE_URL` - database connection url (read-only access is sufficient)
 
-#### .env boilerplate:
+Optional database tuning:
+- `DATABASE_STATEMENT_TIMEOUT_MS` - Postgres `statement_timeout` applied to every frontend connection, in milliseconds (default `20000`). Keep it below the HTTP request timeout so the database gives up before the response does.
 
-```bash
-TINIFY_API_KEY=
-```
+Optional for interop debugging:
+- `INTEROP_AGGREGATE_TIMESTAMP_OVERRIDE` - if present, interop aggregate queries use the earliest timestamp from the timestamp's day instead of the latest timestamp
 
-## Storybook
-
-Production build requires (for some unknown reason) rebuilding dependencies with ESM. Use `yarn storybook:build` to do exactly that.
-
-##### Known issues
-
-You should not import files that depend on node-related modules (e.g. fs) in stories. That will cause much pain searching for why the storybook is not working.
-For example you should not import layer2s from config as it imports all projects and some of them use ProjectDiscovery that uses fs.
+*if you currently work at L2BEAT: feel free to directly connect to our staging DB* 😉

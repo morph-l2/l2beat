@@ -1,0 +1,267 @@
+import {
+  ChainSpecificAddress,
+  EthereumAddress,
+  ProjectId,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import {
+  CONTRACTS,
+  DA_BRIDGES,
+  DA_LAYERS,
+  DA_MODES,
+  EXITS,
+  FORCE_TRANSACTIONS,
+  OPERATOR,
+  REASON_FOR_BEING_OTHER,
+  RISK_VIEW,
+  STATE_VALIDATION,
+  TECHNOLOGY_DATA_AVAILABILITY,
+} from '../../common'
+import { BADGES } from '../../common/badges'
+import { formatDelay } from '../../common/formatDelays'
+import { PROGRAM_HASHES } from '../../common/programHashes'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import { getSHARPVerifierUpgradeDelay } from '../../discovery/starkware'
+import type { ScalingProject } from '../../internalTypes'
+import {
+  generateDiscoveryDrivenContracts,
+  generateDiscoveryDrivenPermissions,
+} from '../../templates/generateDiscoveryDrivenSections'
+import { getDiscoveryInfo } from '../../templates/getDiscoveryInfo'
+import { StarkexDAC } from '../../templates/starkex-template'
+import {
+  getAcceptedSHARPVerifierChain,
+  getSHARPBootloaderHashes,
+} from '../starknet/starknet'
+
+const discovery = new ProjectDiscovery('edgex')
+
+const minDASigners = discovery.getContractValue<number>(
+  'FinalizableCommittee',
+  'signaturesRequired',
+)
+
+const addedDASigners = discovery.getContractValue<string[]>(
+  'FinalizableCommittee',
+  'addedDACMembers',
+)
+const constructorDASigners = discovery.getConstructorArg<string[]>(
+  'FinalizableCommittee',
+  0,
+)
+const daSigners = addedDASigners.concat(constructorDASigners)
+
+const dacConfig = {
+  requiredSignatures: minDASigners,
+  membersCount: daSigners.length,
+}
+
+const freezeGracePeriod = discovery.getContractValue<number>(
+  'StarkPerpetual',
+  'FREEZE_GRACE_PERIOD',
+)
+
+const upgradeDelaySeconds = discovery.getContractValue<number>(
+  'StarkPerpetual',
+  'StarkWareDiamond_upgradeDelay',
+)
+
+const includingSHARPUpgradeDelaySeconds = Math.min(
+  upgradeDelaySeconds,
+  getSHARPVerifierUpgradeDelay(),
+)
+
+const edgexProgramHashes = []
+edgexProgramHashes.push(
+  discovery.getContractValue<string>(
+    'FinalizableGpsFactAdapter',
+    'programHash',
+  ),
+)
+edgexProgramHashes.push(...getSHARPBootloaderHashes())
+
+export const edgex: ScalingProject = {
+  type: 'layer2',
+  id: ProjectId('edgex'),
+  capability: 'appchain',
+  addedAt: UnixTime.fromDate(new Date('2025-10-13')),
+  archivedAt: UnixTime(1786716095), // 2026-08-14T14:01:35Z, StarkPerpetual contract frozen
+  badges: [
+    BADGES.VM.CairoVM,
+    BADGES.DA.DAC,
+    BADGES.Stack.StarkEx,
+    BADGES.Infra.SHARP,
+  ],
+  display: {
+    name: 'edgeX v1',
+    slug: 'edgex',
+    stacks: ['SN Stack', 'StarkEx'],
+    headerWarning:
+      'The edgeX v1 StarkPerpetual contract was frozen on 14th August 2026. It can no longer process trades, deposits or state updates. Remaining funds can only be recovered via the escape hatch.',
+    description:
+      "edgeX v1 was a high-performance on-chain trading platform, built as an L2 on Starknet's StarkEx tech.",
+    purposes: ['Exchange'],
+    links: {
+      websites: ['https://edgex.exchange'],
+      documentation: ['https://edgex-1.gitbook.io/edgeX-documentation'],
+      bridges: ['https://pro.edgex.exchange'],
+      socialMedia: [
+        'https://x.com/edgeX_exchange',
+        'https://discord.com/invite/edgeX',
+        'https://medium.com/@edgexexchange',
+        'https://t.me/edgeX_exchange',
+      ],
+    },
+    liveness: {
+      explanation:
+        'EdgeX is a ZK L2 that posts data to a data availability committee (DAC). A transaction is considered final when proven on L1 with ZK proof.',
+    },
+  },
+  proofSystem: {
+    type: 'Validity',
+    zkCatalogIds: [ProjectId('stone')],
+  },
+  reasonsForBeingOther: [REASON_FOR_BEING_OTHER.LOW_DAC_THRESHOLD],
+  stage: {
+    stage: 'NotApplicable',
+  },
+  chainConfig: {
+    name: 'edgex',
+    chainId: undefined,
+    apis: [{ type: 'starkex', product: ['edgex'] }],
+  },
+
+  config: {
+    activityConfig: {
+      type: 'day',
+      sinceTimestamp: UnixTime(1720435943),
+      resyncLastDays: 7,
+      batchSize: 10,
+      dataSource: 'StarkEx Aggregations API',
+    },
+    escrows: [
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(
+          'eth:0xfAaE2946e846133af314d1Df13684c89fA7d83DD',
+        ),
+        tokens: ['USDT'],
+      }),
+    ],
+    trackedTxs: [
+      {
+        uses: [
+          { type: 'liveness', subtype: 'stateUpdates' },
+          { type: 'l2costs', subtype: 'stateUpdates' },
+        ],
+
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xfAaE2946e846133af314d1Df13684c89fA7d83DD',
+          ),
+          selector: '0x538f9406',
+          functionSignature:
+            'function updateState(uint256[] programOutput, uint256[] applicationData)',
+          sinceTimestamp: UnixTime(1720436183),
+        },
+      },
+      {
+        uses: [
+          { type: 'liveness', subtype: 'proofSubmissions' },
+          { type: 'l2costs', subtype: 'proofSubmissions' },
+        ],
+        query: {
+          formula: 'sharpSubmission',
+          programHashes: [
+            '2530337539466159944237001094809327283009177793361359619481044346150483328860',
+          ],
+          sinceTimestamp: UnixTime(1720435919),
+        },
+      },
+    ],
+  },
+  dataAvailability: {
+    layer: DA_LAYERS.DAC,
+    bridge: DA_BRIDGES.DAC_MEMBERS(dacConfig),
+    mode: DA_MODES.STATE_DIFFS,
+  },
+  riskView: {
+    stateValidation: {
+      ...RISK_VIEW.STATE_ZKP_ST,
+      executionDelay: 0,
+    },
+    dataAvailability: RISK_VIEW.DATA_EXTERNAL_DAC(dacConfig),
+    exitWindow: RISK_VIEW.EXIT_WINDOW(
+      includingSHARPUpgradeDelaySeconds,
+      freezeGracePeriod,
+    ),
+    sequencerFailure: {
+      ...RISK_VIEW.SEQUENCER_FORCE_VIA_L1_STARKEX_PERPETUAL(freezeGracePeriod),
+      secondLine: formatDelay(freezeGracePeriod),
+    },
+    proposerFailure: RISK_VIEW.PROPOSER_USE_ESCAPE_HATCH_MP_AVGPRICE,
+  },
+  stateValidation: {
+    categories: [STATE_VALIDATION.STARKEX_VALIDITY_PROOFS],
+  },
+  technology: {
+    dataAvailability: TECHNOLOGY_DATA_AVAILABILITY.STARKEX_OFF_CHAIN,
+    operator: OPERATOR.STARKEX_OPERATOR,
+    forceTransactions:
+      FORCE_TRANSACTIONS.STARKEX_PERPETUAL_WITHDRAW(freezeGracePeriod),
+    exitMechanisms: EXITS.STARKEX_PERPETUAL,
+  },
+  contracts: {
+    addresses: generateDiscoveryDrivenContracts([discovery]),
+    risks: [
+      CONTRACTS.UPGRADE_WITH_DELAY_SECONDS_RISK(
+        includingSHARPUpgradeDelaySeconds,
+      ),
+    ],
+    programHashes: edgexProgramHashes.map((el) => PROGRAM_HASHES(el)),
+    // stone verifier address, could be deduced from analyzing trx traces
+    zkVerifiers: getAcceptedSHARPVerifierChain().factRegistries,
+  },
+  permissions: generateDiscoveryDrivenPermissions([discovery]),
+  milestones: [
+    {
+      title: 'edgeX live on Mainnet',
+      date: '2024-08-03T00:00:00Z',
+      url: 'https://x.com/edgeX_exchange/status/1819614179760001039',
+      description:
+        'edgeX, a non-custodial decentralized exchange powered by StarkeX, is now live on Mainnet.',
+      type: 'general',
+    },
+    {
+      title: 'EDGE Chain announced',
+      date: '2026-03-10T00:00:00Z',
+      url: 'https://blog.arbitrum.io/edgex-announces-edge-chain-on-arbitrum/',
+      description:
+        'edgeX announces EDGE Chain, an app-specific rollup on Arbitrum, as the execution layer for edgeX v2.',
+      type: 'general',
+    },
+    {
+      title: 'edgeX v2 live on EDGE Chain',
+      date: '2026-05-26T00:00:00Z',
+      url: 'https://x.com/edgeX_exchange/status/2059258266006479101',
+      description:
+        'edgeX v2 goes live, moving all trading from the StarkEx-based v1 to EDGE Chain.',
+      type: 'general',
+    },
+    {
+      title: 'edgeX v1 stops operating',
+      date: '2026-08-14T00:00:00Z',
+      url: 'https://etherscan.io/tx/0xf67c799e5f555a6b65d48f4c96ae94e391c38e522d4724c49ec3614ceeac511c',
+      description:
+        'Following an unprocessed forced withdrawal on L1, edgeX v1 contract freezes.',
+      type: 'incident',
+    },
+  ],
+  customDa: StarkexDAC({
+    dac: {
+      requiredMembers: dacConfig.requiredSignatures,
+      membersCount: dacConfig.membersCount,
+    },
+  }),
+  discoveryInfo: getDiscoveryInfo([discovery]),
+}

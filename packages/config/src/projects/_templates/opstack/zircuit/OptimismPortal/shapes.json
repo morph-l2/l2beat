@@ -1,0 +1,12 @@
+{
+  "OptimismPortal": {
+    "hash": "0xdc5318bc69c1ce63071ba60b1421f734173f7ef868455b5ef80fc2a17f4ccee2",
+    "address": "eth:0xA0A36095A2258568759fb41CAE4934BBd2d04E26",
+    "blockNumber": 23086994
+  },
+  "OptimismPortal_v2_2_0": {
+    "hash": "0x75b3a40d24df23769d05a5f3bb0461a19038ca999e7d7a3bb9e1ea2579b405d6",
+    "address": "eth:0xF7209f5471628aC5f68FE4ae98Feb7f02E0f40Be",
+    "blockNumber": 23216770
+  }
+}

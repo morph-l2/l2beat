@@ -1,6 +1,10 @@
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
-import { z } from 'zod'
-import { MulticallConfig, MulticallRequest, MulticallResponse } from './types'
+import { Bytes, type EthereumAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import type {
+  MulticallConfig,
+  MulticallRequest,
+  MulticallResponse,
+} from './types'
 
 export interface CallProvider {
   call(
@@ -13,7 +17,7 @@ export interface CallProvider {
 export class MulticallClient {
   constructor(
     private readonly provider: CallProvider,
-    private readonly config: MulticallConfig,
+    private readonly config?: MulticallConfig,
   ) {}
 
   async multicallNamed(
@@ -46,15 +50,16 @@ export class MulticallClient {
     requests: MulticallRequest[],
     blockNumber: number,
   ): Promise<MulticallResponse[]> {
-    if (this.config.sinceBlock > blockNumber) {
+    const config = this.config
+
+    if (!config || config.sinceBlock > blockNumber) {
       return this.executeIndividual(requests, blockNumber)
-    } else {
-      const batches = toBatches(requests, this.config.batchSize)
-      const batchedResults = await Promise.all(
-        batches.map((batch) => this.executeBatch(batch, blockNumber)),
-      )
-      return batchedResults.flat()
     }
+    const batches = toBatches(requests, config.batchSize)
+    const batchedResults = await Promise.all(
+      batches.map((batch) => this.executeBatch(batch, blockNumber, config)),
+    )
+    return batchedResults.flat()
   }
 
   private async executeIndividual(
@@ -85,22 +90,23 @@ export class MulticallClient {
   private async executeBatch(
     requests: MulticallRequest[],
     blockNumber: number,
+    config: MulticallConfig,
   ): Promise<MulticallResponse[]> {
-    const encoded = this.config.encodeBatch(requests)
+    const encoded = config.encodeBatch(requests)
     try {
       const result = await this.provider.call(
-        this.config.address,
+        config.address,
         encoded,
         blockNumber,
       )
-      return this.config.decodeBatch(result)
+      return config.decodeBatch(result)
     } catch (e) {
-      const parsed = ethersError.safeParse(e)
+      const parsed = ethersError.safeValidate(e)
       if (parsed.success) {
         // NOTE(radomski): If we batch a call that will execute an INVALID
         // opcode we have no way of knowing which call failed. Just execute
         // them individually.
-        if (parsed.data.error.error.message === 'out of gas') {
+        if (parsed.data.error.error.message.includes('out of gas')) {
           return await this.executeIndividual(requests, blockNumber)
         }
       }
@@ -109,7 +115,7 @@ export class MulticallClient {
   }
 }
 
-export function toBatches<T>(items: T[], batchSize: number): T[][] {
+function toBatches<T>(items: T[], batchSize: number): T[][] {
   const batches: T[][] = []
   for (let i = 0; i < items.length; i += batchSize) {
     batches.push(items.slice(i, i + batchSize))
@@ -117,26 +123,16 @@ export function toBatches<T>(items: T[], batchSize: number): T[][] {
   return batches
 }
 
-export function parseEthersError(e: unknown): Error | undefined {
-  const parsed = ethersError.safeParse(e)
-
-  if (parsed.success) {
-    return new Error(JSON.stringify(parsed.data))
-  }
-
-  return undefined
-}
-
-const ethersError = z.object({
-  error: z.object({
-    code: z.string().optional(),
-    reason: z.string().optional(),
-    requestMethod: z.string().optional(),
-    error: z.object({
-      code: z.number(),
-      message: z.string(),
+const ethersError = v.object({
+  error: v.object({
+    code: v.string().optional(),
+    reason: v.string().optional(),
+    requestMethod: v.string().optional(),
+    error: v.object({
+      code: v.number(),
+      message: v.string(),
     }),
-    timeout: z.number().optional(),
-    status: z.number().optional(),
+    timeout: v.number().optional(),
+    status: v.number().optional(),
   }),
 })

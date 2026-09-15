@@ -1,15 +1,14 @@
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
+import type { Bytes, ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
 import { utils } from 'ethers'
-import * as z from 'zod'
 
 import { getErrorMessage } from '../../../utils/getErrorMessage'
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
 import {
-  ScopeVariables,
-  generateScopeVariables,
+  generateReferenceInput,
   getReferencedName,
+  type ReferenceInput,
   resolveReference,
 } from '../reference'
 import { SingleSlot } from '../storageCommon'
@@ -23,14 +22,14 @@ import { valueToBigInt } from '../utils/valueToBigInt'
 // statically sized arrays! This is because the first slot of a dynamic array
 // contains its length instead of actual data, also the place in storage where
 // the data is located is i = keccak256(slot) instead of i = slot.
-export type DynamicArrayHandlerDefinition = z.infer<
+export type DynamicArrayHandlerDefinition = v.infer<
   typeof DynamicArrayHandlerDefinition
 >
-export const DynamicArrayHandlerDefinition = z.strictObject({
-  type: z.literal('dynamicArray'),
+export const DynamicArrayHandlerDefinition = v.strictObject({
+  type: v.literal('dynamicArray'),
   slot: SingleSlot,
-  returnType: z.optional(z.enum(['address'])),
-  ignoreRelative: z.optional(z.boolean()),
+  returnType: v.enum(['address']).optional(),
+  ignoreRelative: v.boolean().optional(),
 })
 
 export class DynamicArrayHandler implements Handler {
@@ -39,23 +38,21 @@ export class DynamicArrayHandler implements Handler {
   constructor(
     readonly field: string,
     private readonly definition: DynamicArrayHandlerDefinition,
-    readonly logger: DiscoveryLogger,
   ) {
     this.dependencies = getDependencies(definition)
   }
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
     previousResults: Record<string, HandlerResult | undefined>,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, ['Reading dynamic array storage'])
-    const scopeVariables = generateScopeVariables(provider, address)
-    const resolved = resolveDependencies(
-      this.definition,
+    const referenceInput = generateReferenceInput(
       previousResults,
-      scopeVariables,
+      provider,
+      address,
     )
+    const resolved = resolveDependencies(this.definition, referenceInput)
 
     const elementStorages: Bytes[] = []
     try {
@@ -95,17 +92,12 @@ function getDependencies(definition: DynamicArrayHandlerDefinition): string[] {
 
 function resolveDependencies(
   definition: DynamicArrayHandlerDefinition,
-  previousResults: Record<string, HandlerResult | undefined>,
-  scopeVariables: ScopeVariables,
+  referenceInput: ReferenceInput,
 ): {
   slot: bigint
   returnType: 'number' | 'address' | 'bytes'
 } {
-  const resolved = resolveReference(
-    definition.slot,
-    previousResults,
-    scopeVariables,
-  )
+  const resolved = resolveReference(definition.slot, referenceInput)
   const slot = valueToBigInt(resolved)
 
   const returnType = definition.returnType ?? 'address'

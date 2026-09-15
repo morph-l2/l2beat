@@ -1,12 +1,12 @@
-import { Logger } from '@l2beat/backend-tools'
-import { Database, LivenessRecord } from '@l2beat/database'
-import { TrackedTxId } from '@l2beat/shared'
-import { TrackedTxsConfigType, UnixTime } from '@l2beat/shared-pure'
-import { TxUpdaterInterface } from '../../types/TxUpdaterInterface'
-import { TrackedTxResult } from '../../types/model'
+import type { Logger } from '@l2beat/backend-tools'
+import type { Database, LivenessRecord } from '@l2beat/database'
+import type { TrackedTxId } from '@l2beat/shared'
+import type { UnixTime } from '@l2beat/shared-pure'
+import type { TrackedTxResult } from '../../types/model'
+import type { TxUpdaterInterface } from '../../types/TxUpdaterInterface'
 
-export class LivenessUpdater implements TxUpdaterInterface {
-  type: TrackedTxsConfigType = 'liveness'
+export class LivenessUpdater implements TxUpdaterInterface<'liveness'> {
+  type = 'liveness' as const
 
   constructor(
     private readonly db: Database,
@@ -31,11 +31,23 @@ export class LivenessUpdater implements TxUpdaterInterface {
   }
 
   transformTransactions(transactions: TrackedTxResult[]): LivenessRecord[] {
-    return transactions.map((t) => ({
-      timestamp: t.blockTimestamp,
-      blockNumber: t.blockNumber,
-      configurationId: t.id,
-      txHash: t.hash,
-    }))
+    return transactions.map((transaction) => {
+      const record: LivenessRecord = {
+        timestamp: transaction.blockTimestamp,
+        blockNumber: transaction.blockNumber,
+        configurationId: transaction.id,
+        txHash: transaction.hash,
+      }
+
+      if (
+        transaction.formula === 'functionCall' &&
+        transaction.type === 'liveness' &&
+        transaction.groupingKey !== undefined
+      ) {
+        record.groupingKey = transaction.groupingKey
+      }
+
+      return record
+    })
   }
 }

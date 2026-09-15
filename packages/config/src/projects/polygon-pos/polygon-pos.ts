@@ -1,0 +1,490 @@
+import {
+  assert,
+  ChainSpecificAddress,
+  EthereumAddress,
+  formatNumber,
+  formatSeconds,
+  ProjectId,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import {
+  CONTRACTS,
+  DA_LAYERS,
+  DA_MODES,
+  REASON_FOR_BEING_OTHER,
+  RISK_VIEW,
+  SEQUENCING_SPEC,
+} from '../../common'
+import { BADGES } from '../../common/badges'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import { HARDCODED } from '../../discovery/values/hardcoded'
+import type { ScalingProject } from '../../internalTypes'
+import { getDiscoveryInfo } from '../../templates/getDiscoveryInfo'
+import { readProjectMarkdown } from '../../utils/readMarkdown'
+import { readStakeDistribution } from '../../utils/readStakeDistribution'
+import stakeDistributionJson from './stake-distribution.json'
+
+const stakeDistribution = readStakeDistribution(stakeDistributionJson)
+
+const discovery = new ProjectDiscovery('polygon-pos')
+
+const upgrades = {
+  upgradableBy: [{ name: 'PolygonMultisig', delay: 'no' }],
+}
+
+const delayString = formatSeconds(
+  discovery.getContractValue('Timelock', 'getMinDelay'),
+)
+
+const upgradeDelay = discovery.getContractValue<number>(
+  'Timelock',
+  'getMinDelay',
+)
+
+const currentValidatorSetSize = discovery.getContractValue<number>(
+  'StakeManager',
+  'currentValidatorSetSize',
+)
+
+const currentValidatorSetCap = discovery.getContractValue<number>(
+  'StakeManager',
+  'validatorThreshold',
+)
+
+const minDeposit = discovery.getContractValue<string>(
+  'StakeManager',
+  'minDeposit',
+)
+
+const replacementCoolDown = discovery.getContractValue<number>(
+  'StakeManager',
+  'replacementCoolDown',
+)
+assert(
+  replacementCoolDown === 2018083,
+  'The far-future replacement cooldown which effectively closed the vali set whenever it was at the cap has changed and the sequencer section and risk rosette should be adjusted if the set is now open+capped with a working replacement auction.',
+)
+
+const polygonSpanBlocks = HARDCODED.POLYGON_POS.SPAN_BLOCKS
+const polygonBlockSeconds = HARDCODED.POLYGON_POS.BLOCK_TIME_SECONDS
+const polygonSpanTimeString = formatSeconds(
+  polygonSpanBlocks * polygonBlockSeconds,
+)
+
+const chainId = 137
+
+export const polygonpos: ScalingProject = {
+  type: 'layer2',
+  id: ProjectId('polygon-pos'),
+  capability: 'universal',
+  addedAt: UnixTime(1664808578), // 2022-10-03T14:49:38Z
+  badges: [BADGES.VM.EVM, BADGES.DA.CustomDA],
+  reasonsForBeingOther: [REASON_FOR_BEING_OTHER.NO_PROOFS],
+  display: {
+    name: 'Polygon PoS',
+    aliases: ['Matic'],
+    slug: 'polygon-pos',
+    purposes: ['Universal'],
+    links: {
+      websites: ['https://polygon.technology'],
+      explorers: ['https://polygonscan.com'],
+      bridges: ['https://wallet.polygon.technology'],
+      repositories: ['https://github.com/maticnetwork/'],
+      documentation: ['https://docs.polygon.technology/pos/'],
+      socialMedia: [
+        'https://twitter.com/0xPolygon',
+        'https://forum.polygon.technology/',
+        'https://reddit.com/r/0xPolygon/',
+        'https://facebook.com/0xPolygon.Technology',
+        'https://linkedin.com/company/0xpolygon/',
+        'https://youtube.com/c/PolygonTV',
+        'https://instagram.com/0xpolygon/',
+        'https://discord.com/invite/0xPolygonCommunity',
+      ],
+    },
+    description:
+      'Polygon PoS is an EVM-compatible, proof of stake sidechain for Ethereum, planning to become a Validium with a state validating bridge. The bridge is currently validated by Polygon validators and allows for asset as well as data movement between Polygon and Ethereum.',
+  },
+  proofSystem: undefined,
+  stage: {
+    stage: 'NotApplicable',
+  },
+  interopConfig: {
+    description:
+      'The canonical bridge. Validated by the Polygon PoS validator set.',
+    durationSplit: {
+      lockAndMint: [
+        {
+          label: 'Deposit',
+          transferTypes: ['polygon.L1ToL2Transfer'],
+        },
+        {
+          label: 'Withdrawal',
+          transferTypes: ['polygon.L2ToL1Transfer'],
+        },
+      ],
+    },
+    plugins: [
+      {
+        plugin: 'polygon',
+        bridgeType: 'lockAndMint',
+      },
+    ],
+    type: 'canonical',
+  },
+  config: {
+    associatedTokens: ['POL', 'MATIC'],
+    escrows: [
+      discovery.getEscrowDetails({
+        // DepositManager
+        address: ChainSpecificAddress(
+          'eth:0x401F6c983eA34274ec46f84D70b31C151321188b',
+        ),
+        tokens: '*',
+        ...upgrades,
+      }),
+      discovery.getEscrowDetails({
+        // ERC20Predicate
+        address: ChainSpecificAddress(
+          'eth:0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf',
+        ),
+        premintedTokens: ['TRADE'],
+        tokens: '*',
+        ...upgrades,
+      }),
+      discovery.getEscrowDetails({
+        // MintableERC20Predicate
+        address: ChainSpecificAddress(
+          'eth:0x9923263fA127b3d1484cFD649df8f1831c2A74e4',
+        ),
+        tokens: '*',
+        ...upgrades,
+      }),
+      discovery.getEscrowDetails({
+        // EtherPredicate
+        address: ChainSpecificAddress(
+          'eth:0x8484Ef722627bf18ca5Ae6BcF031c23E6e922B30',
+        ),
+        tokens: ['ETH'],
+        ...upgrades,
+      }),
+      discovery.getEscrowDetails({
+        // ERC20EscrowPredicate for TOWER token
+        address: ChainSpecificAddress(
+          'eth:0x21ada4D8A799c4b0ADF100eB597a6f1321bCD3E4',
+        ),
+        tokens: '*',
+        ...upgrades,
+      }),
+      // ...other predicates up until PolygonERC20MintBurnPredicate do not hold funds
+      discovery.getEscrowDetails({
+        // old MaticWETH contract escrowing ETH sent to Polygon
+        address: ChainSpecificAddress(
+          'eth:0xa45b966996374E9e65ab991C6FE4Bfce3a56DDe8',
+        ),
+        tokens: ['ETH'],
+      }),
+    ],
+    activityConfig: {
+      type: 'block',
+      startBlock: 5000000,
+    },
+    trackedTxs: [
+      {
+        uses: [
+          // checkpoint submission counts both as data submission and state update
+          { type: 'liveness', subtype: 'batchSubmissions' },
+          { type: 'liveness', subtype: 'stateUpdates' },
+          { type: 'l2costs', subtype: 'stateUpdates' },
+        ],
+        query: {
+          formula: 'functionCall',
+          address: ChainSpecificAddress.address(
+            discovery.getContract('RootChain').address,
+          ),
+          selector: '0x4e43e495',
+          functionSignature:
+            'function submitCheckpoint(bytes data, uint256[3][] sigs)',
+          sinceTimestamp: UnixTime(1590850580),
+        },
+      },
+    ],
+  },
+  chainConfig: {
+    name: 'polygonpos',
+    chainId,
+    explorerUrl: 'https://polygonscan.com',
+    sinceTimestamp: UnixTime(1590856200),
+    coingeckoPlatform: 'polygon-pos',
+    multicallContracts: [
+      {
+        address: EthereumAddress('0xcA11bde05977b3631167028862bE2a173976CA11'),
+        batchSize: 150,
+        sinceBlock: 25770160,
+        version: '3',
+      },
+    ],
+    apis: [
+      {
+        type: 'rpc',
+        url: 'https://polygon.llamarpc.com',
+        callsPerMinute: 300,
+      },
+      { type: 'etherscan', chainId },
+      { type: 'blockscoutV2', url: 'https://polygon.blockscout.com/api/v2' },
+    ],
+  },
+  dataAvailability: {
+    layer: DA_LAYERS.POLYGON_POS_DA,
+    bridge: {
+      value: `${currentValidatorSetSize} validators`,
+      sentiment: 'warning',
+      description:
+        'The bridge verifies that at least 2/3+1 of the Polygon PoS stake has signed off on the checkpoint. The StakeManager contract is the source of truth for the current validator set.',
+    },
+    mode: DA_MODES.TRANSACTION_DATA,
+  },
+  riskView: {
+    stateValidation: RISK_VIEW.STATE_NONE,
+    dataAvailability: RISK_VIEW.DATA_POS,
+    exitWindow: RISK_VIEW.EXIT_WINDOW(upgradeDelay, 0),
+    sequencerFailure: {
+      value: 'Decentralized Sequencer Set',
+      sentiment: 'warning',
+      description: `Although there is a sequencer set of ${currentValidatorSetSize} (called validators), if the cap of ${currentValidatorSetCap} is reached, no new stakers can join. A minimum of ${minDeposit} POL stake is required to obtain block production rights. There is no specific censorship resistance mechanism against selective censorship by parts of the active validator set nor a way to force transactions from Ethereum L1. The canonical bridge between Polygon PoS and Ethereum allows for queuing transactions from the Ethereum and Polygon PoS sides, which cannot be skipped, except for halting the queue entirely.`,
+    },
+    proposerFailure: RISK_VIEW.PROPOSER_POS(
+      currentValidatorSetSize,
+      currentValidatorSetCap,
+    ),
+  },
+  stateValidation: {
+    categories: [
+      {
+        title: 'No state validation',
+        description:
+          'State updates are settled on Ethereum if signed by at least 2/3+1 of the Polygon PoS validators stake. Contracts on Ethereum do not check whether the state transitions are valid.',
+        references: [],
+        risks: [
+          {
+            category: 'Users can be censored if',
+            text: 'validators on Polygon decide to not mint tokens after observing an event on Ethereum.',
+          },
+          {
+            category: 'Funds can be stolen if',
+            text: 'validators decide to mint more tokens than there are locked on Ethereum thus preventing some existing holders from being able to bring their funds back to Ethereum.',
+          },
+          {
+            category: 'Funds can be stolen if',
+            text: 'validators submit a fraudulent checkpoint allowing themselves to withdraw all locked funds.',
+          },
+        ],
+      },
+    ],
+  },
+  technology: {
+    // dataAvailability: {},
+    //operator: {},
+    //forceTransactions: {},
+    //exitMechanisms: [],
+    sequencing: {
+      name: 'Transactions are ordered by Polygon PoS validators',
+      description: readProjectMarkdown('polygon-pos', 'technologySequencing', {
+        currentValidatorSetSize,
+      }),
+      sequencingSpec: {
+        type: 'sequencer-set',
+        blockTime: { value: formatSeconds(polygonBlockSeconds) },
+        proposerRotationTime: {
+          value: `${polygonSpanTimeString}`,
+          description: `Randomly sampled validators delegate block production for the duration of a span: ${polygonSpanBlocks} blocks`,
+        },
+        sequencerCount: {
+          value: `${currentValidatorSetSize} validators`,
+          secondLine: `${formatNumber(stakeDistribution.totalStake)} ${stakeDistribution.stakeToken}`,
+        },
+        blockProductionAccess: {
+          value: 'Closed and capped',
+          sentiment: 'bad',
+          description: `The current validator cap is ${currentValidatorSetCap}. Joining the set is permissioned (Multisig).`,
+        },
+        stakePerValidator: {
+          value: minDeposit + ' POL minimum, variable',
+          description: 'stake-weighted block production rights, no maximum',
+        },
+        rateLimit: { value: 'No (permissioned)' },
+        deterministicCrGadget: SEQUENCING_SPEC.NO_DETERMINISTIC_CR_GADGET(),
+        additionalCrGadgets: { value: 'No', sentiment: 'bad' },
+        inclusionDelayChart: {
+          type: 'spanlike',
+          validatorCount: currentValidatorSetSize,
+          spanBlocks: polygonSpanBlocks,
+          blockSeconds: polygonBlockSeconds,
+          target: 0.99,
+          maxCensorFraction: 0.33,
+          stakeDistribution,
+        },
+        inclusionDelayChartDescription:
+          'The chart models live-chain selective censorship only. Since proposing is stake-weighted, the x-axis represents the censoring POL stake, and does not cover validator-set changes, or blanket-censorship resistance gadgets.',
+      },
+      censorshipResistance: readProjectMarkdown(
+        'polygon-pos',
+        'censorshipResistance',
+      ),
+      references: [
+        {
+          title: 'Polygon PoS architecture documentation',
+          url: 'https://docs.polygon.technology/pos/architecture/',
+        },
+      ],
+      risks: [
+        {
+          category: 'Users can be censored if',
+          text: 'the active span proposer censors them, or if at least one third of Polygon PoS stake refuses to attest blocks that include their transactions.',
+        },
+      ],
+    },
+    otherConsiderations: [
+      {
+        name: 'Destination tokens are upgradeable',
+        description:
+          'Tokens transferred end up as wrapped ERC20 proxies, some of them are upgradable. The contract is named UChildERC20Proxy.',
+        references: [],
+        risks: [
+          {
+            category: 'Funds can be stolen if',
+            text: 'destination token contract is maliciously upgraded.',
+          },
+        ],
+        isIncomplete: true,
+      },
+    ],
+  },
+  contracts: {
+    addresses: {
+      ethereum: [
+        discovery.getContractDetails('RootChain', {
+          description:
+            'Contract storing Polygon PoS chain checkpoints. Note that validity of these checkpoints is not verified, it is assumed to be valid if signed by 2/3 of the Polygon Validators.',
+          ...upgrades,
+        }),
+        discovery.getContractDetails(
+          'StateSender',
+          'Smart contract allowing whitelisted addresses to send messages to contracts on Polygon PoS chain.',
+        ),
+        discovery.getContractDetails('RootChainManager', {
+          description:
+            'Main configuration contract to manage tokens, token types, escrows (predicates) for given token types.\
+          It also serves as an entry point for deposits and withdrawals effectively acting as a token router.',
+          ...upgrades,
+        }),
+        discovery.getContractDetails('StakeManager', {
+          description:
+            'Main configuration contract to manage stakers and their voting power and validate checkpoint signatures.',
+          ...upgrades,
+        }),
+        discovery.getContractDetails(
+          'StakingInfo',
+          'Contains logging and getter functions about staking on Polygon.',
+        ),
+        discovery.getContractDetails('Registry', {
+          description:
+            'Maintains the addresses of the contracts used in the system.',
+        }),
+        discovery.getContractDetails('DepositManager', {
+          description:
+            'Contract to deposit and escrow ETH, ERC20 or ERC721 tokens. Currently only used for POL.',
+          ...upgrades,
+        }),
+        discovery.getContractDetails('WithdrawManager', {
+          description:
+            "Contract handling users' withdrawal finalization for tokens escrowed in DepositManager.",
+          ...upgrades,
+        }),
+        discovery.getContractDetails('ERC20PredicateBurnOnly', {
+          description:
+            'Contract used to initiate ERC20 token withdrawals. The function to handle Plasma proofs is empty, meaning exits cannot be challenged.',
+        }),
+        discovery.getContractDetails('ERC721PredicateBurnOnly', {
+          description:
+            'Contract used to initiate ERC721 token withdrawals. The function to handle Plasma proofs is empty, meaning exits cannot be challenged.',
+        }),
+
+        discovery.getContractDetails('EventsHub', {
+          description: 'Contains events used by other contracts in the system.',
+          ...upgrades,
+        }),
+
+        discovery.getContractDetails(
+          'ExitNFT',
+          'NFTs used to represent a withdrawal in the withdrawal PriorityQueue (Only used for tokens initially deposited via DepositManager).',
+        ),
+        discovery.getContractDetails(
+          'Timelock',
+          `Contract enforcing delay on code upgrades. The current delay is ${delayString}.`,
+        ),
+      ],
+    },
+    risks: [CONTRACTS.UPGRADE_NO_DELAY_RISK],
+  },
+  permissions: {
+    ethereum: {
+      actors: [
+        discovery.getMultisigPermission(
+          'PolygonMultisig',
+          'Can propose and execute code upgrades. Can arbitrarily moves tokens out of the ERC20 escrow without a contract upgrade.',
+        ),
+      ],
+    },
+  },
+  discoveryInfo: getDiscoveryInfo([discovery]),
+  milestones: [
+    {
+      title: 'Rio upgrade',
+      url: 'https://polygon.technology/blog/polygon-launches-major-payments-upgrade-with-rio-faster-lighter-and-easier-to-build',
+      date: '2025-10-08T00:00:00Z',
+      description:
+        'Performance-focused Polygon PoS upgrade improving block production and network efficiency.',
+      type: 'general',
+    },
+    {
+      title: 'Heimdall v2 upgrade',
+      url: 'https://polygon.technology/blog/polygon-5-second-fast-finality-upgrade',
+      date: '2025-07-10T00:00:00Z',
+      description:
+        'Major consensus upgrade replacing Heimdall v1 with Heimdall v2.',
+      type: 'general',
+    },
+    {
+      title: 'Ahmedabad hard fork',
+      url: 'https://polygon.technology/blog/polygon-pos-the-ahmedabad-upgrade-is-live-on-mainnet',
+      date: '2024-09-26T00:00:00Z',
+      description:
+        'Hard fork increasing maximum contract size and improving bridge observability on Polygon PoS.',
+      type: 'general',
+    },
+    {
+      title: 'POL becomes native gas token',
+      url: 'https://polygon.technology/blog/matic-to-pol-migration-is-now-live-everything-you-need-to-know',
+      date: '2024-09-04T00:00:00Z',
+      description:
+        'Migration from MATIC to POL as the native gas and staking token on Polygon PoS.',
+      type: 'general',
+    },
+    {
+      title: 'EIP-1559 activated on Polygon PoS',
+      url: 'https://polygon.technology/blog/eip-1559-upgrades-are-going-live-on-polygon-mainnet',
+      date: '2022-01-17T00:00:00Z',
+      description:
+        'Polygon PoS implements EIP-1559, introducing base fee burn and a new gas fee mechanism.',
+      type: 'general',
+    },
+    {
+      title: 'Matic rebrands to Polygon',
+      url: 'https://polygon.technology/blog/matic-network-becomes-polygon-ethereums-internet-of-blockchains-expands-mission-and-tech-scope',
+      date: '2021-02-09T00:00:00Z',
+      description: 'Launch of the Polygon Proof-of-Stake chain.',
+      type: 'general',
+    },
+  ],
+}

@@ -1,15 +1,17 @@
-import { assert } from '@l2beat/backend-tools'
-import {
+import { assert } from '@l2beat/shared-pure'
+import type {
   Configuration,
-  RemovalConfiguration,
   SavedConfiguration,
+  TrimRemovalConfiguration,
+  WipeRemovalConfiguration,
 } from './types'
 
 export interface ConfigurationsDiff<T> {
   toAdd: Configuration<T>[]
   toUpdate: SavedConfiguration<T>[]
   toDelete: string[]
-  toRemoveData: RemovalConfiguration[]
+  toTrimData: TrimRemovalConfiguration[]
+  toWipeData: WipeRemovalConfiguration[]
 }
 
 export interface MergeResult<T> {
@@ -22,13 +24,15 @@ export function mergeConfigurations<T>(
   saved: SavedConfiguration<string>[],
   actual: Configuration<T>[],
   serializeConfiguration: (value: T) => string,
+  configurationsTrimmingDisabled?: boolean,
 ): MergeResult<T> {
   const maps = getConfigurationsAsMaps(saved, actual)
 
   const toAdd: Configuration<T>[] = []
   const toUpdate: SavedConfiguration<T>[] = []
+  const toTrimData: TrimRemovalConfiguration[] = []
+  const toWipeData: WipeRemovalConfiguration[] = []
   const toDelete: string[] = []
-  const toRemoveData: RemovalConfiguration[] = []
   const configurations: SavedConfiguration<T>[] = []
 
   for (const c of actual) {
@@ -45,36 +49,51 @@ export function mergeConfigurations<T>(
       // We remove everything because we cannot have gaps in downloaded data
       // We will re-download everything from the beginning
       if (stored.currentHeight !== null) {
-        toRemoveData.push({
+        toWipeData.push({
           id: stored.id,
-          from: stored.minHeight,
-          to: stored.currentHeight,
         })
       }
       currentHeight = null
     } else if (c.minHeight > stored.minHeight) {
-      toRemoveData.push({
-        id: stored.id,
-        from: stored.minHeight,
-        to: c.minHeight - 1,
-      })
-      if (currentHeight !== null && currentHeight < c.minHeight) {
-        currentHeight = null
+      // If trimming disabled we wipe everything
+      if (configurationsTrimmingDisabled) {
+        if (stored.currentHeight) {
+          toWipeData.push({
+            id: stored.id,
+          })
+          currentHeight = null
+        }
+      } else {
+        toTrimData.push({
+          id: stored.id,
+          range: [stored.minHeight, c.minHeight - 1],
+        })
+        if (currentHeight !== null && currentHeight < c.minHeight) {
+          currentHeight = null
+        }
       }
     }
 
     if (c.maxHeight !== stored.maxHeight) {
-      if (
-        c.maxHeight !== null &&
-        currentHeight !== null &&
-        c.maxHeight < currentHeight
-      ) {
-        toRemoveData.push({
-          id: stored.id,
-          from: c.maxHeight + 1,
-          to: currentHeight,
-        })
-        currentHeight = c.maxHeight
+      if (configurationsTrimmingDisabled) {
+        if (stored.currentHeight) {
+          toWipeData.push({
+            id: stored.id,
+          })
+          currentHeight = null
+        }
+      } else {
+        if (
+          c.maxHeight !== null &&
+          currentHeight !== null &&
+          c.maxHeight < currentHeight
+        ) {
+          toTrimData.push({
+            id: stored.id,
+            range: [c.maxHeight + 1, currentHeight],
+          })
+          currentHeight = c.maxHeight
+        }
       }
     }
 
@@ -95,20 +114,32 @@ export function mergeConfigurations<T>(
       toDelete.push(c.id)
 
       if (c.currentHeight !== null) {
-        toRemoveData.push({
+        toWipeData.push({
           id: c.id,
-          from: c.minHeight,
-          to: c.currentHeight,
         })
       }
     }
   }
 
   return {
-    diff: { toAdd, toUpdate, toDelete, toRemoveData },
+    diff: {
+      toAdd,
+      toUpdate,
+      toTrimData,
+      toDelete,
+      toWipeData: uniqueById(toWipeData),
+    },
     configurations: configurations,
     safeHeight: getSafeHeight(configurations),
   }
+}
+
+function uniqueById(configurations: WipeRemovalConfiguration[]) {
+  return Array.from(
+    new Map(
+      configurations.map((configuration) => [configuration.id, configuration]),
+    ).values(),
+  )
 }
 
 function getConfigurationsAsMaps<T>(
@@ -135,6 +166,6 @@ function getSafeHeight<T>(configurations: SavedConfiguration<T>[]) {
   return configurations.reduce(
     (agg, curr) =>
       (agg = Math.min(agg, curr.currentHeight ?? curr.minHeight - 1)),
-    Infinity,
+    Number.POSITIVE_INFINITY,
   )
 }

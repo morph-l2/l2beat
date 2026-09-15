@@ -1,0 +1,2358 @@
+import {
+  assert,
+  ChainSpecificAddress,
+  EthereumAddress,
+  formatNumber,
+  formatSeconds,
+  ProjectId,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import {
+  CONTRACTS,
+  DA_BRIDGES,
+  DA_LAYERS,
+  DA_MODES,
+  ESCROW,
+  EXITS,
+  FORCE_TRANSACTIONS,
+  OPERATOR,
+  RISK_VIEW,
+  SEQUENCING_SPEC,
+  STATE_VALIDATION,
+  TECHNOLOGY_DATA_AVAILABILITY,
+} from '../../common'
+import { BADGES } from '../../common/badges'
+import { PROGRAM_HASHES } from '../../common/programHashes'
+import { getRollupStage } from '../../common/stages/getRollupStage'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import { getSHARPVerifierUpgradeDelay } from '../../discovery/starkware'
+import { HARDCODED } from '../../discovery/values/hardcoded'
+import type { ScalingProject } from '../../internalTypes'
+import {
+  generateDiscoveryDrivenContracts,
+  generateDiscoveryDrivenPermissions,
+} from '../../templates/generateDiscoveryDrivenSections'
+import { getDiscoveryInfo } from '../../templates/getDiscoveryInfo'
+import { readProjectMarkdown } from '../../utils/readMarkdown'
+
+const discovery = new ProjectDiscovery('starknet')
+
+const starknetDelaySeconds = discovery.getContractValue<number>(
+  'Starknet',
+  'StarkWareProxy_upgradeDelay',
+)
+
+const delayedExecutorDelaySeconds = discovery.getContractValue<number>(
+  'DelayedExecutor',
+  'executionDelay',
+)
+
+const ESCROW_ETH_ADDRESS = 'eth:0xae0Ee0A63A2cE6BaeEFFE56e7714FB4EFE48D419'
+const ESCROW_WBTC_ADDRESS = 'eth:0x283751A21eafBFcD52297820D27C1f1963D9b5b4'
+const ESCROW_USDC_ADDRESS = 'eth:0xF6080D9fbEEbcd44D89aFfBFd42F098cbFf92816'
+const ESCROW_USDT_ADDRESS = 'eth:0xbb3400F107804DFB482565FF1Ec8D8aE66747605'
+const ESCROW_WSTETH_ADDRESS = 'eth:0xBf67F59D2988A46FBFF7ed79A621778a3Cd3985B'
+const ESCROW_RETH_ADDRESS = 'eth:0xcf58536D6Fab5E59B654228a5a4ed89b13A876C2'
+const ESCROW_UNI_ADDRESS = 'eth:0xf76e6bF9e2df09D0f854F045A3B724074dA1236B'
+const ESCROW_FRAX_ADDRESS = 'eth:0xDc687e1E0B85CB589b2da3C47c933De9Db3d1ebb'
+const ESCROW_FXS_ADDRESS = 'eth:0x66ba83ba3D3AD296424a2258145d9910E9E40B7C'
+const ESCROW_SFRXETH_ADDRESS = 'eth:0xd8E8531fdD446DF5298819d3Bc9189a5D8948Ee8'
+const ESCROW_LUSD_ADDRESS = 'eth:0xF3F62F23dF9C1D2C7C63D9ea6B90E8d24c7E3DF5'
+const ESCROW_LORDS_ADDRESS = 'eth:0x023A2aAc5d0fa69E3243994672822BA43E34E5C9'
+const ESCROW_STRK_ADDRESS = 'eth:0xcE5485Cfb26914C5dcE00B9BAF0580364daFC7a4'
+const ESCROW_MULTIBRIDGE_ADDRESS =
+  'eth:0xF5b6Ee2CAEb6769659f6C091D209DfdCaF3F69Eb'
+const ESCROW_SOLVBTC_ADDRESS = 'eth:0xA86b9b9c58d4f786F8ea89356c9c9Dde9432Ab10'
+const ESCROW_LBTC_ADDRESS = 'eth:0x96C8AE2AC9A5cd5fC354e375dB4d0ca75fc0685e'
+
+const escrowETHDelaySeconds = discovery.getContractValue<number>(
+  ESCROW_ETH_ADDRESS,
+  'StarkWareProxy_upgradeDelay',
+)
+const escrowSTRKDelaySeconds = discovery.getContractValue<number>(
+  ESCROW_STRK_ADDRESS,
+  'StarkWareProxy_upgradeDelay',
+)
+
+const minDelay = Math.min(
+  starknetDelaySeconds,
+  getSHARPVerifierUpgradeDelay(),
+  escrowETHDelaySeconds,
+  escrowSTRKDelaySeconds,
+)
+
+const minNonScDelay = Math.min(
+  delayedExecutorDelaySeconds,
+  getSHARPVerifierUpgradeDelay(),
+)
+
+function formatMaxTotalBalanceString(
+  ticker: string,
+  maxTotalBalance: number,
+  decimals: number,
+) {
+  if (
+    maxTotalBalance.toString() ===
+    '115792089237316195423570985008687907853269984665640564039457584007913129639935'
+  ) {
+    return 'There is no bridge cap.'
+  }
+  return `The current bridge cap is ${formatNumber(
+    maxTotalBalance / 10 ** decimals,
+  )} ${ticker}.`
+}
+
+const escrowETHMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'ETH',
+  discovery.getContractValue<number>('ETHBridge', 'maxTotalBalance'),
+  18,
+)
+
+const escrowUSDCMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'USDC',
+  discovery.getContractValue<number>('USDCBridge', 'maxTotalBalance'),
+  6,
+)
+
+const escrowUSDTMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'USDT',
+  discovery.getContractValue<number>('USDTBridge', 'maxTotalBalance'),
+  6,
+)
+
+const escrowWSTETHMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'wstETH',
+  discovery.getContractValue<number>('wstETHBridge', 'maxTotalBalance'),
+  18,
+)
+
+const escrowRETHMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'rETH',
+  discovery.getContractValue<number>('rETHBridge', 'maxTotalBalance'),
+  18,
+)
+
+const escrowUNIMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'UNI',
+  discovery.getContractValue<number>('UNIBridge', 'maxTotalBalance'),
+  18,
+)
+
+const escrowFRAXMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'FRAX.legacy',
+  discovery.getContractValue<number>('FRAXBridge', 'maxTotalBalance'),
+  18,
+)
+
+const escrowFXSMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'FRAX (prev. FXS)',
+  discovery.getContractValue<number>('FXSBridge', 'maxTotalBalance'),
+  18,
+)
+
+const escrowSFRXETHMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'sfrxETH',
+  discovery.getContractValue<number>('sfrxETHBridge', 'maxTotalBalance'),
+  18,
+)
+
+const escrowLUSDMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'LUSD',
+  discovery.getContractValue<number>('LUSDBridge', 'maxTotalBalance'),
+  18,
+)
+
+const escrowDAIMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'DAI',
+  discovery.getContractValue<number>('L1DaiGateway', 'ceiling'),
+  18,
+)
+const escrowSTRKMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'STRK',
+  discovery.getContractValue<number>('STRKBridge', 'maxTotalBalance'),
+  18,
+)
+
+const finalizationPeriod = 0
+
+const scThreshold = discovery.getMultisigStats('Starkware Security Council')
+const sharpMsThreshold = discovery.getMultisigStats('SHARP Multisig')
+const currentSHARPOuterBootloaderProgramHash =
+  '3427958597398434235135013788958741576989752718219267963615783564775551242024'
+
+interface ModernSHARPBootloaderConfig {
+  [key: string]: string
+  simpleBootloaderConfigurationCommitment: string
+  applicativeBootloaderProgramHash: string
+  supportedCairoVerifierProgramHashesCommitment: string
+}
+
+// A verifier accepts facts registered locally or in its reference registry until
+// that reference expires. Collect the accepted registry deployments and their
+// bootloader-configuration pins, plus the current shared outer bootloader.
+export function getAcceptedSHARPVerifierChain(): {
+  programPins: string[]
+  factRegistries: ChainSpecificAddress[]
+} {
+  // Derived standard Cairo program hash for the exact 1,166-felt executable
+  // returned by the current shared CairoBootloaderProgram contract.
+  const programPins: string[] = [currentSHARPOuterBootloaderProgramHash]
+  const factRegistries: ChainSpecificAddress[] = []
+  let sharpVerifierAddress = discovery.getContract('SHARPVerifier').address
+  let expirationTimestamp = Number.MAX_SAFE_INTEGER
+  const timestampNow = Date.now() / 1000
+  while (timestampNow < expirationTimestamp) {
+    factRegistries.push(sharpVerifierAddress)
+    const bootloaderConfig = discovery.getContractValue<
+      ModernSHARPBootloaderConfig | string[]
+    >(sharpVerifierAddress, 'getBootloaderConfig')
+    if (Array.isArray(bootloaderConfig)) {
+      // Older verifier generations expose only the simple-bootloader program
+      // hash and recursive Cairo-verifier allowlist commitment.
+      programPins.push(...bootloaderConfig)
+    } else {
+      programPins.push(
+        bootloaderConfig.simpleBootloaderConfigurationCommitment,
+        bootloaderConfig.applicativeBootloaderProgramHash,
+        bootloaderConfig.supportedCairoVerifierProgramHashesCommitment,
+      )
+    }
+
+    expirationTimestamp = discovery.getContractValue<number>(
+      sharpVerifierAddress,
+      'referralExpirationTime',
+    )
+    sharpVerifierAddress = discovery.getContractValue<ChainSpecificAddress>(
+      sharpVerifierAddress,
+      'referenceFactRegistry',
+    )
+  }
+  return {
+    programPins: [...new Set(programPins)],
+    factRegistries: [...new Set(factRegistries)],
+  }
+}
+
+// Kept for shared-SHARP projects that consume the common program-pin list.
+export function getSHARPBootloaderHashes(): string[] {
+  return getAcceptedSHARPVerifierChain().programPins
+}
+
+const acceptedSHARPVerifierChain = getAcceptedSHARPVerifierChain()
+const starknetProgramHashes: string[] = []
+starknetProgramHashes.push(
+  discovery.getContractValue<string>('Starknet', 'programHash'),
+)
+starknetProgramHashes.push(
+  discovery.getContractValue<string>('Starknet', 'aggregatorProgramHash'),
+)
+// Virtual Starknet OS for client-side proving (e.g. STRK-20). Not stored in
+// the L1 core contract: it is pinned as ALLOWED_VIRTUAL_OS_PROGRAM_HASHES
+// inside the L1-registered Starknet OS program above. See
+// https://github.com/starkware-libs/sequencer/blob/5114457/crates/apollo_starknet_os_program/src/cairo/starkware/starknet/core/os/constants.cairo#L66-L71
+starknetProgramHashes.push(
+  '2373625305120835200243020426311988160128377108314438505880592663683179928225',
+)
+starknetProgramHashes.push(...acceptedSHARPVerifierChain.programPins)
+
+const starkwareMultisig2Stats = discovery.getMultisigStats(
+  'Starkware Multisig 2',
+)
+const starkwareMultisig1Stats = discovery.getMultisigStats(
+  'Starkware Multisig 1',
+)
+const scMinorityStats = discovery.getMultisigStats(
+  'Starkware SCMinority Multisig',
+)
+const scMinorityAddress = discovery.getContract(
+  'Starkware SCMinority Multisig',
+).address
+const stateUpdateOperators = discovery.getContractValue<ChainSpecificAddress[]>(
+  'Starknet',
+  'operators',
+)
+assert(
+  stateUpdateOperators.length === 2 &&
+    stateUpdateOperators.includes(scMinorityAddress),
+  'Starknet state-update Operators changed: review the sequencing analysis',
+)
+const messageCancellationDelaySeconds = discovery.getContractValue<number>(
+  'Starknet',
+  'messageCancellationDelay',
+)
+const consensusSequencerCount = HARDCODED.STARKNET.CONSENSUS_SEQUENCER_COUNT
+const consensusQuorum = HARDCODED.STARKNET.CONSENSUS_QUORUM
+const l2BlockTimeMilliseconds = HARDCODED.STARKNET.L2_BLOCK_TIME_MILLISECONDS
+const preconfirmationTimeMilliseconds =
+  HARDCODED.STARKNET.PRECONFIRMATION_TIME_MILLISECONDS
+const executionDelay = discovery.getContractValue<string>(
+  'DelayedExecutor',
+  'executionDelayFmt',
+)
+const sharpUpgradeDelay = discovery.getContractValue<string>(
+  'SHARPVerifierCallProxy',
+  'upgradeActivationDelayFmt',
+)
+
+export const starknet: ScalingProject = {
+  type: 'layer2',
+  id: ProjectId('starknet'),
+  capability: 'universal',
+  addedAt: UnixTime(1642687633), // 2022-01-20T14:07:13Z
+  badges: [
+    BADGES.VM.CairoVM,
+    BADGES.DA.EthereumBlobs,
+    BADGES.Stack.SNStack,
+    BADGES.Infra.SHARP,
+    BADGES.Other.Governance,
+  ],
+  display: {
+    name: 'Starknet',
+    aliases: ['StarkWare'],
+    slug: 'starknet',
+    stacks: ['SN Stack'],
+    description:
+      'Starknet is a ZK rollup that uses STARK proofs to securely scale Ethereum and Ethereum blobs for data availability. Starknet is also actively engaged in bringing Bitcoin users the same scale, UX, and liquidity through a variety of products and programs.',
+    purposes: ['Universal'],
+    links: {
+      bridges: ['https://starkgate.starknet.io/'],
+      websites: [
+        'https://starknet.io/',
+        'https://starkware.co/starknet/',
+        'https://starkware.co/ecosystem/',
+        'https://community.starknet.io/',
+      ],
+      documentation: ['https://docs.starknet.io'],
+      explorers: ['https://voyager.online/', 'https://starkscan.co/'],
+      repositories: ['https://github.com/starkware-libs'],
+      socialMedia: [
+        'https://discord.com/invite/starknet-community',
+        'https://twitter.com/StarkWareLtd',
+        'https://medium.com/starkware',
+        'https://starkware.co/',
+        'https://youtube.com/channel/UCnDWguR8mE2oDBsjhQkgbvg',
+      ],
+      other: ['https://growthepie.com/chains/starknet'],
+    },
+    liveness: {
+      explanation:
+        'Starknet is a ZK rollup that posts state diffs to the L1. For a transaction to be considered final, the state diffs have to be submitted and a validity proof should be generated, submitted, and verified. Proofs are aggregated with other projects using SHARP and state updates have to refer to proved claims.',
+      overwrites: {
+        proofSubmissions: 'no-data',
+      },
+    },
+    costsWarning: {
+      sentiment: 'warning',
+      value:
+        "The proof verification costs are shared among all projects that use the Starkware SHARP verifier. Due to this complexity, Starknet's SHARP costs represent an estimate based on self-reported costs by the Starkware team.",
+    },
+  },
+  proofSystem: {
+    type: 'Validity',
+    zkCatalogIds: [ProjectId('stwo')],
+  },
+  chainConfig: {
+    name: 'starknet',
+    chainId: undefined,
+    gasTokens: ['ETH', 'STRK'],
+    sinceTimestamp: UnixTime(1637069048), // block 0
+    apis: [
+      {
+        type: 'starknet',
+        url: 'https://starknet-rpc.publicnode.com',
+        callsPerMinute: 120,
+      },
+    ],
+  },
+  dataAvailability: {
+    layer: DA_LAYERS.ETH_BLOBS_OR_CALLDATA,
+    bridge: DA_BRIDGES.ENSHRINED,
+    mode: DA_MODES.STATE_DIFFS_COMPRESSED,
+  },
+  riskView: {
+    stateValidation: {
+      ...RISK_VIEW.STATE_ZKP_ST,
+      executionDelay: finalizationPeriod,
+    },
+    dataAvailability: {
+      ...RISK_VIEW.DATA_ON_CHAIN_STATE_DIFFS,
+    },
+    exitWindow: RISK_VIEW.EXIT_WINDOW_STARKNET(minNonScDelay),
+    sequencerFailure: RISK_VIEW.SEQUENCER_CAN_SKIP('L1'),
+    proposerFailure: RISK_VIEW.PROPOSER_WHITELIST_SECURITY_COUNCIL(),
+  },
+  stage: getRollupStage(
+    {
+      stage0: {
+        callsItselfRollup: true,
+        stateRootsPostedToL1: true,
+        dataAvailabilityOnL1: true,
+        rollupNodeSourceAvailable: true,
+        stateVerificationOnL1: true,
+        fraudProofSystemAtLeast5Outsiders: null,
+      },
+      stage1: {
+        principle: true,
+        usersHave7DaysToExit: true,
+        usersCanExitWithoutCooperation: true,
+        securityCouncilProperlySetUp: true,
+        noRedTrustedSetups: true,
+        programHashesReproducible: true,
+        proverSourcePublished: true,
+        verifierContractsReproducible: true,
+      },
+      stage2: {
+        proofSystemOverriddenOnlyInCaseOfABug: false,
+        fraudProofSystemIsPermissionless: null,
+        delayWith30DExitWindow: false,
+      },
+    },
+    {
+      rollupNodeLink: 'https://github.com/eqlabs/pathfinder',
+      securityCouncilReference:
+        'https://docs.starknet.io/learn/protocol/security-council',
+      stage1PrincipleDescription:
+        'While Starknet is considered Stage 1, the Security Council minority provides a discretionary fallback when the permissioned operator fails to include transactions. The process through which a censored user can contact the Security Council is not defined, and the council has no protocol deadline to respond.',
+    },
+  ),
+  technology: {
+    dataAvailability: TECHNOLOGY_DATA_AVAILABILITY.STARKNET_ON_CHAIN(true),
+    operator: {
+      ...OPERATOR.CENTRALIZED_OPERATOR,
+      description:
+        OPERATOR.CENTRALIZED_OPERATOR.description +
+        ' Typically, the Operator is the hot wallet of the Starknet service submitting state updates for which proofs have been already submitted and verified.',
+    },
+    sequencing: {
+      name: 'Transactions are ordered by centralized sequencers',
+      description: readProjectMarkdown('starknet', 'technologySequencing', {
+        consensusSequencerCount,
+        consensusQuorum,
+        stateUpdateOperatorCount: stateUpdateOperators.length,
+      }),
+      sequencingSpec: {
+        type: 'centralized',
+        trustedPreconfirmation: {
+          value: `${preconfirmationTimeMilliseconds} ms`,
+          secondLine: `${l2BlockTimeMilliseconds / 1_000}s L2 block time`,
+          description: `The current proposer targets a PRE_CONFIRMED receipt in about ${preconfirmationTimeMilliseconds} ms. It is a trusted promise before consensus decides the block, with no onchain enforcement or slashing, and can be reverted if the proposal does not become the consensus block. The ${l2BlockTimeMilliseconds / 1_000}-second L2 block time is a target: a block can close earlier when it reaches a resource limit or later while transactions are still executing or consensus takes longer.`,
+          orderHint: preconfirmationTimeMilliseconds / 1_000,
+        },
+        trustedOrdering: {
+          value: 'Priority gas auction',
+          secondLine: 'Higher explicit tips first',
+          description:
+            'The active proposer selects eligible transactions from its peer-to-peer synchronized mempool in descending tip order, with the transaction hash breaking equal-tip ties. Transactions whose gas-price bound is below the current threshold remain pending. This offchain policy is not enforced by Ethereum.',
+        },
+        sequencer: {
+          value: 'Centralized',
+          secondLine: `${consensusSequencerCount}-node Tendermint`,
+          sentiment: 'bad',
+          description: `StarkWare controls ${consensusSequencerCount} equal-weight, permissioned proposers selected in deterministic round-robin order. The deployment assumes no malicious validators and requires more than half of the voting weight (${consensusQuorum}/${consensusSequencerCount}). The replicas can tolerate process outages, but do not create independent operators or censorship resistance.`,
+          orderHint: 1,
+        },
+        realtimeCensorshipResistance:
+          SEQUENCING_SPEC.NO_REALTIME_CENSORSHIP_RESISTANCE(
+            'The permissioned sequencer committee is controlled by one operator, StarkWare, which can censor transactions submitted through the normal L2 path.',
+          ),
+        forcedInclusion: {
+          value: 'Discretionary fallback',
+          secondLine: 'Security Council minority',
+          sentiment: 'bad',
+          description:
+            'There is no user-callable forced-inclusion function. A user can log an L1-to-L2 message with one Ethereum transaction and contact the Security Council minority. The council can then bypass sequencer consensus by participating in a valid, proven state update, but whether and when it does so is discretionary.',
+        },
+        inclusionDelay: {
+          value: 'Unbounded',
+          secondLine: 'No protocol deadline',
+          sentiment: 'bad',
+          description:
+            'The contracts impose no deadline for the Security Council minority to respond, for SHARP to prove the state transition, or for an Operator to post the state update.',
+          orderHint: Number.MAX_SAFE_INTEGER,
+        },
+        inclusionMechanics: {
+          value: 'L1 log of intent',
+          secondLine: 'Permissioned inclusion',
+          sentiment: 'warning',
+          description: `Logging a message creates an L1-originated L1-handler transaction rather than submitting the original signed L2 transaction. It does not automatically enter the canonical L2 order and has no other effect than recording the intent. The Security Council path must produce Starknet OS execution, data availability and an accepted SHARP proof before posting the state update. An unconsumed message can be cancelled through a two-call L1 process after a ${formatSeconds(messageCancellationDelaySeconds, { preventRoundingUp: true, fullUnit: true })} delay.`,
+        },
+        exitDelay: {
+          value: 'Unbounded',
+          secondLine: 'Council response + proving',
+          sentiment: 'bad',
+          description:
+            'Under operator failure, a user cannot independently advance the state needed for an exit. There is no deadline for the Security Council minority to act or for SHARP to produce the required proof. Once an accepted fact and valid state update reach Ethereum, there is no additional state-finalization delay.',
+          orderHint: Number.MAX_SAFE_INTEGER,
+        },
+        exitEconomics: {
+          value: 'No self-service',
+          secondLine: 'STARK proof + council action',
+          sentiment: 'bad',
+          description:
+            'A user cannot self-propose state. Progress requires the recursive STARK proving pipeline and cooperation from a whitelisted Operator or the Security Council minority.',
+        },
+      },
+      censorshipResistance:
+        'The permissioned sequencer committee provides no real-time censorship resistance. The Security Council minority can conditionally bypass consensus with a valid, proven state update, but because users cannot invoke this path and it has no deadline, Starknet provides no deterministic eventual censorship-resistance guarantee.',
+      references: [
+        {
+          title: 'Starknet documentation - Transaction lifecycle',
+          url: 'https://docs.starknet.io/learn/protocol/transactions',
+        },
+        {
+          title: 'Starknet documentation - SHARP architecture',
+          url: 'https://docs.starknet.io/learn/protocol/sharp',
+        },
+        {
+          title: 'Starknet documentation - Current consensus centralization',
+          url: 'https://docs.starknet.io/learn/protocol/staking',
+        },
+        {
+          title: 'Starknet v0.14 - Tendermint and preconfirmations',
+          url: 'https://community.starknet.io/t/snip-30-v0-14-0/115756',
+        },
+        {
+          title: 'Starknet v0.14.3 - More frequent blocks',
+          url: 'https://community.starknet.io/t/snip-40-more-frequent-blocks/116203',
+        },
+        {
+          title: 'Apollo - Mainnet consensus committee configuration',
+          url: 'https://github.com/starkware-libs/sequencer/blob/5114457ad4b5d6d1764b520dfa40b9e826f48854/deployments/sequencer/configs/overlays/hybrid/mainnet/services/core.yaml#L13',
+        },
+        {
+          title: 'Apollo - Consensus runtime configuration',
+          url: 'https://github.com/starkware-libs/sequencer/blob/5114457ad4b5d6d1764b520dfa40b9e826f48854/crates/apollo_deployments/resources/app_configs/consensus_manager_config.json#L1-L3',
+        },
+        {
+          title: 'Apollo - L2 block-time target',
+          url: 'https://github.com/starkware-libs/sequencer/blob/5114457ad4b5d6d1764b520dfa40b9e826f48854/crates/apollo_batcher_config/src/config.rs#L318-L344',
+        },
+        {
+          title: 'Apollo - Deterministic proposer rotation',
+          url: 'https://github.com/starkware-libs/sequencer/blob/5114457ad4b5d6d1764b520dfa40b9e826f48854/crates/apollo_staking/src/staking_manager.rs#L475-L517',
+        },
+        {
+          title: 'Apollo - Mempool fee ordering',
+          url: 'https://github.com/starkware-libs/sequencer/blob/5114457ad4b5d6d1764b520dfa40b9e826f48854/crates/apollo_mempool/src/fee_transaction_queue.rs#L231-L250',
+        },
+        {
+          title: 'Starknet documentation - L1-L2 messaging',
+          url: 'https://docs.starknet.io/learn/protocol/messaging',
+        },
+        {
+          title: 'Starknet - Decentralization roadmap',
+          url: 'https://www.starknet.io/blog/decentralized-starknet-2025/',
+        },
+        {
+          title: 'Starknet core contract - source code',
+          url: 'https://etherscan.io/address/0xc662c410c0ecf747543f5ba90660f6abebd9c8c4#code',
+        },
+      ],
+      risks: [],
+    },
+    forceTransactions: {
+      ...FORCE_TRANSACTIONS.SEQUENCER_NO_MECHANISM,
+      references: [
+        {
+          title: 'Censorship resistance of Starknet - Forum Discussion',
+          url: 'https://community.starknet.io/t/censorship-resistance/196',
+        },
+      ],
+    },
+    exitMechanisms: EXITS.STARKNET,
+  },
+  stateDerivation: {
+    nodeSoftware:
+      'The [Juno](https://github.com/NethermindEth/juno) node software can be used to reconstruct the L2 state entirely from L1. The feature has not been released yet, but can be found in this [PR](https://github.com/NethermindEth/juno/pull/1335).',
+    compressionScheme:
+      'Starknet uses [stateful compression since v0.13.4](https://docs.starknet.io/architecture/data-availability/#v0_13_4).',
+    genesisState: 'There is no non-empty genesis state.',
+    dataFormat:
+      'The data format has been updated with different versions, and the full specification can be found [here](https://docs.starknet.io/architecture/data-availability/).',
+  },
+  stateValidation: {
+    description:
+      'Each update to the system state must be accompanied by a ZK proof that ensures that the new state was derived by correctly applying a series of valid user transactions to the previous state. These proofs are then verified on Ethereum by a smart contract.',
+    categories: [
+      {
+        title: 'Proven Program',
+        description:
+          'The current Starknet OS and aggregator sources are published in the [Starknet sequencer repository](https://github.com/starkware-libs/sequencer/tree/APOLLO-0.14.3-RC.11/crates/apollo_starknet_os_program/src/cairo/starkware/starknet/core), and the bootloader sources are published in [cairo-lang](https://github.com/starkware-libs/cairo-lang/tree/1c5dace6fbd1dc9d1ae2eb878dc1dd85f23512ab/src/starkware/cairo/bootloaders). The exact 1,166-felt outer bootloader stored onchain has been reproduced from [this source revision](https://github.com/starkware-libs/cairo-lang/tree/56407b69f3f19f69302a8623baa8c5f71f967eed/src/starkware/cairo/bootloaders/bootloader). However, SHARP also commits to an ordered allowlist of recursive Cairo verifier programs whose active preimages and source-to-hash mappings have not been published, so the complete proven program is not independently reproducible.',
+        risks: [],
+      },
+      {
+        ...STATE_VALIDATION.VALIDITY_PROOFS,
+        references: [
+          {
+            title: 'What is Starknet',
+            url: 'https://starkware.co/starknet/',
+          },
+        ],
+      },
+    ],
+  },
+  permissions: generateDiscoveryDrivenPermissions([discovery]),
+  contracts: {
+    addresses: generateDiscoveryDrivenContracts([discovery]),
+    risks: [CONTRACTS.UPGRADE_WITH_DELAY_SECONDS_RISK(minDelay)],
+    programHashes: starknetProgramHashes.map((el) => PROGRAM_HASHES(el)),
+    // GPS statement-verifier deployments currently able to satisfy Starknet's
+    // fact lookup. Their selectable CPU verifiers and helper contracts are
+    // exposed by the shared SHARP discovery.
+    zkVerifiers: acceptedSHARPVerifierChain.factRegistries,
+    programHashesDescription:
+      'The Starknet OS, virtual Starknet OS, aggregator, outer bootloader, supported-simple-bootloader commitment, and applicative bootloader are reproducible. Every SHARP verifier in the currently accepted fact-registry chain also pins a commitment to an ordered allowlist of recursive Cairo verifier programs. The active allowlist preimages and the programs behind them have not been reproduced, so an invalid nested-proof verifier cannot be ruled out independently.',
+  },
+  upgradesAndGovernance: {
+    content: readProjectMarkdown('starknet', 'upgradesAndGovernance', {
+      scThreshold,
+      starkwareMultisig1Stats,
+      starkwareMultisig2Stats,
+      executionDelay,
+      sharpMsThreshold,
+      sharpUpgradeDelay,
+      scMinorityStats,
+    }),
+    governanceInfo: {
+      securityCouncil: {
+        Composition: `**${scThreshold}** onchain Safe multisig — 12 members, geographically and organizationally diverse (<50% from one country, <4 from one organization). The Starknet Foundation appoints and can administratively remove members. No fixed term length and no live tokenholder election mechanism.`,
+        'Members public':
+          '**Not mapped**, SNIP-25 and Foundation announcements publish only composition criteria (technical reputation, KYC/AML, diversity limits, conflict-of-interest rules).',
+        Charter:
+          '[SNIP-25](https://github.com/starknet-io/SNIPs/blob/main/SNIPS/snip-25.md) defines duties (security-only mandate), vetting-failure reports, eligibility and the code of conduct.',
+        'Can bypass DAO?': `**Yes** — ${scThreshold} can approve and execute an emergency upgrade immediately. The same instant rights let it counteract a malicious action queued in the DelayedExecutor during its ${executionDelay} window.`,
+        'DAO can override SC?':
+          '**No**, the community can only dispute the emergency upgrades after the fact in advisory way.',
+      },
+      upgrades: {
+        'Major upgrade path': `Release announcement (≥1 SNIP + specific GitHub commit) → 2-week community deliberation → 1-week final review → 1-week STRK vote on the [Governance Hub on L2](https://governance.starknet.io/) → Security Council vetting → deployment queued in the DelayedExecutor by the ${starkwareMultisig1Stats} Starkware Multisig 1, whose ${executionDelay} onchain delay covers the procedural ≥7-day freeze → execution. Minimum wall-clock ≈ **5 weeks** (${executionDelay} onchain-enforced if executed via DelayedExecutor).`,
+        'Minor upgrade path': `Announcement (SNIP may be submitted in parallel) → 1-week review → 1-week STRK vote on L2 → deployment queued in the DelayedExecutor, whose ${executionDelay} onchain delay covers the procedural ≥5-day freeze → execution. No Security Council approval required. Minimum wall-clock ≈ **22 days** (${executionDelay} onchain-enforced if executed via DelayedExecutor).`,
+        'Emergency upgrade path': `**${scThreshold} Security Council, instant**.`,
+        'Exit window': `**${executionDelay}** enforced onchain by the DelayedExecutor on the normal upgrade path (procedurally ≥7 days after the vote for major releases, ≥5 days for minor). **0** for emergency upgrades by the Security Council.`,
+      },
+      tokenGovernance: {
+        'Governance token':
+          '\`STRK\` — ~10.15B total supply, not permanently capped. Users can vote with L1 STRK, natively staked STRK or L2 vSTRK tokens, each gives 1 vote. In 2025 the Starknet Foundation [delegated ~1.7B STRK](https://www.starknet.io/blog/starknet-foundation-delegation-program/) to ~180 ecosystem delegates.',
+        'Voting venue':
+          '[Starknet Governance Hub](https://governance.starknet.io/) using Snapshot X — proposals, space configuration and results are recorded and verified on Starknet, with relayed gasless signed votes.',
+        'Proposal threshold':
+          '**None**, but proposal admission is curated, not triggered permissionlessly by an onchain token threshold.',
+        Quorum:
+          '**No protocol-wide quorum rule published.** Historical votes used a simple majority with no minimum quorum.',
+        'Execution model': `**Vote as onchain record, permissioned deployment** — passed proposals are queued in the DelayedExecutor by the ${starkwareMultisig1Stats} Starkware Multisig 1 and execute after ${executionDelay}.`,
+      },
+    },
+  },
+  milestones: [
+    {
+      title: 'Starknet reverts 18mins of history',
+      url: 'https://www.starknet.io/blog/starknet-incident-report-january-5-2026/',
+      date: '2026-01-05T00:00:00.00Z',
+      description:
+        'Starknet experienced an outage during which block production was halted.',
+      type: 'incident',
+    },
+    {
+      title: 'Starknet upgrades its proving system to Stwo',
+      url: 'https://etherscan.io/tx/0x7b4a25af246b28b6d5bed86942696273a84e57abc629b83072be370df2bdb797',
+      date: '2025-10-19T00:00:00.00Z',
+      description:
+        'Starknet switches to the next-generation prover Stwo to prove its STF on Ethereum L1.',
+      type: 'general',
+    },
+    {
+      title: 'Starknet is down for several hours',
+      url: 'https://x.com/Starknet/status/1962740091937317247',
+      date: '2025-09-02T00:00:00.00Z',
+      description:
+        'Starknet experiences a reorg caused by a bug on the sequencing side.',
+      type: 'incident',
+    },
+    {
+      title: 'Grinta upgrade is deployed',
+      url: 'https://x.com/Starknet/status/1962457868277305357',
+      date: '2025-09-02T00:00:00.00Z',
+      description:
+        'Starknet activates the grinta upgrade with several improvements.',
+      type: 'general',
+    },
+    {
+      title: 'Stage 1',
+      url: 'https://x.com/Starknet/status/1922990242035814424',
+      date: '2025-05-15T00:00:00.00Z',
+      description:
+        'Starknet is now Stage 1 by introducing a Security Council, upgrade delays and censorship resistance.',
+      type: 'general',
+    },
+    {
+      title: 'Starknet 4h outage',
+      url: 'https://cointelegraph.com/news/starknet-details-bug-reorganization-blockss',
+      date: '2024-04-04T00:00:00Z',
+      description: 'A rounding error causes a 4-hour outage on Starknet.',
+      type: 'incident',
+    },
+    {
+      title: 'Starknet starts using blobs',
+      url: 'https://twitter.com/Starknet/status/1767915153700290839',
+      date: '2024-03-13T00:00:00Z',
+      description: 'Starknet starts publishing data to blobs.',
+      type: 'general',
+    },
+    {
+      title: 'Starknet Provisions',
+      url: 'https://www.starknet.io/en/content/starknet-provisions-program',
+      date: '2024-02-14T00:00:00Z',
+      description:
+        'Starknet begins allocating $STRK to early contributors and users.',
+      type: 'general',
+    },
+    {
+      title: 'Starknet Alpha',
+      url: 'https://medium.com/starkware/starknet-alpha-now-on-mainnet-4cf35efd1669',
+      date: '2021-11-29T00:00:00Z',
+      description:
+        'Rollup is live on mainnet, enabling general computation using ZK Rollup technology.',
+      type: 'general',
+    },
+    {
+      title: 'StarkGate Alpha',
+      url: 'https://medium.com/starkware/starkgate-alpha-35d01d21e3af',
+      date: '2022-05-09T00:00:00Z',
+      description:
+        'Bridge is live on mainnet, serving as gateway between Ethereum and Starknet.',
+      type: 'general',
+    },
+  ],
+  config: {
+    associatedTokens: ['STRK'],
+    escrows: [
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_ETH_ADDRESS),
+        sinceTimestamp: UnixTime(1647857148),
+        tokens: ['ETH'],
+        description:
+          'StarkGate bridge for ETH.' + ' ' + escrowETHMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(
+          'eth:0x0437465dfb5B79726e35F08559B0cBea55bb585C',
+        ),
+        sinceTimestamp: UnixTime(1652101033),
+        tokens: ['DAI'],
+        description:
+          'DAI Vault for custom DAI Gateway managed by MakerDAO.' +
+          ' ' +
+          escrowDAIMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_WBTC_ADDRESS),
+        sinceTimestamp: UnixTime(1657137600),
+        untilTimestamp: UnixTime(1768848455),
+        tokens: ['WBTC'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for WBTC. The bridge is halted and WBTC migrated to external OFT bridging.',
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_USDC_ADDRESS),
+        sinceTimestamp: UnixTime(1657137639),
+        tokens: [], // removed due to custom config in starknet.json
+        description:
+          'StarkGate bridge for USDC.' + ' ' + escrowUSDCMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_USDT_ADDRESS),
+        sinceTimestamp: UnixTime(1657137615),
+        tokens: ['USDT'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for USDT.' + ' ' + escrowUSDTMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_WSTETH_ADDRESS),
+        sinceTimestamp: UnixTime(1657137623),
+        tokens: ['wstETH'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for wstETH.' +
+          ' ' +
+          escrowWSTETHMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_RETH_ADDRESS),
+        sinceTimestamp: UnixTime(1657137623),
+        tokens: ['rETH'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for rETH.' + ' ' + escrowRETHMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_UNI_ADDRESS),
+        tokens: ['UNI'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for UNI.' + ' ' + escrowUNIMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_FRAX_ADDRESS),
+        tokens: ['FRAX.legacy'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for FRAX.' + ' ' + escrowFRAXMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_FXS_ADDRESS),
+        tokens: ['FRAX'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for FRAX (prev. FXS).' +
+          ' ' +
+          escrowFXSMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_SFRXETH_ADDRESS),
+        tokens: ['sfrxETH'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for sfrxETH.' +
+          ' ' +
+          escrowSFRXETHMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_LUSD_ADDRESS),
+        tokens: ['LUSD'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for LUSD.' + ' ' + escrowLUSDMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_LORDS_ADDRESS),
+        tokens: ['LORDS'],
+        description: 'StarkGate bridge for LORDS.',
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_STRK_ADDRESS),
+        tokens: ['STRK'],
+        description:
+          'StarkGate bridge for STRK.' + ' ' + escrowSTRKMaxTotalBalanceString,
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_MULTIBRIDGE_ADDRESS),
+        tokens: ['EKUBO', 'ZEND', 'NSTR'],
+        ...ESCROW.CANONICAL_ADD_TA,
+        description:
+          'StarkGate bridge for EKUBO, ZEND, NSTR (and potentially other tokens listed via StarkgateManager).',
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_SOLVBTC_ADDRESS),
+        untilTimestamp: UnixTime(1768848971),
+        tokens: ['SolvBTC'],
+        description:
+          'StarkGate bridge for SolvBTC. The bridge is halted and SolvBTC migrated to external OFT bridging.',
+      }),
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(ESCROW_LBTC_ADDRESS),
+        tokens: ['LBTC'],
+        description: 'StarkGate bridge for LBTC.',
+      }),
+    ],
+    activityConfig: {
+      type: 'day',
+      sinceTimestamp: UnixTime(1637020800),
+      dataSource: 'Voyager API',
+    },
+    daTracking: [
+      {
+        type: 'ethereum',
+        daLayer: ProjectId('ethereum'),
+        sinceBlock: 0, // Edge Case: config added @ DA Module start
+        inbox: EthereumAddress('0xc662c410C0ECf747543f5bA90660f6ABeBD9C8c4'),
+        sequencers: [
+          EthereumAddress('0xFf6B2185E357b6e9136A1b2ca5d7C45765D5c591'),
+          EthereumAddress('0x2C169DFe5fBbA12957Bdd0Ba47d9CEDbFE260CA7'),
+        ],
+      },
+    ],
+    trackedTxs: [
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'sharpSubmission',
+          sinceTimestamp: UnixTime(1636978914),
+          untilTimestamp: UnixTime(1702921247),
+          programHashes: [
+            '1865367024509426979036104162713508294334262484507712987283009063059134893433',
+          ],
+        },
+        _hackCostMultiplier: 0.7,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'sharpSubmission',
+          sinceTimestamp: UnixTime(1702921247),
+          untilTimestamp: UnixTime(1704855731),
+          programHashes: [
+            '54878256403880350656938046611252303365750679698042371543935159963667935317',
+          ],
+        },
+        _hackCostMultiplier: 0.7,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'sharpSubmission',
+          sinceTimestamp: UnixTime(1704855731),
+          untilTimestamp: UnixTime(1709251200), // 2024-03-01 00:00:00 UTC
+          programHashes: [
+            '2479841346739966073527450029179698923866252973805981504232089731754042431018',
+          ],
+        },
+        _hackCostMultiplier: 0.7,
+      },
+      {
+        // Since 2024-03-01, Starknet SHARP proof share is estimated via
+        // customer fractions from sharp-bi API. (see `pnpm starkware-costs -h` in backend)
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1709251200),
+          untilTimestamp: UnixTime(1711670400),
+        },
+        _hackCostMultiplier: 0.7728,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1711670400),
+          untilTimestamp: UnixTime(1713484800),
+        },
+        _hackCostMultiplier: 0.5713,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1713484800),
+          untilTimestamp: UnixTime(1715904000),
+        },
+        _hackCostMultiplier: 0.4699,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1715904000),
+          untilTimestamp: UnixTime(1722556800),
+        },
+        _hackCostMultiplier: 0.3884,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1722556800),
+          untilTimestamp: UnixTime(1724976000),
+        },
+        _hackCostMultiplier: 0.3153,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1724976000),
+          untilTimestamp: UnixTime(1729814400),
+        },
+        _hackCostMultiplier: 0.0621,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1729814400),
+          untilTimestamp: UnixTime(1731628800),
+        },
+        _hackCostMultiplier: 0.1762,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1731628800),
+          untilTimestamp: UnixTime(1746748800),
+        },
+        _hackCostMultiplier: 0.0616,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1746748800),
+          untilTimestamp: UnixTime(1750982400),
+        },
+        _hackCostMultiplier: 0.1518,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1750982400),
+          untilTimestamp: UnixTime(1755216000),
+        },
+        _hackCostMultiplier: 0.0686,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1755216000),
+          untilTimestamp: UnixTime(1757635200),
+        },
+        _hackCostMultiplier: 0.1781,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1757635200),
+          untilTimestamp: UnixTime(1760659200),
+        },
+        _hackCostMultiplier: 0.2712,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1760659200),
+          untilTimestamp: UnixTime(1764288000),
+        },
+        _hackCostMultiplier: 0.3812,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1764288000),
+          untilTimestamp: UnixTime(1766707200),
+        },
+        _hackCostMultiplier: 0.2756,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1766707200),
+          untilTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.2559,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x47312450B3Ac8b5b8e247a6bB6d523e7605bDb60',
+          ),
+          selector: '0x9b3b76cc',
+          functionSignature:
+            'function verifyProofAndRegister(uint256[] proofParams, uint256[] proof, uint256[] taskMetadata, uint256[] cairoAuxInput, uint256 cairoVerifierId)',
+          sinceTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.084,
+      },
+      {
+        uses: [
+          { type: 'liveness', subtype: 'stateUpdates' },
+          { type: 'l2costs', subtype: 'stateUpdates' },
+        ],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xc662c410C0ECf747543f5bA90660f6ABeBD9C8c4',
+          ),
+          selector: '0x77552641',
+          functionSignature:
+            'function updateState(uint256[] programOutput, uint256 onchainDataHash, uint256 onchainDataSize)',
+          sinceTimestamp: UnixTime(1636979180),
+          untilTimestamp: UnixTime(1710352043), // last call: https://etherscan.io/tx/0xd7cfa525566850a190eec7937da2f8e43c8e87873747e5a41c74adb404210472
+        },
+      },
+      {
+        uses: [
+          { type: 'liveness', subtype: 'stateUpdates' },
+          { type: 'l2costs', subtype: 'stateUpdates' },
+        ],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xc662c410C0ECf747543f5bA90660f6ABeBD9C8c4',
+          ),
+          selector: '0xb72d42a1',
+          functionSignature:
+            'function updateStateKzgDA(uint256[] programOutput, bytes kzgProof)',
+          sinceTimestamp: UnixTime(1710252995),
+          untilTimestamp: UnixTime(1724855579),
+        },
+      },
+      {
+        uses: [
+          { type: 'liveness', subtype: 'stateUpdates' },
+          { type: 'l2costs', subtype: 'stateUpdates' },
+        ],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xc662c410C0ECf747543f5bA90660f6ABeBD9C8c4',
+          ),
+          selector: '0x507ee528',
+          functionSignature:
+            'function updateStateKzgDA(uint256[] programOutput, bytes[] kzgProofs)',
+          sinceTimestamp: UnixTime(1724855579),
+        },
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xFD14567eaf9ba941cB8c8a94eEC14831ca7fD1b4',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1678095635),
+          untilTimestamp: UnixTime(1706789063),
+        },
+        _hackCostMultiplier: 0.9,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x40864568f679c10aC9e72211500096a5130770fA',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1706789063),
+          untilTimestamp: UnixTime(1709251200),
+        },
+        _hackCostMultiplier: 0.9,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x40864568f679c10aC9e72211500096a5130770fA',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1709251200),
+          untilTimestamp: UnixTime(1710342000),
+        },
+        _hackCostMultiplier: 0.8962,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x40864568f679c10aC9e72211500096a5130770fA',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1710342000),
+          untilTimestamp: UnixTime(1711670400),
+        },
+        _hackCostMultiplier: 0.8962,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x40864568f679c10aC9e72211500096a5130770fA',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1711670400),
+          untilTimestamp: UnixTime(1713484800),
+        },
+        _hackCostMultiplier: 0.4258,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x40864568f679c10aC9e72211500096a5130770fA',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1713484800),
+          untilTimestamp: UnixTime(1715904000),
+        },
+        _hackCostMultiplier: 0.4194,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x40864568f679c10aC9e72211500096a5130770fA',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1715904000),
+          untilTimestamp: UnixTime(1722197315),
+        },
+        _hackCostMultiplier: 0.3336,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1722197315),
+          untilTimestamp: UnixTime(1722556800),
+        },
+        _hackCostMultiplier: 0.3336,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1722556800),
+          untilTimestamp: UnixTime(1724976000),
+        },
+        _hackCostMultiplier: 0.255,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1724976000),
+          untilTimestamp: UnixTime(1729814400),
+        },
+        _hackCostMultiplier: 0.1088,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1729814400),
+          untilTimestamp: UnixTime(1731628800),
+        },
+        _hackCostMultiplier: 0.1829,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1731628800),
+          untilTimestamp: UnixTime(1732747391),
+        },
+        _hackCostMultiplier: 0.0354,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1722197315),
+          untilTimestamp: UnixTime(1722556800),
+        },
+        _hackCostMultiplier: 0.3336,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1722556800),
+          untilTimestamp: UnixTime(1724976000),
+        },
+        _hackCostMultiplier: 0.255,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1724976000),
+          untilTimestamp: UnixTime(1729814400),
+        },
+        _hackCostMultiplier: 0.1088,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1729814400),
+          untilTimestamp: UnixTime(1731628800),
+        },
+        _hackCostMultiplier: 0.1829,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1731628800),
+          untilTimestamp: UnixTime(1732747391),
+        },
+        _hackCostMultiplier: 0.0354,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1732747391),
+          untilTimestamp: UnixTime(1746748800),
+        },
+        _hackCostMultiplier: 0.0354,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1746748800),
+          untilTimestamp: UnixTime(1750982400),
+        },
+        _hackCostMultiplier: 0.0299,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1750982400),
+          untilTimestamp: UnixTime(1755216000),
+        },
+        _hackCostMultiplier: 0.0097,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1755216000),
+          untilTimestamp: UnixTime(1757635200),
+        },
+        _hackCostMultiplier: 0.0238,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1757635200),
+          untilTimestamp: UnixTime(1760659200),
+        },
+        _hackCostMultiplier: 0.0114,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1760659200),
+          untilTimestamp: UnixTime(1764288000),
+        },
+        _hackCostMultiplier: 0.0091,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1764288000),
+          untilTimestamp: UnixTime(1766707200),
+        },
+        _hackCostMultiplier: 0.0103,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1766707200),
+          untilTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.1048,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x5578ceae',
+          functionSignature:
+            'function registerContinuousMemoryPage(uint256 startAddr,uint256[] values,uint256 z,uint256 alpha,uint256 prime)',
+          sinceTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.1526,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1732747391),
+          untilTimestamp: UnixTime(1746748800),
+        },
+        _hackCostMultiplier: 0.0354,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1746748800),
+          untilTimestamp: UnixTime(1750982400),
+        },
+        _hackCostMultiplier: 0.0299,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1750982400),
+          untilTimestamp: UnixTime(1755216000),
+        },
+        _hackCostMultiplier: 0.0097,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1755216000),
+          untilTimestamp: UnixTime(1757635200),
+        },
+        _hackCostMultiplier: 0.0238,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1757635200),
+          untilTimestamp: UnixTime(1760659200),
+        },
+        _hackCostMultiplier: 0.0114,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1760659200),
+          untilTimestamp: UnixTime(1764288000),
+        },
+        _hackCostMultiplier: 0.0091,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1764288000),
+          untilTimestamp: UnixTime(1766707200),
+        },
+        _hackCostMultiplier: 0.0103,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1766707200),
+          untilTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.1048,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'batchSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xe583BcDE0160b637330b27a3ea1F3c02ba2eC460',
+          ),
+          selector: '0x739ef303',
+          functionSignature:
+            'function registerContinuousPageBatch((uint256 startAddr, uint256[] values, uint256 z, uint256 alpha, uint256 prime)[] memoryPageEntries)',
+          sinceTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.1526,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xDEf8A3b280A54eE7Ed4f72E1c7d6098ad8df44fb',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1706772791),
+          untilTimestamp: UnixTime(1709251200),
+        },
+        _hackCostMultiplier: 0.7,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xDEf8A3b280A54eE7Ed4f72E1c7d6098ad8df44fb',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1709251200),
+          untilTimestamp: UnixTime(1710342000),
+        },
+        _hackCostMultiplier: 0.7728,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xDEf8A3b280A54eE7Ed4f72E1c7d6098ad8df44fb',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1710342000),
+          untilTimestamp: UnixTime(1711670400),
+        },
+        _hackCostMultiplier: 0.7728,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xDEf8A3b280A54eE7Ed4f72E1c7d6098ad8df44fb',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1711670400),
+          untilTimestamp: UnixTime(1713484800),
+        },
+        _hackCostMultiplier: 0.5713,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xDEf8A3b280A54eE7Ed4f72E1c7d6098ad8df44fb',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1713484800),
+          untilTimestamp: UnixTime(1715783986),
+        },
+        _hackCostMultiplier: 0.4699,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xDEf8A3b280A54eE7Ed4f72E1c7d6098ad8df44fb',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1715783986),
+          untilTimestamp: UnixTime(1715904000),
+        },
+        _hackCostMultiplier: 0.4699,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xDEf8A3b280A54eE7Ed4f72E1c7d6098ad8df44fb',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1715904000),
+          untilTimestamp: UnixTime(1722197315),
+        },
+        _hackCostMultiplier: 0.3884,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1722197315),
+          untilTimestamp: UnixTime(1722556800),
+        },
+        _hackCostMultiplier: 0.3884,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1722556800),
+          untilTimestamp: UnixTime(1724976000),
+        },
+        _hackCostMultiplier: 0.3153,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1724976000),
+          untilTimestamp: UnixTime(1729814400),
+        },
+        _hackCostMultiplier: 0.0621,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1729814400),
+          untilTimestamp: UnixTime(1731628800),
+        },
+        _hackCostMultiplier: 0.1762,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1731628800),
+          untilTimestamp: UnixTime(1732665600),
+        },
+        _hackCostMultiplier: 0.0616,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1732665600),
+          untilTimestamp: UnixTime(1746748800),
+        },
+        _hackCostMultiplier: 0.0616,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1746748800),
+          untilTimestamp: UnixTime(1750982400),
+        },
+        _hackCostMultiplier: 0.1518,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1750982400),
+          untilTimestamp: UnixTime(1755216000),
+        },
+        _hackCostMultiplier: 0.0686,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1755216000),
+          untilTimestamp: UnixTime(1757635200),
+        },
+        _hackCostMultiplier: 0.1781,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1757635200),
+          untilTimestamp: UnixTime(1760659200),
+        },
+        _hackCostMultiplier: 0.2712,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1760659200),
+          untilTimestamp: UnixTime(1764288000),
+        },
+        _hackCostMultiplier: 0.3812,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1764288000),
+          untilTimestamp: UnixTime(1766707200),
+        },
+        _hackCostMultiplier: 0.2756,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1766707200),
+          untilTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.2559,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x30EfaAA99f8eFe310D9FdC83072e2a04c093d400',
+          ),
+          selector: '0xe85a6a28',
+          functionSignature:
+            'function verifyFRI(uint256[] proof,uint256[] friQueue,uint256 evaluationPoint,uint256 friStepSize,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.084,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x634DCf4f1421Fc4D95A968A559a450ad0245804c',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1706767355),
+          untilTimestamp: UnixTime(1709251200),
+        },
+        _hackCostMultiplier: 0.7,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x634DCf4f1421Fc4D95A968A559a450ad0245804c',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1709251200),
+          untilTimestamp: UnixTime(1710342000),
+        },
+        _hackCostMultiplier: 0.7728,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x634DCf4f1421Fc4D95A968A559a450ad0245804c',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1710342000),
+          untilTimestamp: UnixTime(1711670400),
+        },
+        _hackCostMultiplier: 0.7728,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x634DCf4f1421Fc4D95A968A559a450ad0245804c',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1711670400),
+          untilTimestamp: UnixTime(1713484800),
+        },
+        _hackCostMultiplier: 0.5713,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x634DCf4f1421Fc4D95A968A559a450ad0245804c',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1713484800),
+          untilTimestamp: UnixTime(1715783986),
+        },
+        _hackCostMultiplier: 0.4699,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x634DCf4f1421Fc4D95A968A559a450ad0245804c',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1715783986),
+          untilTimestamp: UnixTime(1715904000),
+        },
+        _hackCostMultiplier: 0.4699,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x634DCf4f1421Fc4D95A968A559a450ad0245804c',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1715904000),
+          untilTimestamp: UnixTime(1722197315),
+        },
+        _hackCostMultiplier: 0.3884,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1722197315),
+          untilTimestamp: UnixTime(1722556800),
+        },
+        _hackCostMultiplier: 0.3884,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1722556800),
+          untilTimestamp: UnixTime(1724976000),
+        },
+        _hackCostMultiplier: 0.3153,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1724976000),
+          untilTimestamp: UnixTime(1729814400),
+        },
+        _hackCostMultiplier: 0.0621,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1729814400),
+          untilTimestamp: UnixTime(1731628800),
+        },
+        _hackCostMultiplier: 0.1762,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1731628800),
+          untilTimestamp: UnixTime(1732665600),
+        },
+        _hackCostMultiplier: 0.0616,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1732665600),
+          untilTimestamp: UnixTime(1746748800),
+        },
+        _hackCostMultiplier: 0.0616,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1746748800),
+          untilTimestamp: UnixTime(1750982400),
+        },
+        _hackCostMultiplier: 0.1518,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1750982400),
+          untilTimestamp: UnixTime(1755216000),
+        },
+        _hackCostMultiplier: 0.0686,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1755216000),
+          untilTimestamp: UnixTime(1757635200),
+        },
+        _hackCostMultiplier: 0.1781,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1757635200),
+          untilTimestamp: UnixTime(1760659200),
+        },
+        _hackCostMultiplier: 0.2712,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1760659200),
+          untilTimestamp: UnixTime(1764288000),
+        },
+        _hackCostMultiplier: 0.3812,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1764288000),
+          untilTimestamp: UnixTime(1766707200),
+        },
+        _hackCostMultiplier: 0.2756,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1766707200),
+          untilTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.2559,
+      },
+      {
+        uses: [{ type: 'l2costs', subtype: 'proofSubmissions' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0x32a91Ff604AB2aDCd832e91D68b2f3f25358FdAd',
+          ),
+          selector: '0x3fe317a6',
+          functionSignature:
+            'function verifyMerkle(uint256[] merkleView,uint256[] initialMerkleQueue,uint256 height,uint256 expectedRoot)',
+          sinceTimestamp: UnixTime(1770336000),
+        },
+        _hackCostMultiplier: 0.084,
+      },
+    ],
+  },
+  discoveryInfo: getDiscoveryInfo([discovery]),
+}

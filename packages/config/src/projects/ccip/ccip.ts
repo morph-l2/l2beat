@@ -1,0 +1,65 @@
+import { ProjectId, UnixTime } from '@l2beat/shared-pure'
+import { CONTRACTS } from '../../common'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import {
+  generateDiscoveryDrivenContracts,
+  generateDiscoveryDrivenPermissions,
+} from '../../templates/generateDiscoveryDrivenSections'
+import type { BaseProject } from '../../types'
+import { readProjectMarkdown } from '../../utils/readMarkdown'
+
+const discovery = new ProjectDiscovery('ccip')
+
+const ocrCommitN = discovery.getContractValue(
+  'EthereumOffRamp_v1_6',
+  'ocrCommitN',
+)
+const ocrCommitF = discovery.getContractValue(
+  'EthereumOffRamp_v1_6',
+  'ocrCommitF',
+)
+const ocrCommitQuorum = Number(ocrCommitF) + 1
+
+const permissionLessExecutionThresholdFmt = discovery.getContractValue(
+  'EthereumOffRamp_v1_6',
+  'permissionLessExecutionThresholdFmt',
+)
+
+export const ccip: BaseProject = {
+  id: ProjectId('ccip'),
+  slug: 'ccip',
+  name: 'Chainlink CCIP',
+  shortName: 'CCIP',
+  addedAt: UnixTime(1769526436),
+  interopConfig: {
+    description:
+      "Multichain token framework using the CCIP messaging protocol. Routes are migrating from v1.6's fixed OCR commit and execution networks to v2.0's modular cross-chain verifiers and permissionless execution.",
+    detailedDescription: readProjectMarkdown('ccip', 'detailedDescription', {
+      ocrCommitQuorum,
+      ocrCommitN: String(ocrCommitN),
+      permissionLessExecutionThresholdFmt: String(
+        permissionLessExecutionThresholdFmt,
+      ),
+    }),
+    plugins: [
+      {
+        plugin: 'ccip',
+        bridgeType: 'lockAndMint',
+      },
+      {
+        plugin: 'ccip',
+        bridgeType: 'burnAndMint',
+      },
+      {
+        plugin: 'ccip',
+        bridgeType: 'nonMinting',
+      },
+    ],
+    type: 'multichain',
+    permissions: generateDiscoveryDrivenPermissions([discovery]),
+    contracts: {
+      addresses: generateDiscoveryDrivenContracts([discovery]),
+      risks: [CONTRACTS.UPGRADE_NO_DELAY_RISK],
+    },
+  },
+}

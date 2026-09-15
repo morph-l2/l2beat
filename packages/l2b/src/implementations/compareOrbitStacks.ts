@@ -1,15 +1,17 @@
+import type { DiscoveryPaths, EntryParameters } from '@l2beat/discovery'
 import { ConfigReader } from '@l2beat/discovery'
-import { ContractParameters } from '@l2beat/discovery-types'
 import { assert } from '@l2beat/shared-pure'
 
-const chainMapping: Record<string, string> = {
-  arbitrum: 'ethereum',
-  parallel: 'ethereum',
-  kinto: 'ethereum',
-  xai: 'arbitrum',
-  deri: 'arbitrum',
-  rari: 'arbitrum',
-}
+const chainMapping: string[] = [
+  'arbitrum',
+  'parallel',
+  'kinto',
+  'xai',
+  'deri',
+  'rari',
+  'sxnetwork',
+  'galxegravity',
+]
 
 function getArbOSVersion(wasmModuleRoot: string): string {
   const wasmRoots: Record<string, string> = {
@@ -44,6 +46,8 @@ function getChainName(chainId: number | undefined): string {
     20231119: 'deri',
     1380012617: 'rari',
     7887: 'kinto',
+    4162: 'sxnetwork',
+    1625: 'galxegravity',
   }
   if (chainId === undefined) {
     return 'Unknown chainId'
@@ -59,16 +63,12 @@ const descriptions: Record<string, string> = {
     'Dispute window (in blocks) during which it is required to respond to a challenge',
 }
 
-export async function analyseAllOrbitChains(
-  discoveryPath: string,
-): Promise<void> {
-  const configReader = new ConfigReader(discoveryPath)
-  const rollups: ContractParameters[] = []
-  for (const [chain, mapping] of Object.entries(chainMapping)) {
-    const discovery = configReader.readDiscovery(chain, mapping)
-    const contract = discovery.contracts.find(
-      (obj) => obj.name === 'RollupProxy',
-    )
+export function analyzeAllOrbitChains(paths: DiscoveryPaths) {
+  const configReader = new ConfigReader(paths.discovery)
+  const rollups: EntryParameters[] = []
+  for (const [chain] of Object.entries(chainMapping)) {
+    const discovery = configReader.readDiscovery(chain)
+    const contract = discovery.entries.find((obj) => obj.name === 'RollupProxy')
     assert(contract, 'RollupProxy contract not found')
     rollups.push(contract)
   }
@@ -144,22 +144,22 @@ export async function analyseAllOrbitChains(
   console.table(data3)
 }
 
-export async function compareTwoOrbitChain(
+export function compareTwoOrbitChain(
   firstProject: string,
   secondProject: string,
-  discoveryPath: string,
-): Promise<void> {
+  paths: DiscoveryPaths,
+) {
   console.log(`Analyzing ${firstProject} and ${secondProject}`)
-  const configReader = new ConfigReader(discoveryPath)
+  const configReader = new ConfigReader(paths.discovery)
 
-  const discovery1 = getSafeDiscovery(configReader, firstProject)
-  const discovery2 = getSafeDiscovery(configReader, secondProject)
+  const discovery1 = configReader.readDiscovery(firstProject)
+  const discovery2 = configReader.readDiscovery(secondProject)
 
-  const rollupProxy1 = discovery1.contracts.find(
+  const rollupProxy1 = discovery1.entries.find(
     (obj) => obj.name === 'RollupProxy',
   )
 
-  const rollupProxy2 = discovery2.contracts.find(
+  const rollupProxy2 = discovery2.entries.find(
     (obj) => obj.name === 'RollupProxy',
   )
 
@@ -242,10 +242,4 @@ export async function compareTwoOrbitChain(
   ]
 
   console.table(data)
-}
-
-function getSafeDiscovery(configReader: ConfigReader, chain: string) {
-  const mappedChain = chainMapping[chain]
-  assert(mappedChain, `Chain ${chain} not found in mapping`)
-  return configReader.readDiscovery(chain, mappedChain)
 }

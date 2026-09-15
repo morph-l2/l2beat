@@ -1,0 +1,890 @@
+import { assert, type TokenCategory, UnixTime } from '@l2beat/shared-pure'
+import type { ExpressionBuilder, Insertable, Selectable } from 'kysely'
+import { sql } from 'kysely'
+import { BaseRepository } from '../BaseRepository'
+import type { DB } from '../kysely'
+import type { TokenValue } from '../kysely/generated/types'
+import {
+  type CleanDateRange,
+  deleteHourlyUntil,
+  deleteSixHourlyUntil,
+} from '../utils/deleteArchivedRecords'
+import type { TokenSource } from './TokenMetadataRepository'
+
+export interface TokenValueRecord {
+  timestamp: UnixTime
+  configurationId: string
+  projectId: string
+  tokenId: string
+  amount: number
+  value: number
+  valueForProject: number
+  valueForSummary: number
+  priceUsd: number
+}
+
+export interface SummedByTimestampTokenValueRecord {
+  timestamp: UnixTime
+  value: number
+  canonical: number
+  customCanonical: number
+  external: number
+  native: number
+  ether: number
+  stablecoin: number
+  btc: number
+  rwaRestricted: number
+  rwaPublic: number
+  other: number
+}
+
+export interface SummedByTimestampTokenValuePerProjectRecord {
+  projectId: string
+  timestamp: UnixTime
+  value: number
+  canonical: number
+  customCanonical: number
+  external: number
+  native: number
+  ether: number
+  stablecoin: number
+  btc: number
+  rwaRestricted: number
+  rwaPublic: number
+  other: number
+}
+
+export function toRecord(row: Selectable<TokenValue>): TokenValueRecord {
+  return {
+    ...row,
+    timestamp: UnixTime.fromDate(row.timestamp),
+  }
+}
+
+export function toRow(record: TokenValueRecord): Insertable<TokenValue> {
+  return {
+    ...record,
+    timestamp: UnixTime.toDate(record.timestamp),
+  }
+}
+
+export class TokenValueRepository extends BaseRepository {
+  async upsertMany(records: TokenValueRecord[]) {
+    if (records.length === 0) return 0
+
+    const rows = records.map(toRow)
+    await this.batch(rows, 1_000, async (batch) => {
+      await this.db
+        .insertInto('TokenValue')
+        .values(batch)
+        .onConflict((oc) =>
+          oc.columns(['timestamp', 'configurationId']).doUpdateSet((eb) => ({
+            value: eb.ref('excluded.value'),
+            valueForProject: eb.ref('excluded.valueForProject'),
+            valueForSummary: eb.ref('excluded.valueForSummary'),
+            priceUsd: eb.ref('excluded.priceUsd'),
+            amount: eb.ref('excluded.amount'),
+          })),
+        )
+        .execute()
+    })
+    return rows.length
+  }
+
+  async getByProject(
+    project: string,
+    fromInclusive: UnixTime,
+    toInclusive: UnixTime,
+  ): Promise<TokenValueRecord[]> {
+    const rows = await this.db
+      .selectFrom('TokenValue')
+      .selectAll()
+      .where('projectId', '=', project)
+      .where('timestamp', '>=', UnixTime.toDate(fromInclusive))
+      .where('timestamp', '<=', UnixTime.toDate(toInclusive))
+      .execute()
+
+    return rows.map(toRecord)
+  }
+
+  async getAtOrBefore(timestamp: UnixTime): Promise<TokenValueRecord[]> {
+    const latestPerToken = this.db
+      .selectFrom('TokenValue')
+      .select(['tokenId'])
+      .select(this.db.fn.max('timestamp').as('maxTimestamp'))
+      .where('timestamp', '<=', UnixTime.toDate(timestamp))
+      .groupBy(['tokenId'])
+      .as('latest')
+
+    const rows = await this.db
+      .selectFrom('TokenValue')
+      .innerJoin(latestPerToken, (join) =>
+        join
+          .onRef('TokenValue.tokenId', '=', 'latest.tokenId')
+          .onRef('TokenValue.timestamp', '=', 'latest.maxTimestamp'),
+      )
+      .selectAll('TokenValue')
+      .execute()
+
+    return rows.map(toRecord)
+  }
+
+  async getByTokenIdInTimeRange(
+    tokenId: string,
+    fromInclusive: UnixTime | null,
+    toInclusive: UnixTime | null,
+  ): Promise<TokenValueRecord[]> {
+    let query = this.db
+      .selectFrom('TokenValue')
+      .selectAll()
+      .where('tokenId', '=', tokenId)
+
+    if (fromInclusive) {
+      query = query.where('timestamp', '>=', UnixTime.toDate(fromInclusive))
+    }
+
+    if (toInclusive) {
+      query = query.where('timestamp', '<=', UnixTime.toDate(toInclusive))
+    }
+
+    const rows = await query.orderBy('timestamp', 'asc').execute()
+
+    return rows.map(toRecord)
+  }
+
+  async getFirstTimestampByTokenId(
+    tokenId: string,
+  ): Promise<UnixTime | undefined> {
+    const row = await this.db
+      .selectFrom('TokenValue')
+      .select((eb) => eb.fn.min('timestamp').as('timestamp'))
+      .where('tokenId', '=', tokenId)
+      .executeTakeFirst()
+
+    return row?.timestamp ? UnixTime.fromDate(row.timestamp) : undefined
+  }
+
+  async getByProjectAtOrBefore(
+    project: string,
+    timestamp: UnixTime,
+  ): Promise<TokenValueRecord[]> {
+    const subquery = this.db
+      .selectFrom('TokenValue')
+      .select(['tokenId'])
+      .select(this.db.fn.max('timestamp').as('maxTimestamp'))
+      .where('projectId', '=', project)
+      .where('timestamp', '<=', UnixTime.toDate(timestamp))
+      .groupBy(['tokenId'])
+      .as('latest')
+
+    const rows = await this.db
+      .selectFrom('TokenValue')
+      .innerJoin(subquery, (join) =>
+        join
+          .onRef('TokenValue.tokenId', '=', 'latest.tokenId')
+          .onRef('TokenValue.timestamp', '=', 'latest.maxTimestamp'),
+      )
+      .where('TokenValue.projectId', '=', project)
+      .selectAll('TokenValue')
+      .execute()
+
+    return rows.map(toRecord)
+  }
+
+  async getLastNonZeroValue(
+    timestamp: UnixTime,
+    project?: string,
+  ): Promise<TokenValueRecord[]> {
+    let subquery = this.db
+      .selectFrom('TokenValue')
+      .select(['tokenId'])
+      .select(this.db.fn.max('timestamp').as('maxTimestamp'))
+      .where('value', '>', 0)
+      .where('timestamp', '<=', UnixTime.toDate(timestamp))
+
+    if (project) {
+      subquery = subquery.where('projectId', '=', project)
+    }
+
+    const latest = subquery.groupBy(['tokenId']).as('latest')
+
+    const rows = await this.db
+      .selectFrom('TokenValue')
+      .innerJoin(latest, (join) =>
+        join
+          .onRef('TokenValue.tokenId', '=', 'latest.tokenId')
+          .onRef('TokenValue.timestamp', '=', 'latest.maxTimestamp'),
+      )
+      .selectAll('TokenValue')
+      .execute()
+
+    return rows.map(toRecord)
+  }
+
+  async getLastNonZeroValueByProjects(
+    timestamp: UnixTime,
+    projects: string[],
+  ): Promise<TokenValueRecord[]> {
+    if (projects.length === 0) return []
+
+    const latest = this.db
+      .selectFrom('TokenValue')
+      .select(['projectId', 'tokenId'])
+      .select(this.db.fn.max('timestamp').as('maxTimestamp'))
+      .where('value', '>', 0)
+      .where('timestamp', '<=', UnixTime.toDate(timestamp))
+      .where('projectId', 'in', projects)
+      .groupBy(['projectId', 'tokenId'])
+      .as('latest')
+
+    const rows = await this.db
+      .selectFrom('TokenValue')
+      .innerJoin(latest, (join) =>
+        join
+          .onRef('TokenValue.projectId', '=', 'latest.projectId')
+          .onRef('TokenValue.tokenId', '=', 'latest.tokenId')
+          .onRef('TokenValue.timestamp', '=', 'latest.maxTimestamp'),
+      )
+      .selectAll('TokenValue')
+      .execute()
+
+    return rows.map(toRecord)
+  }
+
+  async deleteByConfigIds(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0
+    const result = await this.db
+      .deleteFrom('TokenValue')
+      .where('configurationId', 'in', ids)
+      .executeTakeFirst()
+    return Number(result.numDeletedRows)
+  }
+
+  async deleteByConfigInTimeRange(
+    configurationId: string,
+    fromInclusive: UnixTime,
+    toInclusive: UnixTime,
+  ): Promise<number> {
+    const result = await this.db
+      .deleteFrom('TokenValue')
+      .where('configurationId', '=', configurationId)
+      .where('timestamp', '>=', UnixTime.toDate(fromInclusive))
+      .where('timestamp', '<=', UnixTime.toDate(toInclusive))
+      .executeTakeFirst()
+    return Number(result.numDeletedRows)
+  }
+
+  async deleteHourlyUntil(dateRange: CleanDateRange): Promise<number> {
+    return await deleteHourlyUntil(this.db, 'TokenValue', dateRange)
+  }
+
+  async deleteSixHourlyUntil(dateRange: CleanDateRange): Promise<number> {
+    return await deleteSixHourlyUntil(this.db, 'TokenValue', dateRange)
+  }
+
+  async getAll(): Promise<TokenValueRecord[]> {
+    const rows = await this.db.selectFrom('TokenValue').selectAll().execute()
+    return rows.map(toRecord)
+  }
+
+  async getFirstTimestampByProjects(
+    projectIds: string[],
+  ): Promise<UnixTime | undefined> {
+    if (projectIds.length === 0) return undefined
+    const row = await this.db
+      .selectFrom('TokenValue')
+      .select((eb) => eb.fn.min('timestamp').as('timestamp'))
+      .where('projectId', 'in', projectIds)
+      .executeTakeFirst()
+
+    return row?.timestamp ? UnixTime.fromDate(row.timestamp) : undefined
+  }
+
+  async deleteAll(): Promise<number> {
+    const result = await this.db.deleteFrom('TokenValue').executeTakeFirst()
+    return Number(result.numDeletedRows)
+  }
+
+  async getMaxTimestampAtOrBeforeForProjects(
+    timestamp: UnixTime,
+    projectIds: readonly string[],
+  ): Promise<UnixTime | undefined> {
+    if (projectIds.length === 0) {
+      return undefined
+    }
+
+    const result = await this.db
+      .selectFrom('TokenValue')
+      .select((eb) => eb.fn.max('timestamp').as('max_timestamp'))
+      .where('timestamp', '<=', UnixTime.toDate(timestamp))
+      .where('projectId', 'in', projectIds)
+      .executeTakeFirst()
+    return result?.max_timestamp
+      ? UnixTime.fromDate(result.max_timestamp)
+      : undefined
+  }
+
+  async getByTimestamp(timestamp: UnixTime): Promise<TokenValueRecord[]> {
+    const rows = await this.db
+      .selectFrom('TokenValue')
+      .selectAll()
+      .where('timestamp', '=', UnixTime.toDate(timestamp))
+      .execute()
+
+    return rows.map(toRecord)
+  }
+
+  async getSummedByTimestampByProjects(
+    projectIds: string[],
+    fromInclusive: UnixTime | null,
+    toInclusive: UnixTime | null,
+    opts: {
+      forSummary: boolean
+      excludeAssociatedTokens: boolean
+      excludeRwaRestrictedTokens: boolean
+    },
+  ): Promise<SummedByTimestampTokenValueRecord[]> {
+    if (projectIds.length === 0) {
+      return []
+    }
+    const valueField = opts.forSummary ? 'valueForSummary' : 'valueForProject'
+
+    let query = this.db
+      .selectFrom('TokenValue')
+      .innerJoin('TokenMetadata', 'TokenValue.tokenId', 'TokenMetadata.tokenId')
+      .select((eb) => [
+        'TokenValue.timestamp',
+        eb.cast(eb.fn.sum(valueField), 'double precision').as('value'),
+        // Source breakdown
+        sumBySource(eb, valueField, 'canonical'),
+        sumBySource(eb, valueField, 'custom-canonical', 'customCanonical'),
+        sumBySource(eb, valueField, 'external'),
+        sumBySource(eb, valueField, 'native'),
+        // Category breakdown
+        sumByCategory(eb, valueField, 'ether'),
+        sumByCategory(eb, valueField, 'stablecoin'),
+        sumByCategory(eb, valueField, 'btc'),
+        sumByCategory(eb, valueField, 'rwaRestricted'),
+        sumByCategory(eb, valueField, 'rwaPublic'),
+        sumByCategory(eb, valueField, 'other'),
+      ])
+      .where('TokenValue.projectId', 'in', projectIds)
+      .groupBy('TokenValue.timestamp')
+
+    if (fromInclusive) {
+      query = query.where('timestamp', '>=', UnixTime.toDate(fromInclusive))
+    }
+
+    if (toInclusive) {
+      query = query.where('timestamp', '<=', UnixTime.toDate(toInclusive))
+    }
+
+    if (opts.excludeAssociatedTokens) {
+      query = query.where('TokenMetadata.isAssociated', '=', false)
+    }
+
+    if (opts.excludeRwaRestrictedTokens) {
+      query = query.where('TokenMetadata.category', '!=', 'rwaRestricted')
+    }
+
+    const rows = await query.execute()
+
+    return rows.map((row) => ({
+      timestamp: UnixTime.fromDate(row.timestamp),
+      value: Number(row.value),
+      canonical: Number(row.canonical),
+      customCanonical: Number(row.customCanonical),
+      external: Number(row.external),
+      native: Number(row.native),
+      ether: Number(row.ether),
+      stablecoin: Number(row.stablecoin),
+      btc: Number(row.btc),
+      rwaRestricted: Number(row.rwaRestricted),
+      rwaPublic: Number(row.rwaPublic),
+      other: Number(row.other),
+    }))
+  }
+
+  async getSummedByTimestampWithProjectsRangesPerProject(
+    projectsWithRanges: {
+      projectId: string
+      sinceTimestamp: UnixTime
+      untilTimestamp?: UnixTime
+    }[],
+    fromInclusive: UnixTime | null,
+    toInclusive: UnixTime | null,
+    opts: {
+      forSummary: boolean
+      excludeAssociatedTokens: boolean
+      excludeRwaRestrictedTokens: boolean
+    },
+  ): Promise<SummedByTimestampTokenValuePerProjectRecord[]> {
+    if (projectsWithRanges.length === 0) {
+      return []
+    }
+
+    const valueField = opts.forSummary ? 'valueForSummary' : 'valueForProject'
+
+    let query = this.db
+      .selectFrom('TokenValue')
+      .innerJoin('TokenMetadata', 'TokenValue.tokenId', 'TokenMetadata.tokenId')
+      .select((eb) => [
+        'TokenValue.projectId',
+        'TokenValue.timestamp',
+        eb.cast(eb.fn.sum(valueField), 'double precision').as('value'),
+        // Source breakdown
+        sumBySource(eb, valueField, 'canonical'),
+        sumBySource(eb, valueField, 'custom-canonical', 'customCanonical'),
+        sumBySource(eb, valueField, 'external'),
+        sumBySource(eb, valueField, 'native'),
+        // Category breakdown
+        sumByCategory(eb, valueField, 'ether'),
+        sumByCategory(eb, valueField, 'stablecoin'),
+        sumByCategory(eb, valueField, 'btc'),
+        sumByCategory(eb, valueField, 'rwaRestricted'),
+        sumByCategory(eb, valueField, 'rwaPublic'),
+        sumByCategory(eb, valueField, 'other'),
+      ])
+      .where((eb) =>
+        eb.or(
+          projectsWithRanges.map((project) => {
+            const conditions = [
+              eb('TokenValue.projectId', '=', project.projectId),
+              eb('timestamp', '>=', UnixTime.toDate(project.sinceTimestamp)),
+            ]
+            if (project.untilTimestamp) {
+              conditions.push(
+                eb('timestamp', '<=', UnixTime.toDate(project.untilTimestamp)),
+              )
+            }
+            return eb.and(conditions)
+          }),
+        ),
+      )
+      .groupBy(['TokenValue.timestamp', 'TokenValue.projectId'])
+
+    if (fromInclusive) {
+      query = query.where('timestamp', '>=', UnixTime.toDate(fromInclusive))
+    }
+
+    if (toInclusive) {
+      query = query.where('timestamp', '<=', UnixTime.toDate(toInclusive))
+    }
+
+    if (opts.excludeAssociatedTokens) {
+      query = query.where('TokenMetadata.isAssociated', '=', false)
+    }
+
+    if (opts.excludeRwaRestrictedTokens) {
+      query = query.where('TokenMetadata.category', '!=', 'rwaRestricted')
+    }
+
+    const rows = await query.execute()
+
+    return rows.map((row) => ({
+      projectId: row.projectId,
+      timestamp: UnixTime.fromDate(row.timestamp),
+      value: Number(row.value),
+      canonical: Number(row.canonical),
+      customCanonical: Number(row.customCanonical),
+      external: Number(row.external),
+      native: Number(row.native),
+      ether: Number(row.ether),
+      stablecoin: Number(row.stablecoin),
+      btc: Number(row.btc),
+      rwaRestricted: Number(row.rwaRestricted),
+      rwaPublic: Number(row.rwaPublic),
+      other: Number(row.other),
+    }))
+  }
+
+  async getSummedAtTimestampsByProjects(
+    oldestTimestamp: number,
+    latestTimestamp: number,
+    opts: {
+      excludeAssociatedTokens: boolean
+      excludeRwaRestrictedTokens: boolean
+      cutOffTimestamp?: number
+    },
+  ): Promise<
+    {
+      timestamp: UnixTime
+      project: string
+      value: number
+      canonical: number
+      customCanonical: number
+      external: number
+      native: number
+      ether: number
+      stablecoin: number
+      btc: number
+      rwaRestricted: number
+      rwaPublic: number
+      other: number
+      associated: number
+    }[]
+  > {
+    const valueField = 'valueForProject'
+
+    let query = this.db
+      .selectFrom('TokenValue')
+      .innerJoin('TokenMetadata', 'TokenValue.tokenId', 'TokenMetadata.tokenId')
+      .select((eb) => [
+        'TokenValue.projectId',
+        'TokenValue.timestamp',
+        eb.cast(eb.fn.sum(valueField), 'double precision').as('value'),
+        // Source breakdown
+        sumBySource(eb, valueField, 'canonical'),
+        sumBySource(eb, valueField, 'custom-canonical', 'customCanonical'),
+        sumBySource(eb, valueField, 'external'),
+        sumBySource(eb, valueField, 'native'),
+        // Category breakdown
+        sumByCategory(eb, valueField, 'ether'),
+        sumByCategory(eb, valueField, 'stablecoin'),
+        sumByCategory(eb, valueField, 'btc'),
+        sumByCategory(eb, valueField, 'rwaRestricted'),
+        sumByCategory(eb, valueField, 'rwaPublic'),
+        sumByCategory(eb, valueField, 'other'),
+        eb.fn
+          .sum(
+            eb
+              .case()
+              .when('TokenMetadata.isAssociated', '=', true)
+              .then(eb.ref(valueField))
+              .else(eb.cast(eb.val(0), 'double precision'))
+              .end(),
+          )
+          .as('associated'),
+      ])
+      .where('timestamp', 'in', [
+        UnixTime.toDate(oldestTimestamp),
+        UnixTime.toDate(latestTimestamp),
+      ])
+      .where(
+        'timestamp',
+        '>=',
+        opts.cutOffTimestamp
+          ? UnixTime.toDate(opts.cutOffTimestamp)
+          : sql<Date>`NOW() - INTERVAL '30 days'`,
+      )
+      .groupBy(['TokenValue.timestamp', 'TokenValue.projectId'])
+
+    if (opts.excludeAssociatedTokens) {
+      query = query.where('TokenMetadata.isAssociated', '=', false)
+    }
+
+    if (opts.excludeRwaRestrictedTokens) {
+      query = query.where('TokenMetadata.category', '!=', 'rwaRestricted')
+    }
+
+    const rows = await query.execute()
+
+    return rows.map((row) => ({
+      project: row.projectId,
+      timestamp: UnixTime.fromDate(row.timestamp),
+      value: Number(row.value),
+      canonical: Number(row.canonical),
+      customCanonical: Number(row.customCanonical),
+      external: Number(row.external),
+      native: Number(row.native),
+      ether: Number(row.ether),
+      stablecoin: Number(row.stablecoin),
+      btc: Number(row.btc),
+      rwaRestricted: Number(row.rwaRestricted),
+      rwaPublic: Number(row.rwaPublic),
+      other: Number(row.other),
+      associated: Number(row.associated),
+    }))
+  }
+
+  /**
+   * Hot path — called on every TVS table/chart render.
+   * Typically receives only 2 ranges so UNION ALL is ideal.
+   * Each branch gets its own index range scan with minimal planning overhead.
+   * If range count ever grows significantly (50+), consider batching into separate queries.
+   */
+  /**
+   * Same sums as getSummedByProjectForRanges, but only at each project's
+   * latest timestamp within the range and at the timestamp exactly seven
+   * days before it. The 7-day breakdown reads nothing else, and aggregating
+   * every hour of the range first made it the slowest query on project pages.
+   */
+  async getSummedByProjectAtLatestAndSevenDaysBefore(
+    projectIds: string[],
+    range: [UnixTime, UnixTime],
+    opts: {
+      excludeAssociatedTokens: boolean
+      excludeRwaRestrictedTokens: boolean
+    },
+  ): Promise<SummedByProjectRow[]> {
+    if (projectIds.length === 0) {
+      return []
+    }
+    const [from, to] = range
+
+    const withTokenFilters = <Q extends TokenFilterable>(query: Q): Q => {
+      let filtered = query
+      if (opts.excludeAssociatedTokens) {
+        filtered = filtered.where('TokenMetadata.isAssociated', '=', false)
+      }
+      if (opts.excludeRwaRestrictedTokens) {
+        filtered = filtered.where(
+          'TokenMetadata.category',
+          '!=',
+          'rwaRestricted',
+        )
+      }
+      return filtered
+    }
+
+    const query = this.db
+      // One backward index probe per project that stops at the newest row
+      // passing the token filters. Filtering here (not only in the sums)
+      // guarantees every returned project has a latest row, so the
+      // seven-days-before row can never be the only one. Taking max() over
+      // the whole range instead costs ~7x more on production-sized data.
+      .with('latest', (eb) =>
+        eb
+          .selectFrom(
+            sql<{
+              projectId: string
+            }>`(select unnest(${projectIds}::text[]) as "projectId")`.as('p'),
+          )
+          .innerJoinLateral(
+            (eb) =>
+              withTokenFilters(
+                eb
+                  .selectFrom('TokenValue')
+                  .innerJoin(
+                    'TokenMetadata',
+                    'TokenValue.tokenId',
+                    'TokenMetadata.tokenId',
+                  )
+                  .select('TokenValue.timestamp')
+                  .whereRef('TokenValue.projectId', '=', 'p.projectId')
+                  .where('TokenValue.timestamp', '>=', UnixTime.toDate(from))
+                  .where('TokenValue.timestamp', '<=', UnixTime.toDate(to)),
+              )
+                .orderBy('TokenValue.timestamp', 'desc')
+                .limit(1)
+                .as('l'),
+            (join) => join.onTrue(),
+          )
+          .select(['p.projectId', 'l.timestamp']),
+      )
+      // Two rows per project, so the join below hits the (projectId,
+      // timestamp) index instead of scanning every hour of the project.
+      .with('wanted', (eb) =>
+        eb
+          .selectFrom('latest')
+          .select(['projectId', 'timestamp'])
+          .unionAll(
+            eb
+              .selectFrom('latest')
+              .select([
+                'projectId',
+                sql<Date>`"timestamp" - interval '7 days'`.as('timestamp'),
+              ]),
+          ),
+      )
+      .selectFrom('wanted')
+      .innerJoin('TokenValue', (join) =>
+        join
+          .onRef('TokenValue.projectId', '=', 'wanted.projectId')
+          .onRef('TokenValue.timestamp', '=', 'wanted.timestamp'),
+      )
+      .innerJoin('TokenMetadata', 'TokenValue.tokenId', 'TokenMetadata.tokenId')
+      .select((eb) => selectBreakdownSums(eb, 'valueForProject'))
+
+    const rows = await withTokenFilters(query)
+      .groupBy(['TokenValue.timestamp', 'TokenValue.projectId'])
+      .orderBy('TokenValue.timestamp')
+      .execute()
+
+    return rows.map(toSummedByProjectRow)
+  }
+
+  async getSummedByProjectForRanges(
+    projectIds: string[],
+    ranges: [UnixTime | null, UnixTime][],
+    opts: {
+      forSummary?: boolean
+      excludeAssociatedTokens: boolean
+      excludeRwaRestrictedTokens: boolean
+      cutOffTimestamp?: number
+    },
+  ): Promise<SummedByProjectRow[]> {
+    if (projectIds.length === 0 || ranges.length === 0) {
+      return []
+    }
+
+    const valueField = opts.forSummary ? 'valueForSummary' : 'valueForProject'
+
+    const rangeQueries = ranges.map(([from, to]) => {
+      let query = this.db
+        .selectFrom('TokenValue')
+        .innerJoin(
+          'TokenMetadata',
+          'TokenValue.tokenId',
+          'TokenMetadata.tokenId',
+        )
+        .select((eb) => selectBreakdownSums(eb, valueField))
+        .where('TokenValue.projectId', 'in', projectIds)
+        .where('TokenValue.timestamp', '<=', UnixTime.toDate(to))
+
+      if (from) {
+        query = query.where('TokenValue.timestamp', '>=', UnixTime.toDate(from))
+      }
+
+      if (opts.excludeAssociatedTokens) {
+        query = query.where('TokenMetadata.isAssociated', '=', false)
+      }
+
+      if (opts.excludeRwaRestrictedTokens) {
+        query = query.where('TokenMetadata.category', '!=', 'rwaRestricted')
+      }
+
+      return query.groupBy(['TokenValue.timestamp', 'TokenValue.projectId'])
+    })
+
+    const [first, ...rest] = rangeQueries
+    assert(first, 'rangeQueries is empty')
+    let combined = first
+    for (const query of rest) {
+      combined = combined.unionAll(query)
+    }
+
+    const rows = await combined.orderBy('timestamp').execute()
+
+    return rows.map(toSummedByProjectRow)
+  }
+
+  async checkIfExists(
+    projectId: string,
+    fromInclusive?: UnixTime,
+  ): Promise<boolean> {
+    let query = this.db
+      .selectFrom('TokenValue')
+      .select('projectId')
+      .where('projectId', '=', projectId)
+      .limit(1)
+
+    if (fromInclusive) {
+      query = query.where('timestamp', '>=', UnixTime.toDate(fromInclusive))
+    }
+
+    const result = await query.executeTakeFirst()
+    return result !== undefined
+  }
+}
+
+interface TokenFilterable {
+  where(column: 'TokenMetadata.isAssociated', op: '=', value: boolean): this
+  where(column: 'TokenMetadata.category', op: '!=', value: string): this
+}
+
+export interface SummedByProjectRow {
+  timestamp: UnixTime
+  project: string
+  value: number
+  canonical: number
+  customCanonical: number
+  external: number
+  native: number
+  ether: number
+  stablecoin: number
+  btc: number
+  rwaRestricted: number
+  rwaPublic: number
+  other: number
+  associated: number
+}
+
+function selectBreakdownSums(
+  eb: ExpressionBuilder<DB, 'TokenValue' | 'TokenMetadata'>,
+  valueField: 'valueForProject' | 'valueForSummary',
+) {
+  return [
+    'TokenValue.projectId' as const,
+    'TokenValue.timestamp' as const,
+    eb.cast(eb.fn.sum(valueField), 'double precision').as('value'),
+    sumBySource(eb, valueField, 'canonical'),
+    sumBySource(eb, valueField, 'custom-canonical', 'customCanonical'),
+    sumBySource(eb, valueField, 'external'),
+    sumBySource(eb, valueField, 'native'),
+    sumByCategory(eb, valueField, 'ether'),
+    sumByCategory(eb, valueField, 'stablecoin'),
+    sumByCategory(eb, valueField, 'btc'),
+    sumByCategory(eb, valueField, 'rwaRestricted'),
+    sumByCategory(eb, valueField, 'rwaPublic'),
+    sumByCategory(eb, valueField, 'other'),
+    eb.fn
+      .sum(
+        eb
+          .case()
+          .when('TokenMetadata.isAssociated', '=', true)
+          .then(eb.ref(valueField))
+          .else(eb.cast(eb.val(0), 'double precision'))
+          .end(),
+      )
+      .as('associated'),
+  ]
+}
+
+function toSummedByProjectRow(row: {
+  projectId: string
+  timestamp: Date
+  [sum: string]: unknown
+}): SummedByProjectRow {
+  return {
+    project: row.projectId,
+    timestamp: UnixTime.fromDate(row.timestamp),
+    value: Number(row.value),
+    canonical: Number(row.canonical),
+    customCanonical: Number(row.customCanonical),
+    external: Number(row.external),
+    native: Number(row.native),
+    ether: Number(row.ether),
+    stablecoin: Number(row.stablecoin),
+    btc: Number(row.btc),
+    rwaRestricted: Number(row.rwaRestricted),
+    rwaPublic: Number(row.rwaPublic),
+    other: Number(row.other),
+    associated: Number(row.associated),
+  }
+}
+
+function sumByCategory(
+  eb: ExpressionBuilder<DB, 'TokenValue' | 'TokenMetadata'>,
+  valueField: 'valueForProject' | 'valueForSummary',
+  category: TokenCategory,
+) {
+  return eb.fn
+    .sum(
+      eb
+        .case()
+        .when('TokenMetadata.category', '=', category)
+        .then(eb.ref(valueField))
+        .else(eb.cast(eb.val(0), 'double precision'))
+        .end(),
+    )
+    .as(category)
+}
+
+function sumBySource(
+  eb: ExpressionBuilder<DB, 'TokenValue' | 'TokenMetadata'>,
+  valueField: 'valueForProject' | 'valueForSummary',
+  source: TokenSource,
+  alias?: string,
+) {
+  return eb.fn
+    .sum(
+      eb
+        .case()
+        .when('TokenMetadata.source', '=', source)
+        .then(eb.ref(valueField))
+        .else(eb.cast(eb.val(0), 'double precision'))
+        .end(),
+    )
+    .as(alias ?? source)
+}

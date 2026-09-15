@@ -1,20 +1,18 @@
-import { EthereumAddress, Hash256 } from '@l2beat/shared-pure'
+import { ChainSpecificAddress, type Hash256 } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
 import { DebugTransactionCallResponse } from '../../provider/DebugTransactionTrace'
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 import { ArbitrumActorsHandler } from './ArbitrumActorsHandler'
 
 describe(ArbitrumActorsHandler.name, () => {
   it('returns validators from the traces that add and remove them', async () => {
-    const handler = new ArbitrumActorsHandler(
-      'validators',
-      { type: 'arbitrumActors', actorType: 'validator' },
-      DiscoveryLogger.SILENT,
-    )
+    const handler = new ArbitrumActorsHandler('validators', {
+      type: 'arbitrumActors',
+      actorType: 'validator',
+    })
 
-    const contractAddress = EthereumAddress.random()
+    const contractAddress = ChainSpecificAddress.random()
 
     const provider = mockObject<IProvider>({
       getLogs: async () => EXAMPLE_VALIDATORS_LOGS,
@@ -37,13 +35,12 @@ describe(ArbitrumActorsHandler.name, () => {
   })
 
   it('returns batch posters from the traces that add and remove them', async () => {
-    const handler = new ArbitrumActorsHandler(
-      'batchPosters',
-      { type: 'arbitrumActors', actorType: 'batchPoster' },
-      DiscoveryLogger.SILENT,
-    )
+    const handler = new ArbitrumActorsHandler('batchPosters', {
+      type: 'arbitrumActors',
+      actorType: 'batchPoster',
+    })
 
-    const contractAddress = EthereumAddress.random()
+    const contractAddress = ChainSpecificAddress.random()
 
     const provider = mockObject<IProvider>({
       getLogs: async () => EXAMPLE_BATCHPOSTERS_LOGS,

@@ -1,0 +1,637 @@
+{
+  "name": "lumia",
+  "timestamp": 1761895563,
+  "configHash": "0x57eb42768a5022beff82bc2a6b7d303593811688c1edf5fe96d073b6219d2d1d",
+  "entries": [
+    {
+      "name": "AgglayerGateway",
+      "address": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+      "type": "Reference",
+      "targetType": "Contract",
+      "targetProject": "shared-polygon-cdk"
+    },
+    {
+      "address": "eth:0x258862dec9a77db57b398c441390783293E2a7A1",
+      "type": "EOA",
+      "proxyType": "EOA"
+    },
+    {
+      "name": "AgglayerBridge",
+      "address": "eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+      "type": "Reference",
+      "targetType": "Contract",
+      "targetProject": "shared-polygon-cdk"
+    },
+    {
+      "name": "AgglayerManager",
+      "address": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+      "type": "Reference",
+      "targetType": "Contract",
+      "targetProject": "shared-polygon-cdk"
+    },
+    {
+      "name": "AgglayerGER",
+      "address": "eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb",
+      "type": "Reference",
+      "targetType": "Contract",
+      "targetProject": "shared-polygon-cdk"
+    },
+    {
+      "address": "eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F",
+      "type": "EOA",
+      "proxyType": "EOA"
+    },
+    {
+      "name": "AggchainECDSAMultisig",
+      "address": "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B",
+      "type": "Contract",
+      "template": "polygon-cdk/AggchainECDSAMultisig",
+      "sourceHashes": [
+        "0xa25e4c87882527d75fa2198c374939dd0c3b3fd509be89ee51c9b206bc62bdc4",
+        "0xa58b59f574674919f2c3fb755a6e3e369c0d5f734d8fcca6fe2664629ad8b25e"
+      ],
+      "proxyType": "EIP1967 proxy",
+      "description": "System contract defining the prism Aggchain logic. It only enforces bridge accounting (pessimistic) proofs to protect the shared bridge while the Aggchain state transitions are not proven. They must instead be signed by 1 aggchainSigner(s).",
+      "ignoreInWatchMode": ["lastAccInputHash"],
+      "deployerAddress": "eth:0xEad77b01ea770839F7f576Cd1516Ff6A298d9dB2",
+      "sinceTimestamp": 1719499031,
+      "sinceBlock": 20183666,
+      "values": {
+        "_legacypendingVKeyManager": "eth:0x0000000000000000000000000000000000000000",
+        "_legacyvKeyManager": "eth:0x0000000000000000000000000000000000000000",
+        "$admin": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+        "$implementation": "eth:0x0D49fD0d79723e4D24AaC83f604ED2D3d5fC0f21",
+        "$pastUpgrades": [
+          [
+            "2024-06-27T14:37:11.000Z",
+            "0x03c9a006f95a45fda2a18e475242078b8563715bc621e21e62a78962e9fb4e63",
+            ["eth:0x10D296e8aDd0535be71639E5D1d1c30ae1C6bD4C"]
+          ],
+          [
+            "2025-03-05T12:12:47.000Z",
+            "0xc376c3725fb986eead241c5b7663e6e081f66b92984bc4b3f0c08d23a0101a35",
+            ["eth:0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F"]
+          ],
+          [
+            "2025-10-02T11:35:35.000Z",
+            "0x4a9633f61bf7eacf4cfffefccc1e8a561fdaacfbed6470573463e28304b3906d",
+            ["eth:0x18C45DD422f6587357a6d3b23307E75D42b2bc5B"]
+          ],
+          [
+            "2025-10-29T14:11:11.000Z",
+            "0x7be3301b763f904f5076e22914b0ea13e101ed3cff6480b23a7757e7b9875939",
+            ["eth:0x0D49fD0d79723e4D24AaC83f604ED2D3d5fC0f21"]
+          ]
+        ],
+        "$upgradeCount": 4,
+        "admin": "eth:0x258862dec9a77db57b398c441390783293E2a7A1",
+        "AGGCHAIN_ECDSA_MULTISIG_VERSION": "v1.0.0",
+        "AGGCHAIN_TYPE": "0x0000",
+        "aggchainManager": "eth:0x258862dec9a77db57b398c441390783293E2a7A1",
+        "aggchainMetadataManager": "eth:0x0000000000000000000000000000000000000000",
+        "aggchainMultisigHash": "0x56d8bc2e1eecaf68ad03aa2d252136284a839aac7cd6971d9f421cc0f415f93b",
+        "aggchainSigners": ["eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F"],
+        "aggLayerGateway": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+        "bridgeAddress": "eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+        "CONSENSUS_TYPE": 1,
+        "forceBatchAddress": "eth:0x258862dec9a77db57b398c441390783293E2a7A1",
+        "forceBatchTimeout": 432000,
+        "gasTokenAddress": "eth:0xD9343a049D5DBd89CD19DC6BcA8c48fB3a0a42a7",
+        "gasTokenNetwork": 0,
+        "getAggchainMultisigHash": "0x56d8bc2e1eecaf68ad03aa2d252136284a839aac7cd6971d9f421cc0f415f93b",
+        "getAggchainSignerInfos": [
+          {
+            "addr": "eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F",
+            "url": "https://prism-sequencer.eu-north-2.gateway.fm/"
+          }
+        ],
+        "getAggchainSigners": [
+          "eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F"
+        ],
+        "getAggchainSignersCount": 1,
+        "getThreshold": 1,
+        "globalExitRootManager": "eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb",
+        "lastAccInputHash": "0x9a1bd0675ea7c2e3651661a48d92d2c8ce6087882060fd885076b35b48c4830e",
+        "lastForceBatch": 0,
+        "lastForceBatchSequenced": 0,
+        "MAX_AGGCHAIN_SIGNERS": 255,
+        "networkName": "prism",
+        "pendingAdmin": "eth:0x0000000000000000000000000000000000000000",
+        "pendingAggchainManager": "eth:0x0000000000000000000000000000000000000000",
+        "pol": "eth:0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6",
+        "rollupManager": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+        "threshold": 1,
+        "trustedSequencer": "eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F",
+        "trustedSequencerURL": "https://prism-sequencer.eu-north-2.gateway.fm/",
+        "useDefaultSigners": false,
+        "useDefaultVkeys": false,
+        "version": "v1.0.0"
+      },
+      "fieldMeta": {
+        "CONSENSUS_TYPE": {
+          "severity": "HIGH",
+          "description": "0 - ECDSA sig verification, 1 - aggchainVkey verification (read by the pessimistic program)"
+        },
+        "forceBatchAddress": {
+          "severity": "HIGH",
+          "description": "If this changes to the ZERO address, an update to the risk rosette is probably needed, since forcing batches is open to everyone."
+        },
+        "aggchainMultisigHash": { "severity": "HIGH" },
+        "useDefaultSigners": { "severity": "HIGH" },
+        "useDefaultVkeys": { "severity": "HIGH" },
+        "AGGCHAIN_TYPE": {
+          "severity": "HIGH",
+          "description": "0: ECDSA sig verification, 1: limited to vkeys in AggchainGateway with 1 as second byte"
+        }
+      },
+      "implementationNames": {
+        "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B": "PolygonTransparentProxy",
+        "eth:0x0D49fD0d79723e4D24AaC83f604ED2D3d5fC0f21": "AggchainECDSAMultisig"
+      },
+      "category": { "name": "Local Infrastructure", "priority": 5 }
+    }
+  ],
+  "abis": {
+    "eth:0x0D49fD0d79723e4D24AaC83f604ED2D3d5fC0f21": [
+      "constructor(address _globalExitRootManager, address _pol, address _bridgeAddress, address _rollupManager, address _aggLayerGateway)",
+      "error AdminCannotBeZeroAddress()",
+      "error AggchainManagerAlreadyInitialized()",
+      "error AggchainManagerCannotBeZero()",
+      "error AggchainSignersHashNotInitialized()",
+      "error AggchainSignersTooHigh()",
+      "error AggchainVKeyNotFound()",
+      "error BatchAlreadyVerified()",
+      "error BatchNotSequencedOrNotSequenceEnd()",
+      "error ConflictingDefaultSignersConfiguration()",
+      "error ExceedMaxVerifyBatches()",
+      "error FinalAccInputHashDoesNotMatch()",
+      "error FinalNumBatchBelowLastVerifiedBatch()",
+      "error FinalNumBatchDoesNotMatchPendingState()",
+      "error FinalPendingStateNumInvalid()",
+      "error ForceBatchNotAllowed()",
+      "error ForceBatchTimeoutNotExpired()",
+      "error ForceBatchesAlreadyActive()",
+      "error ForceBatchesDecentralized()",
+      "error ForceBatchesNotAllowedOnEmergencyState()",
+      "error ForceBatchesOverflow()",
+      "error ForcedDataDoesNotMatch()",
+      "error FunctionNotSupported()",
+      "error GasTokenNetworkMustBeZeroOnEther()",
+      "error GlobalExitRootNotExist()",
+      "error HaltTimeoutNotExpired()",
+      "error HaltTimeoutNotExpiredAfterEmergencyState()",
+      "error HugeTokenMetadataNotSupported()",
+      "error IndicesNotInDescendingOrder()",
+      "error InitNumBatchAboveLastVerifiedBatch()",
+      "error InitNumBatchDoesNotMatchPendingState()",
+      "error InitSequencedBatchDoesNotMatch()",
+      "error InvalidAggchainDataLength()",
+      "error InvalidAggchainType()",
+      "error InvalidInitAggchainVKey()",
+      "error InvalidInitializeFunction()",
+      "error InvalidInitializeTransaction()",
+      "error InvalidInitializer()",
+      "error InvalidProof()",
+      "error InvalidRangeBatchTimeTarget()",
+      "error InvalidRangeForceBatchTimeout()",
+      "error InvalidRangeMultiplierBatchFee()",
+      "error InvalidThreshold()",
+      "error InvalidZeroAddress()",
+      "error L1InfoTreeLeafCountInvalid()",
+      "error MaxTimestampSequenceInvalid()",
+      "error MetadataArrayLengthMismatch()",
+      "error NewAccInputHashDoesNotExist()",
+      "error NewPendingStateTimeoutMustBeLower()",
+      "error NewStateRootNotInsidePrime()",
+      "error NewTrustedAggregatorTimeoutMustBeLower()",
+      "error NotEnoughMaticAmount()",
+      "error NotEnoughPOLAmount()",
+      "error OldAccInputHashDoesNotExist()",
+      "error OldStateRootDoesNotExist()",
+      "error OnlyAdmin()",
+      "error OnlyAggchainManager()",
+      "error OnlyAggchainMetadataManager()",
+      "error OnlyPendingAdmin()",
+      "error OnlyPendingAggchainManager()",
+      "error OnlyRollupManager()",
+      "error OnlyTrustedAggregator()",
+      "error OnlyTrustedSequencer()",
+      "error OwnedAggchainVKeyAlreadyAdded()",
+      "error OwnedAggchainVKeyNotFound()",
+      "error PendingStateDoesNotExist()",
+      "error PendingStateInvalid()",
+      "error PendingStateNotConsolidable()",
+      "error PendingStateTimeoutExceedHaltAggregationTimeout()",
+      "error SequenceZeroBatches()",
+      "error SequencedTimestampBelowForcedTimestamp()",
+      "error SequencedTimestampInvalid()",
+      "error SignerAlreadyExists()",
+      "error SignerCannotBeZero()",
+      "error SignerDoesNotExist()",
+      "error SignerURLCannotBeEmpty()",
+      "error StoredRootMustBeDifferentThanNewRoot()",
+      "error TransactionsLengthAboveMax()",
+      "error TrustedAggregatorTimeoutExceedHaltAggregationTimeout()",
+      "error TrustedAggregatorTimeoutNotExpired()",
+      "error UseDefaultSignersAlreadyDisabled()",
+      "error UseDefaultSignersAlreadyEnabled()",
+      "error UseDefaultVkeysAlreadyDisabled()",
+      "error UseDefaultVkeysAlreadyEnabled()",
+      "error ZeroValueAggchainVKey()",
+      "event AcceptAdminRole(address newAdmin)",
+      "event AcceptAggchainManagerRole(address oldAggchainManager, address newAggchainManager)",
+      "event AddAggchainVKey(bytes4 selector, bytes32 newAggchainVKey)",
+      "event AggchainMetadataSet(string indexed key, string value)",
+      "event DisableUseDefaultSignersFlag()",
+      "event DisableUseDefaultVkeysFlag()",
+      "event EnableUseDefaultSignersFlag()",
+      "event EnableUseDefaultVkeysFlag()",
+      "event Initialized(uint8 version)",
+      "event OnVerifyPessimisticECDSAMultisig()",
+      "event SetAggchainMetadataManager(address oldAggchainMetadataManager, address newAggchainMetadataManager)",
+      "event SetTrustedSequencer(address newTrustedSequencer)",
+      "event SetTrustedSequencerURL(string newTrustedSequencerURL)",
+      "event SignersAndThresholdUpdated(address[] aggchainSigners, uint256 newThreshold, bytes32 newAggchainMultisigHash)",
+      "event TransferAdminRole(address newPendingAdmin)",
+      "event TransferAggchainManagerRole(address currentAggchainManager, address newPendingAggchainManager)",
+      "event UpdateAggchainVKey(bytes4 selector, bytes32 previousAggchainVKey, bytes32 newAggchainVKey)",
+      "function AGGCHAIN_ECDSA_MULTISIG_VERSION() view returns (string)",
+      "function AGGCHAIN_TYPE() view returns (bytes2)",
+      "function CONSENSUS_TYPE() view returns (uint32)",
+      "function MAX_AGGCHAIN_SIGNERS() view returns (uint256)",
+      "function _legacypendingVKeyManager() view returns (address)",
+      "function _legacyvKeyManager() view returns (address)",
+      "function acceptAdminRole()",
+      "function acceptAggchainManagerRole()",
+      "function addOwnedAggchainVKey(bytes4, bytes32) view",
+      "function admin() view returns (address)",
+      "function aggLayerGateway() view returns (address)",
+      "function aggchainManager() view returns (address)",
+      "function aggchainMetadata(string) view returns (string)",
+      "function aggchainMetadataManager() view returns (address)",
+      "function aggchainMultisigHash() view returns (bytes32)",
+      "function aggchainSigners(uint256) view returns (address)",
+      "function batchSetAggchainMetadata(string[] keys, string[] values)",
+      "function bridgeAddress() view returns (address)",
+      "function disableUseDefaultSignersFlag()",
+      "function disableUseDefaultVkeysFlag() view",
+      "function enableUseDefaultSignersFlag()",
+      "function enableUseDefaultVkeysFlag() view",
+      "function forceBatchAddress() view returns (address)",
+      "function forceBatchTimeout() view returns (uint64)",
+      "function forcedBatches(uint64) view returns (bytes32)",
+      "function gasTokenAddress() view returns (address)",
+      "function gasTokenNetwork() view returns (uint32)",
+      "function getAggchainHash(bytes aggchainData) view returns (bytes32)",
+      "function getAggchainMultisigHash() view returns (bytes32)",
+      "function getAggchainSignerInfos() view returns (tuple(address addr, string url)[])",
+      "function getAggchainSigners() view returns (address[])",
+      "function getAggchainSignersCount() view returns (uint256)",
+      "function getAggchainTypeFromSelector(bytes4 aggchainVKeySelector) pure returns (bytes2)",
+      "function getAggchainVKey(bytes4) pure returns (bytes32 aggchainVKey)",
+      "function getAggchainVKeySelector(bytes2 aggchainVKeyVersion, bytes2 aggchainType) pure returns (bytes4)",
+      "function getAggchainVKeyVersionFromSelector(bytes4 aggchainVKeySelector) pure returns (bytes2)",
+      "function getThreshold() view returns (uint256)",
+      "function getVKeyAndAggchainParams(bytes aggchainData) pure returns (bytes32, bytes32)",
+      "function globalExitRootManager() view returns (address)",
+      "function initAggchainManager(address newAggchainManager)",
+      "function initialize(address _admin, address _trustedSequencer, address _gasTokenAddress, string _trustedSequencerURL, string _networkName, bool _useDefaultSigners, tuple(address addr, string url)[] _signersToAdd, uint256 _newThreshold)",
+      "function initialize(address, address, uint32, address, string, string) pure",
+      "function isSigner(address _signer) view returns (bool)",
+      "function lastAccInputHash() view returns (bytes32)",
+      "function lastForceBatch() view returns (uint64)",
+      "function lastForceBatchSequenced() view returns (uint64)",
+      "function migrateFromLegacyConsensus()",
+      "function networkName() view returns (string)",
+      "function onVerifyPessimistic(bytes aggchainData)",
+      "function ownedAggchainVKeys(bytes4 aggchainVKeySelector) view returns (bytes32 ownedAggchainVKey)",
+      "function pendingAdmin() view returns (address)",
+      "function pendingAggchainManager() view returns (address)",
+      "function pol() view returns (address)",
+      "function rollupManager() view returns (address)",
+      "function setAggchainMetadata(string key, string value)",
+      "function setAggchainMetadataManager(address newAggchainMetadataManager)",
+      "function setTrustedSequencer(address newTrustedSequencer)",
+      "function setTrustedSequencerURL(string newTrustedSequencerURL)",
+      "function signerToURLs(address) view returns (string)",
+      "function threshold() view returns (uint256)",
+      "function transferAdminRole(address newPendingAdmin)",
+      "function transferAggchainManagerRole(address newAggchainManager)",
+      "function trustedSequencer() view returns (address)",
+      "function trustedSequencerURL() view returns (string)",
+      "function updateOwnedAggchainVKey(bytes4, bytes32) view",
+      "function updateSignersAndThreshold(tuple(address addr, uint256 index)[] _signersToRemove, tuple(address addr, string url)[] _signersToAdd, uint256 _newThreshold)",
+      "function useDefaultSigners() view returns (bool)",
+      "function useDefaultVkeys() view returns (bool)",
+      "function version() pure returns (string)"
+    ],
+    "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B": [
+      "constructor(address _logic, address admin, bytes _data) payable",
+      "error AddressEmptyCode(address target)",
+      "error ERC1967InvalidAdmin(address admin)",
+      "error ERC1967InvalidImplementation(address implementation)",
+      "error ERC1967NonPayable()",
+      "error FailedInnerCall()",
+      "event AdminChanged(address previousAdmin, address newAdmin)",
+      "event Upgraded(address indexed implementation)"
+    ]
+  },
+  "usedTemplates": {
+    "polygon-cdk/AggchainECDSAMultisig": "0x82ecfee4035ce80ca61e973569ea98f7de96585fc446962ce126778d59492772"
+  },
+  "usedBlockNumbers": { "ethereum": 23695838 },
+  "permissionsConfigHash": "0xbfeb0e90eda08c5aca6f031d9818eeae80fe0631d2d87211d62cdc54bf0405a8",
+  "modelledAgainst": {
+    "shared-polygon-cdk": "0x0d5794bec779188b01680dec2a4f15feb405643223811ce01ae41842a263cb27"
+  },
+  "permissions": {
+    "eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A": {
+      "directlyReceivedPermissions": [
+        {
+          "permission": "upgrade",
+          "from": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+          "role": "admin"
+        },
+        {
+          "permission": "upgrade",
+          "from": "eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+          "role": "admin"
+        },
+        {
+          "permission": "upgrade",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "role": "admin"
+        },
+        {
+          "permission": "upgrade",
+          "from": "eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb",
+          "role": "admin"
+        }
+      ]
+    },
+    "eth:0x20A53dCb196cD2bcc14Ece01F358f1C849aA51dE": {
+      "receivedPermissions": [
+        {
+          "permission": "interact",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "description": "Permissioned to post new state roots and global exit roots accompanied by ZK proofs.",
+          "role": ".trustedAggregatorAC"
+        }
+      ]
+    },
+    "eth:0x242daE44F5d8fb54B198D03a94dA45B5a4413e21": {
+      "receivedPermissions": [
+        {
+          "permission": "interact",
+          "from": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+          "description": "add new routes from proof selector to verifier / pessimisticVkey for pessimistic proofs.",
+          "role": ".addPpRouteAC",
+          "via": [
+            {
+              "address": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+              "delay": 259200,
+              "condition": "(no delay if in emergency state)"
+            }
+          ]
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+          "description": "add or update default aggchain verification keys (aggchainVkey) for any given selectors.",
+          "role": ".aggchainDefaultVKeyAC"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+          "description": "change the aggchainSigners and threshold (a multisig used for permissioned state transitions).",
+          "role": ".alMultisigAC"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+          "description": "freeze routes from proof selector to verifier / pessimisticVkey for pessimistic proofs.",
+          "role": ".freezePpRouteAC"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+          "description": "upgrade the implementation of wrapped tokens deployed by the bridge.",
+          "role": ".proxiedTokensManager",
+          "via": [
+            {
+              "address": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+              "delay": 259200,
+              "condition": "(no delay if in emergency state)"
+            }
+          ]
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "description": "deploy new projects that use predefined rollup types (implementations) and connect them or other Agglayer chains to the PolygonRollupManager.",
+          "role": ".createRollupAC"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "description": "manage all access control roles, add new rollup types (which are implementation contracts that can then be upgraded to by connected projects), update any connected projects to new rollup types, migrate to pessimistic proofs and rollback batches, connect existing rollups to the PolygonRollupManager.",
+          "role": ".defaultAdminAC",
+          "via": [
+            {
+              "address": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+              "delay": 259200,
+              "condition": "(no delay if in emergency state)"
+            }
+          ]
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "description": "manage parameters like fees for all connected projects, set the trusted aggregator, stop the emergency state, update projects and obsolete rollup types.",
+          "role": ".tweakParametersAC"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+          "delay": 259200,
+          "description": "propose, cancel and execute transactions in the timelock, manage all access control roles and change the minimum delay.",
+          "role": ".timelockAdminAC",
+          "condition": "(no delay if in emergency state)",
+          "via": [
+            {
+              "address": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+              "delay": 259200,
+              "condition": "(no delay if in emergency state)"
+            }
+          ]
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+          "delay": 259200,
+          "description": "propose, cancel and execute transactions in the timelock, manage all access control roles and change the minimum delay.",
+          "role": ".timelockAdminAC",
+          "condition": "(no delay if in emergency state)"
+        },
+        {
+          "permission": "upgrade",
+          "from": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+          "role": "admin",
+          "via": [
+            { "address": "eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A" },
+            {
+              "address": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+              "delay": 259200,
+              "condition": "(no delay if in emergency state)"
+            }
+          ]
+        },
+        {
+          "permission": "upgrade",
+          "from": "eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+          "role": "admin",
+          "via": [
+            { "address": "eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A" },
+            {
+              "address": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+              "delay": 259200,
+              "condition": "(no delay if in emergency state)"
+            }
+          ]
+        },
+        {
+          "permission": "upgrade",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "role": "admin",
+          "via": [
+            { "address": "eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A" },
+            {
+              "address": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+              "delay": 259200,
+              "condition": "(no delay if in emergency state)"
+            }
+          ]
+        },
+        {
+          "permission": "upgrade",
+          "from": "eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb",
+          "role": "admin",
+          "via": [
+            { "address": "eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A" },
+            {
+              "address": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+              "delay": 259200,
+              "condition": "(no delay if in emergency state)"
+            }
+          ]
+        }
+      ],
+      "directlyReceivedPermissions": [
+        {
+          "permission": "act",
+          "from": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+          "delay": 259200,
+          "role": ".timelockAdminAC",
+          "condition": "(no delay if in emergency state)"
+        }
+      ]
+    },
+    "eth:0x258862dec9a77db57b398c441390783293E2a7A1": {
+      "receivedPermissions": [
+        {
+          "permission": "interact",
+          "from": "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B",
+          "description": "set the trusted sequencer address.",
+          "role": ".admin"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B",
+          "description": "sole address that can force batches.",
+          "role": ".forceBatchAddress"
+        }
+      ]
+    },
+    "eth:0x37c58Dfa7BF0A165C5AAEdDf3e2EdB475ac6Dcb6": {
+      "receivedPermissions": [
+        {
+          "permission": "interact",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "description": "activate the emergency state in the PolygonRollupManager and in the shared bridge immediately, effectively pausing all projects connected to them and making system contracts instantly upgradable.",
+          "role": ".emergencyCouncilAdminAC"
+        }
+      ]
+    },
+    "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2": {
+      "receivedPermissions": [
+        {
+          "permission": "upgrade",
+          "from": "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B",
+          "role": "admin"
+        }
+      ]
+    },
+    "eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F": {
+      "receivedPermissions": [
+        {
+          "permission": "interact",
+          "from": "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B",
+          "description": "sign state transitions (replaces state validation for this aggchain).",
+          "role": ".aggchainSigners"
+        }
+      ]
+    },
+    "eth:0xC74eFc7fdb3BeC9c6930E91FFDF761b160dF79dB": {
+      "receivedPermissions": [
+        {
+          "permission": "interact",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "description": "deploy new projects that use predefined rollup types (implementations) and connect them or other Agglayer chains to the PolygonRollupManager.",
+          "role": ".createRollupAC"
+        }
+      ]
+    },
+    "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF": {
+      "directlyReceivedPermissions": [
+        {
+          "permission": "act",
+          "from": "eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A",
+          "role": ".owner"
+        },
+        {
+          "permission": "act",
+          "from": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+          "delay": 259200,
+          "role": ".timelockAdminAC",
+          "condition": "(no delay if in emergency state)"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3",
+          "description": "add new routes from proof selector to verifier / pessimisticVkey for pessimistic proofs.",
+          "role": ".addPpRouteAC"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe",
+          "description": "upgrade the implementation of wrapped tokens deployed by the bridge.",
+          "role": ".proxiedTokensManager"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2",
+          "description": "manage all access control roles, add new rollup types (which are implementation contracts that can then be upgraded to by connected projects), update any connected projects to new rollup types, migrate to pessimistic proofs and rollback batches, connect existing rollups to the PolygonRollupManager.",
+          "role": ".defaultAdminAC"
+        },
+        {
+          "permission": "interact",
+          "from": "eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF",
+          "delay": 259200,
+          "description": "propose, cancel and execute transactions in the timelock, manage all access control roles and change the minimum delay.",
+          "role": ".timelockAdminAC",
+          "condition": "(no delay if in emergency state)"
+        }
+      ]
+    }
+  }
+}

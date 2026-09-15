@@ -1,8 +1,10 @@
-.article > * {
+@reference "tailwindcss";
+
+.article:not(.changelog) > * {
   @apply mb-4;
 }
 
-.article > *:last-child {
+.article:not(.changelog) > *:last-child {
   @apply mb-8;
 }
 
@@ -11,25 +13,30 @@
   @apply font-roboto-serif;
 }
 
+.article.extended-char-set p,
+.article.extended-char-set li {
+  @apply font-roboto-serif-ext;
+}
+
 .article h2 {
-  @apply text-2xl font-bold md:text-3xl mt-12 mb-8;
+  @apply text-2xl font-bold md:text-3xl mt-12 mb-6;
 }
 
 .article h3 {
-  @apply text-xl font-bold md:text-2xl mb-4 mt-8;
+  @apply text-xl font-bold md:text-2xl mb-4 mt-6;
 }
 
 .article p,
 .article li {
-  @apply text-base text-black text-opacity-80 dark:text-white dark:text-opacity-80 md:text-[17px] leading-[1.6] font-light;
+  @apply text-sm text-primary/80 md:text-[17px] leading-[1.6] font-light;
 }
 
 .article blockquote {
-  @apply border-l-2 border-pink-200 bg-pink-200 bg-opacity-10 px-7 py-6 text-sm md:text-[17px] leading-[1.6] font-light;
+  @apply border-l-2 border-brand bg-brand/10 px-7 py-6 text-sm md:text-[17px] leading-[1.6] font-light;
 }
 
 .article blockquote p {
-  @apply text-pink-200 dark:text-pink-200;
+  @apply text-brand;
 }
 
 .article blockquote > p:last-child {
@@ -60,7 +67,7 @@
 }
 
 .article strong {
-  @apply text-black text-opacity-100 dark:text-white;
+  @apply text-primary font-semibold;
 }
 
 .article code {
@@ -77,5 +84,22 @@
 
 /* Make sure this is compatible with the <Link /> component */
 .article a {
-  @apply font-semibold text-blue-700 underline transition-colors hover:text-blue-550 dark:text-blue-500 dark:hover:text-blue-550;
+  @apply text-link underline transition-colors hover:text-blue-550;
+  font-weight: 600;
+}
+
+.article.privacy-best-practices > h2:first-child {
+  @apply mt-0;
+}
+
+.article.privacy-best-practices img {
+  @apply my-8 w-full rounded-lg border border-divider bg-pure-black shadow-sm;
+}
+
+.article.privacy-best-practices ul {
+  @apply grid list-none gap-3 pl-0;
+}
+
+.article.privacy-best-practices li {
+  @apply ml-0 rounded-lg border border-divider bg-surface-secondary p-4;
 }

@@ -1,8 +1,8 @@
 import { config as dotenv } from 'dotenv'
 
-export function getEnv(): Env {
+export function getEnv(overrides?: Record<string, string | undefined>): Env {
   dotenv()
-  return new Env({ ...process.env })
+  return new Env({ ...process.env, ...overrides })
 }
 
 export class Env {
@@ -22,6 +22,10 @@ export class Env {
     }
     const value = this.env[key]
     return value !== undefined ? { value, key } : value
+  }
+
+  static key(...inputs: string[]): string {
+    return inputs.join('_').replace(/-/g, '').toUpperCase()
   }
 
   string(key: string | string[], fallback?: string): string {
@@ -53,7 +57,7 @@ export class Env {
   optionalInteger(key: string | string[]): number | undefined {
     const resolved = this.resolve(key)
     if (resolved) {
-      const result = parseInt(resolved.value)
+      const result = Number.parseInt(resolved.value)
       if (result.toString() === resolved.value) {
         return result
       }
@@ -92,8 +96,11 @@ export class Env {
 
 function throwMissingEnvVar(keys: string | string[]): never {
   if (Array.isArray(keys)) {
-    throw new Error(`Missing environment variables: ${keys.join(', ')}`)
-  } else {
-    throw new Error(`Missing environment variable: ${keys}!`)
+    throw new Error(
+      `Missing at least one required environment variable. Please provide one of the following: ${keys.join(
+        ', ',
+      )}`,
+    )
   }
+  throw new Error(`Missing environment variable: ${keys}`)
 }

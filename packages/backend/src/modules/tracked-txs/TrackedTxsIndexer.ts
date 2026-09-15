@@ -1,30 +1,45 @@
-import { Database } from '@l2beat/database'
-import { TrackedTxConfigEntry } from '@l2beat/shared'
-import { UnixTime, clampRangeToDay } from '@l2beat/shared-pure'
+import type { Logger } from '@l2beat/backend-tools'
+import type { Database } from '@l2beat/database'
+import type { TrackedTxConfigEntry } from '@l2beat/shared'
+import { clampRangeToDay } from '@l2beat/shared-pure'
 import { Indexer } from '@l2beat/uif'
+import uniq from 'lodash/uniq'
+import type { TrackedTxProject } from '../../config/Config'
 import { ManagedMultiIndexer } from '../../tools/uif/multi/ManagedMultiIndexer'
-import {
+import type {
   Configuration,
   ManagedMultiIndexerOptions,
-  RemovalConfiguration,
+  TrimRemovalConfiguration,
+  WipeRemovalConfiguration,
 } from '../../tools/uif/multi/types'
-import { TrackedTxsClient } from './TrackedTxsClient'
-import { TxUpdaterInterface } from './types/TxUpdaterInterface'
+import type { TrackedTxsClient } from './TrackedTxsClient'
+import type { TrackedTxResult } from './types/model'
+import type { TxUpdaterInterface } from './types/TxUpdaterInterface'
 
 interface Dependencies
-  extends Omit<ManagedMultiIndexerOptions<TrackedTxConfigEntry>, 'name'> {
-  updaters: TxUpdaterInterface[]
+  extends Omit<
+    ManagedMultiIndexerOptions<TrackedTxConfigEntry>,
+    'name' | 'logger'
+  > {
+  updaters: TxUpdaterInterface<'liveness' | 'l2costs'>[]
   trackedTxsClient: TrackedTxsClient
   db: Database
+  projects: TrackedTxProject[]
 }
 
 export class TrackedTxsIndexer extends ManagedMultiIndexer<TrackedTxConfigEntry> {
-  constructor(private readonly $: Dependencies) {
-    super({
-      ...$,
-      name: 'tracked_txs_indexer',
-      updateRetryStrategy: Indexer.getInfiniteRetryStrategy(),
-    })
+  constructor(
+    private readonly $: Dependencies,
+    logger: Logger,
+  ) {
+    super(
+      {
+        ...$,
+        name: 'tracked_txs_indexer',
+        updateRetryStrategy: Indexer.getInfiniteRetryStrategy(),
+      },
+      logger,
+    )
   }
 
   override async multiUpdate(
@@ -34,56 +49,111 @@ export class TrackedTxsIndexer extends ManagedMultiIndexer<TrackedTxConfigEntry>
   ) {
     const { from: unixFrom, to: unixTo } = clampRangeToDay(from, to)
 
+    // we need to filter out configurations from projects that are archived
+    // it has to be done here otherwise indexer would delete data from inactive configurations/projects
+    const activeConfigurations = configurations.filter((c) => {
+      const project = this.$.projects.find(
+        (p) => p.id === c.properties.projectId,
+      )
+      return project && !project.isArchived
+    })
+
+    this.logger.info('Filtered configuration', {
+      activeConfigurations: activeConfigurations.length,
+    })
+
     const txs = await this.$.trackedTxsClient.getData(
-      configurations,
+      activeConfigurations,
       unixFrom,
       unixTo,
     )
 
+    this.logger.info('Fetched txs', { txs: txs.length, unixFrom, unixTo })
+
     return async () => {
       for (const updater of this.$.updaters) {
         const filteredTxs = txs.filter((tx) => tx.type === updater.type)
-        await updater.update(filteredTxs)
+        const txsToUpdate =
+          updater.type === 'l2costs'
+            ? this.deduplicateByTransaction(filteredTxs)
+            : filteredTxs
+        await this.$.db.syncMetadata.updateSyncedUntil(
+          updater.type,
+          uniq(
+            activeConfigurations
+              .filter((c) => c.properties.type === updater.type)
+              .map((c) => c.properties.projectId),
+          ),
+          unixTo,
+        )
+        await updater.update(txsToUpdate)
       }
-      this.logger.info('Saved txs into DB', {
+
+      this.logger.info('Executed updaters', {
         from,
-        to: unixTo.toNumber(),
+        to: unixTo,
+        updatersCount: this.$.updaters.length,
         configurationsToSync: configurations.length,
       })
 
-      return unixTo.toNumber()
+      return unixTo
     }
   }
 
-  override async removeData(configurations: RemovalConfiguration[]) {
+  private deduplicateByTransaction(txs: TrackedTxResult[]): TrackedTxResult[] {
+    const seen = new Set<string>()
+    const deduplicated = txs.filter((tx) => {
+      const key = `${tx.id}-${tx.hash}`
+      if (seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+    if (deduplicated.length < txs.length) {
+      this.logger.info('Deduplicated transactions', {
+        count: txs.length - deduplicated.length,
+      })
+    }
+    return deduplicated
+  }
+
+  override async wipeData(configurations: WipeRemovalConfiguration[]) {
+    const ids = configurations.map((c) => c.id)
+    await this.$.db.liveness.deleteByConfigIds(ids)
+    await this.$.db.l2Cost.deleteByConfigIds(ids)
+  }
+
+  override async trimData(configurations: TrimRemovalConfiguration[]) {
     for (const configuration of configurations) {
+      const [from, to] = configuration.range
       const [livenessDeletedRecords, l2CostsDeletedRecords] = await Promise.all(
         [
           this.$.db.liveness.deleteByConfigInTimeRange(
             configuration.id,
-            new UnixTime(configuration.from),
-            new UnixTime(configuration.to),
+            from,
+            to,
           ),
           this.$.db.l2Cost.deleteByConfigInTimeRange(
             configuration.id,
-            new UnixTime(configuration.from),
-            new UnixTime(configuration.to),
+            from,
+            to,
           ),
         ],
       )
 
       if (livenessDeletedRecords > 0) {
         this.logger.info('Deleted liveness records', {
-          from: configuration.from,
-          to: configuration.to,
+          from,
+          to,
           id: configuration.id,
           livenessDeletedRecords,
         })
       }
       if (l2CostsDeletedRecords > 0) {
-        this.logger.info('Deleted liveness records', {
-          from: configuration.from,
-          to: configuration.to,
+        this.logger.info('Deleted L2 costs records', {
+          from,
+          to,
           id: configuration.id,
           l2CostsDeletedRecords,
         })

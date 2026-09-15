@@ -1,0 +1,28 @@
+{
+  "$schema": "../../../../../../../discovery/schemas/contract.v2.schema.json",
+  "displayName": "TreasuryGovernor",
+  "category": "gov",
+  "description": "Token governance contract used for creating non-constitutional AIPs (treasury proposals), e.g., transferring funds out of the DAO Treasury. Uses DVP-based quorum (percentage of Delegated Voting Power with floor and ceiling bounds).",
+  "ignoreMethods": [
+    "getPastCirculatingSupply",
+    "getPastTotalDelegatedVotes",
+    "maximumQuorum",
+    "minimumQuorum",
+    "proposalDeadline",
+    "proposalEta",
+    "proposalSnapshot",
+    "proposalVotes",
+    "quorum"
+  ],
+  "fields": {
+    "l2TreasuryQuorumPercent": {
+      "handler": {
+        "type": "call",
+        "method": "quorumNumerator",
+        "args": []
+      },
+      "edit": ["format", "Undecimal2"],
+      "description": "The percentage of total Delegated Voting Power (DVP) required to pass a treasury proposal."
+    }
+  }
+}

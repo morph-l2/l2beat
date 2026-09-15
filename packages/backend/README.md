@@ -6,26 +6,32 @@ L2BEAT backend server.
 
 ### Dependencies
 
-To run or develop the backend you need to install and build its dependencies. You can do it by running the following commands in the repository root:
+To run or develop the backend you need to install and build its dependencies. You can do it by
+running the following commands in the repository root:
 
 ```
-yarn
-yarn build
+pnpm install
+pnpm build
 ```
 
 ### Database
 
-After the nodejs dependencies have been installed you should also install a Postgres database (v14). The recommended way is through docker using the commands below.
+After the nodejs dependencies have been installed you should also install a Postgres database (v17).
+The recommended way is through docker using the commands below.
 
 ```
-docker run -d --name=l2beat_postgres -p 5432:5432 -e POSTGRES_PASSWORD=password postgres:14
+docker run -d --name=l2beat_postgres -p 5432:5432 -e POSTGRES_PASSWORD=password postgres:17
 docker exec -it l2beat_postgres psql -U postgres -c 'CREATE DATABASE l2beat_local'
 docker exec -it l2beat_postgres psql -U postgres -c 'CREATE DATABASE l2beat_test'
 ```
 
-If you restart your system running `docker start l2beat_postgres` will bring the database back online.
+If you restart your system running `docker start l2beat_postgres` will bring the database back
+online.
 
 Alternatively you can simply run `./scripts/start_db.sh` which will always do what's needed.
+
+To update database schema to the latest version run `pnpm dev:migrate`. That way you will have the
+latest schema in your local database.
 
 ### Third party services
 
@@ -40,8 +46,36 @@ Optionally if you want to speed up the price collection obtain an api key from:
 
 ### Environment variables
 
-Once you have everything create a `.env` file that configures the app's
-environment variables. One variable per line `KEY=value`.
+Once you have everything create a `.env` file that configures the app's environment variables. One
+variable per line `KEY=value`.
+
+You can also sync a shared block of non-sensitive env values from Google Sheets with:
+
+```sh
+pnpm env:sync
+```
+
+The command opens a browser login on every run, reads the spreadsheet tab from
+`GOOGLE_SHEETS_ENV_URL`, rewrites only the managed block in `.env`, and then revokes the OAuth
+token.
+
+To use it, add the following local config below the managed block in `.env`:
+
+```sh
+GOOGLE_SHEETS_CLIENT_ID='replace-me.apps.googleusercontent.com'
+GOOGLE_SHEETS_CLIENT_SECRET='replace-me-if-your-downloaded-json-has-one'
+GOOGLE_SHEETS_ENV_URL='https://docs.google.com/spreadsheets/d/replace-me/edit#gid=0'
+```
+
+Create the client ID as a Google OAuth Desktop app and enable the Google Sheets API for that
+project. If the downloaded Google OAuth JSON also contains a `client_secret`, put it in
+`GOOGLE_SHEETS_CLIENT_SECRET`. Note: for desktop OAuth apps Google requires the client secret but
+does not consider it confidential — the real security comes from the browser login and PKCE, so it
+is safe to share alongside the client ID. The full sheet URL is used so the sync script knows which
+spreadsheet tab to read.
+
+Sheet values must be single-line and must not contain single quotes. Rows for `GOOGLE_SHEETS_*`
+variables are rejected, because they configure the sync itself and must stay local.
 
 ### Database
 
@@ -52,16 +86,14 @@ LOCAL_DB_URL=postgresql://postgres:password@localhost:5432/l2beat_local
 TEST_DB_URL=postgresql://postgres:password@localhost:5432/l2beat_test
 ```
 
-If you used a different database setup modify those values accordingly. The
-`TEST_DB_URL` is used by only the test suite. Omitting this variable will cause
-the database tests to be skipped.
-
-You might want to clear the database before running the backend. You can do it
-by setting `FRESH_START=true` env variable.
+If you used a different database setup modify those values accordingly. The `TEST_DB_URL` is used by
+only the test suite. Omitting this variable will cause the database tests to be skipped.
 
 ### Features
 
-The backend can do a lot of things and you most likely don't want to run it all locally. You can enable/disable features by using the feature flag system configured via the `FEATURES` environment variable.
+The backend can do a lot of things and you most likely don't want to run it all locally. You can
+enable/disable features by using the feature flag system configured via the `FEATURES` environment
+variable.
 
 Below are some examples of possible configurations:
 
@@ -69,72 +101,70 @@ Below are some examples of possible configurations:
 # enable all features
 FEATURES=*
 
-# enable everything except tvl
-FEATURES=*,!tvl
+# enable everything except tvs
+FEATURES=*,!tvs
 
-# enable only tvl
-FEATURES=tvl
+# enable only tvs
+FEATURES=tvs
 
-# enable tvl and activity
-FEATURES=tvl,activity
+# enable tvs and activity
+FEATURES=tvs,activity
 
-# enable tvl, but not for arbitrum
-FEATURES=tvl,!tvl.arbitrum
+# enable tvs, but not for arbitrum
+FEATURES=tvs,!tvs.arbitrum
 
-# enable tvl, but only for ethereum
-FEATURES=tvl,!tvl.*,tvl.ethereum
+# enable tvs, but only for ethereum
+FEATURES=tvs,!tvs.*,tvs.ethereum
+```
+
+Note that a flag is enabled whenever any of its parents is, so `FEATURES=*` turns on every feature
+including those that require their own environment variables. Missing ones throw at startup rather
+than being silently skipped. For example `interop.relay` requires `INTEROP_RELAY_API_KEY`, so a
+broad setup either supplies the key or opts out explicitly:
+
+```sh
+FEATURES=*,!interop.relay
 ```
 
 ### Common env variables
 
-- `COINGECKO_API_KEY` - Optional. Speeds up price collection. See https://www.coingecko.com/en/api/pricing
+- `COINGECKO_API_KEY` - Optional. Speeds up price collection. See
+  https://www.coingecko.com/en/api/pricing
+
+- `ETHERSCAN_API_URL` - Etherscan API url
+- `ETHERSCAN_API_KEY` - Etherscan API key Blockscout doesn't need it.
 
 - `<CHAIN>_RPC_URL` - RPC url for the chain, for example from Alchemy
-- `<CHAIN>_RPC_CALLS_PER_MINUTE` - Optional. Rate limits the number of calls to the RPC. Defaults to 60
+- `<CHAIN>_RPC_CALLS_PER_MINUTE` - Optional. Rate limits the number of calls to the RPC. Defaults to
+  60
 - `<CHAIN>_RPC_GETLOGS_MAX_RANGE` - Optional. Limits the range of getLogs calls
-- `<CHAIN>_ETHERSCAN_API_KEY` - Etherscan API key. Only needed if the chain uses Etherscan. Blockscout doesn't need it.
 
-You can also append the feature name to the environment variables if you'd like a specific feature to use a different endpoint. For example:
+You can also append the feature name to the environment variables if you'd like a specific feature
+to use a different endpoint. For example:
 
 ```
 ETHEREUM_RPC_URL=https://example.provider/ethereum
-ETHEREUM_RPC_URL_FOR_TVL=https://another.rpc/mainnet
 ```
 
-### `tvl` feature
+### `tvs` feature
 
-The tvl feature is configured via the following environment variables:
-
-- `ERROR_ON_UNSYNCED_TVL` - Optional. Defaults to false
+The tvs feature is configured via the following environment variables:
 
 **Feature flags:**
 
-- `tvl` - enables tvl feature
-- `tvl.[project_id]` - enables tvl for project with given project_id
+- `tvs` - enables tvs feature
+- `tvs.[project_id]` - enables tvs for project with given project_id
 
 ### `tracked-txs` feature
 
-The tracked-txx feature is configured via the following environment variables:
+The tracked-txs feature is configured via the following environment variables:
 
-- `BIGQUERY_CLIENT_EMAIL` - BigQuery credentials
-- `BIGQUERY_PRIVATE_KEY` - BigQuery credentials
-- `BIGQUERY_PROJECT_ID` - BigQuery credentials
-- `BIGQUERY_LIMIT_GB` - Optional. Defaults to 15
-- `BIGQUERY_WARNING_LIMIT_GB` - Optional. Defaults to 8
+- `DUNE_API_KEY`
 
 **Feature flags:**
 
 - `tracked-txs` - enables tracked txs feature
 - `tracked-txs.liveness` - enables liveness feature
-
-### `finality` feature
-
-**Feature flags:**
-
-- `finality` - enables finality feature
-- `finality.[project_id]` - enables finality for project with given project_id
-
-In development.
 
 ### `activity` feature
 
@@ -142,7 +172,6 @@ The activity feature is configured via the following environment variables:
 
 - `STARKEX_API_KEY`
 - `STARKEX_CALLS_PER_MINUTE` - Optional. Rate limits the number of calls to the RPC. Defaults to 600
-- `ACTIVITY_PROJECTS_EXCLUDED_FROM_API` - Optional. Space separated list of project ids to exclude from the API.
 
 **Feature flags:**
 
@@ -163,28 +192,19 @@ The updateMonitor feature is configured via the following environment variables:
 - `UPDATE_MONITOR_RUN_ON_START` - Optional. Defaults to true
 - `DISCORD_TOKEN` - Optional. Discord bot token
 - `INTERNAL_DISCORD_CHANNEL_ID` - Optional. Discord channel id for internal messages
-- `PUBLIC_DISCORD_CHANNEL_ID` - Optional. Discord channel id for public messages
 
 **Feature flags:**
 
 - `updateMonitor` - enables the update monitor
 
-### `tvlCleaner` feature
-
-The tvlCleaner feature is designed to remove redundant data kept in database. It will only keep the sixHourly data 93 days to the past and hourly data 10 days to the past.
-
-**Feature flags:**
-
-- `tvlCleaner` - enables the cleaner
-
 ### `cache` feature
 
-The cache feature is running functions every 10 minutes that would be ran on endpoint invoke.
+The cache feature is running functions every 10 minutes that would be run on endpoint invoke.
 
 **Feature flags:**
 
 - `cache.liveness` - enables the cache for the liveness endpoint
-- `cache.tvl` - enables the cache for the tvl endpoint
+- `cache.tvs` - enables the cache for the tvs endpoint
 
 ### Logging
 
@@ -200,16 +220,30 @@ You can configure the log level by setting the `LOG_LEVEL` variable. The possibl
 
 ## Scripts
 
-- `yarn build` - build
-- `yarn format:fix` - run biome automatic formatter
-- `yarn format` - check if formatting is correct with biome
-- `yarn lint:fix` - run biome automatic fixer
-- `yarn lint` - check if the code satisfies the biome configuration
-- `yarn start:dev` - run the backend server from source ts
-- `yarn start` - run the backend server from built js
-- `yarn test` - run tests
-- `yarn typecheck` - check if the code satisfies the typescript compiler
-
+- `pnpm build` - build
+- `pnpm format:fix` - run biome automatic formatter
+- `pnpm format` - check if formatting is correct with biome
+- `pnpm lint:fix` - run biome automatic fixer
+- `pnpm lint` - check if the code satisfies the biome configuration
+- `pnpm start:dev` - run the backend server from source ts
+- `pnpm start` - run the backend server from built js
+- `pnpm test` - run tests
+- `pnpm typecheck` - check if the code satisfies the typescript compiler
+- `pnpm db:migrate` - apply the latest migration
+- `pnpm tvs:generate` - regenerate TVS config from latest inputs (check --help for available
+  options)
+- `pnpm tvs:execute` - executes TVS with latest config (check --help for available options)
+- `pnpm tvs:calculate-ids` - calculates IDs for amounts and prices. Examples:
+```bash
+pnpm tvs:calculate-ids --projects=unichain,arbitrum
+```
+```bash
+pnpm tvs:calculate-ids --tokens=unichain-ETH,unichain-USDC
+```
+- `pnpm tvs:translate-id` - find out which config corresponds to given ID. Examples:
+```bash
+pnpm tvs:translate-id 5da09aa91cbd
+```
 - `scripts/rediscoverRawDevAll.sh` - re-runs raw discovery --dev on all existing projects
 
 ## Maintenance endpoints
@@ -219,4 +253,4 @@ The `/status` endpoints were created to see the current state of our backend.
 - `/activity/status`
 - `/status/discovery`
 - `/status/tracked-txs`
-- `/status/tvl`
+- `/status/tvs`

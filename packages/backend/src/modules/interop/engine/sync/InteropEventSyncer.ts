@@ -1,0 +1,474 @@
+import type { Logger } from '@l2beat/backend-tools'
+import type {
+  BlockRangeWithTimestamps,
+  Database,
+  InteropEventRecord,
+  InteropPluginSyncedRangeRecord,
+} from '@l2beat/database'
+import {
+  type EthRpcClient,
+  type RpcBlock,
+  type RpcLog,
+  type RpcReceipt,
+  type RpcTransaction,
+  toEVMLog,
+  UpsertMap,
+} from '@l2beat/shared'
+import {
+  assert,
+  type Block,
+  ChainSpecificAddress,
+  type EthereumAddress,
+  type Log,
+  type LongChainName,
+  type UnixTime,
+} from '@l2beat/shared-pure'
+import { AsyncMutex } from '../../../../tools/AsyncMutex'
+import { TimeLoop } from '../../../../tools/TimeLoop'
+import { toInteropTransaction } from '../../dto/interopTransaction'
+import type {
+  InteropEvent,
+  InteropPluginResyncable,
+  LogToCapture,
+  TxToCapture,
+} from '../../plugins/types'
+import { getItemsToCapture, logToViemLog } from '../capture/getItemsToCapture'
+import type { InteropEventStore } from '../capture/InteropEventStore'
+import { withInteropRpcMetricsContext } from '../rpc/interopRpcMetrics'
+import { errorToString, toEventSelector } from '../utils'
+import { BlockProcessingStats } from './BlockProcessingStats'
+import { FollowingState } from './FollowingState'
+
+export class LogQuery {
+  topic0s = new Set<string>()
+  addresses: Set<EthereumAddress> | '*' = new Set()
+  topicToTxEvents = new UpsertMap<string, Set<string>>()
+  topic0sWithTx = new Set<string>()
+  isEmpty() {
+    if (this.topic0s.size === 0) {
+      return true
+    }
+    return this.addresses === '*' ? false : this.addresses.size === 0
+  }
+}
+
+export interface ResyncablePluginCluster {
+  name: string
+  plugins: InteropPluginResyncable[]
+}
+
+export function buildLogQueryForCluster(
+  cluster: ResyncablePluginCluster,
+  chain: LongChainName,
+): LogQuery {
+  const result = new LogQuery()
+  for (const plugin of cluster.plugins) {
+    addPluginDataRequests(result, plugin, chain)
+  }
+  return result
+}
+
+function addPluginDataRequests(
+  result: LogQuery,
+  plugin: InteropPluginResyncable,
+  chain: LongChainName,
+) {
+  const eventRequests = plugin
+    .getDataRequests()
+    .filter((r) => r.type === 'event')
+
+  for (const eventRequest of eventRequests) {
+    if (eventRequest.addresses === '*') {
+      result.addresses = '*'
+    } else {
+      if (eventRequest.addresses.length === 0) {
+        throw new Error(
+          `Empty address list in data request for ${plugin.name} (${eventRequest.signature})`,
+        )
+      }
+
+      let addressesOnThisChain = 0
+      for (const address of eventRequest.addresses) {
+        if (ChainSpecificAddress.longChain(address) !== chain) {
+          continue
+        }
+        const ethAddress = ChainSpecificAddress.address(address)
+        if (result.addresses !== '*') {
+          result.addresses.add(ethAddress)
+        }
+        addressesOnThisChain++
+      }
+      if (addressesOnThisChain === 0) {
+        continue
+      }
+    }
+
+    // TODO try also with `toEventSelector` straight from viem
+    const topic0 = toEventSelector(eventRequest.signature)
+    result.topic0s.add(topic0)
+
+    if (eventRequest.includeTxEvents?.length) {
+      const txEvents = result.topicToTxEvents.getOrInsertComputed(
+        topic0,
+        () => new Set(),
+      )
+      for (const signature of eventRequest.includeTxEvents) {
+        txEvents.add(toEventSelector(signature))
+      }
+    }
+    if (eventRequest.includeTx) {
+      result.topic0sWithTx.add(topic0)
+    }
+  }
+}
+
+export type SyncerState = TimeloopState | BlockProcessorState
+
+export interface TimeloopState {
+  type: 'timeLoop'
+  name: string
+  status: string
+  run(): Promise<SyncerState>
+}
+export interface BlockProcessorState {
+  type: 'blockProcessor'
+  name: string
+  status: string
+  checkStatus(): Promise<SyncerState>
+  processNewestBlock(block: Block, logs: Log[]): Promise<SyncerState>
+}
+
+export interface TxCaptureResult {
+  events: InteropEvent[]
+  fulfilledCreatorEvents: InteropEvent[]
+}
+
+export class InteropEventSyncer extends TimeLoop {
+  public state: SyncerState
+  public latestBlockNumber?: bigint
+  public waitingForWipe = false
+  public hasError = false
+  // InteropPluginSyncState.lastError may hold a value from a previous run or a
+  // failed attempt. It is cleared lazily on the next success, so steady-state
+  // block processing never writes to that table.
+  private storedErrorMayExist = true
+  public readonly blockProcessingStats = new BlockProcessingStats()
+  // Number of times the log range has been halved due to size-limit errors.
+  public logRangeDivider?: number
+  private readonly exclusiveExecutionMutex = new AsyncMutex()
+
+  constructor(
+    readonly chain: LongChainName,
+    readonly cluster: ResyncablePluginCluster,
+    readonly rpcClient: EthRpcClient,
+    readonly store: InteropEventStore,
+    readonly db: Database,
+    protected logger: Logger,
+    intervalMs = 10000,
+  ) {
+    super({ intervalMs })
+    this.logger = logger.for(this)
+    this.state = new FollowingState(this, this.logger)
+  }
+
+  protected async triggerState<T extends SyncerState>(
+    state: T,
+    fn: (state: T) => Promise<SyncerState>,
+    options?: { clearError?: boolean },
+  ) {
+    try {
+      await withInteropRpcMetricsContext(
+        'interop.sync',
+        this.getRpcMetricsContext(),
+        async () => {
+          this.state = await fn(state)
+          this.hasError = false
+          // A transition into (or a tick spent in) CatchingUpState has not
+          // synced anything yet, so the stored error stays until either data
+          // is persisted (see saveProducedInteropEvents) or the syncer is
+          // following again.
+          if (
+            (options?.clearError ?? true) &&
+            this.state.type === 'blockProcessor'
+          ) {
+            await this.clearChainSyncError()
+            this.storedErrorMayExist = false
+          }
+        },
+      )
+    } catch (error) {
+      this.hasError = true
+      this.logger.error('Error syncing chain', error, {
+        pluginName: this.cluster.name,
+        chain: this.chain,
+        syncerState: this.state.name,
+      })
+      await this.saveChainSyncError(error)
+    }
+  }
+
+  async run() {
+    await this.exclusiveExecutionMutex.tryRunExclusive(async () => {
+      const state = this.state
+      if (state.type === 'timeLoop') {
+        await this.triggerState(state, (current) => current.run())
+      } else {
+        await this.triggerState(state, (current) => current.checkStatus(), {
+          clearError: false,
+        })
+      }
+    })
+  }
+
+  async processNewestBlock(block: Block, logs: Log[]) {
+    this.latestBlockNumber = BigInt(block.number)
+
+    // It's fine to do this check outside of the exclusiveExecutionMutex because
+    // even if we skip block, FollowingState will notice and switch to CatchingUpState
+    if (this.state.type === 'timeLoop') {
+      return
+    }
+
+    await this.exclusiveExecutionMutex.runExclusive(async () => {
+      const state = this.state
+      if (state.type === 'blockProcessor') {
+        await this.triggerState(state, (current) =>
+          current.processNewestBlock(block, logs),
+        )
+      }
+    })
+  }
+
+  captureLog(logToCapture: LogToCapture) {
+    for (const plugin of this.cluster.plugins) {
+      const produced = plugin.capture(logToCapture)
+      if (produced) {
+        return produced.map((p) => ({ ...p, plugin: plugin.name }))
+      }
+    }
+  }
+
+  captureTx(txToCapture: TxToCapture): TxCaptureResult | undefined {
+    for (const plugin of this.cluster.plugins) {
+      if (!plugin.captureTx) {
+        continue
+      }
+      const creatorEvents = txToCapture.tx.hash
+        ? this.store.derivedTxStore.getCreatorEvents(
+            txToCapture.chain,
+            txToCapture.tx.hash,
+            plugin.name,
+          )
+        : undefined
+      const produced = plugin.captureTx(txToCapture, creatorEvents)
+      if (produced) {
+        return {
+          events: produced.map((p) => ({ ...p, plugin: plugin.name })),
+          fulfilledCreatorEvents: creatorEvents ?? [],
+        }
+      }
+    }
+  }
+
+  async capturePendingHistoricalTxs(beforeBlock: bigint) {
+    const pluginNames = this.cluster.plugins.map((p) => p.name)
+    const txHashes = this.store.derivedTxStore.getHashesPendingHistoryCheck(
+      this.chain,
+      pluginNames,
+    )
+    const interopEvents: InteropEvent[] = []
+    const fulfilledCreatorEvents: InteropEvent[] = []
+
+    for (const txHash of txHashes) {
+      const tx = await this.getTransactionByHash(txHash)
+      if (!tx || tx.blockNumber === null || tx.blockNumber >= beforeBlock) {
+        continue
+      }
+
+      const receipt = await this.getTransactionReceipt(txHash)
+      assert(receipt, `Missing receipt for tx ${txHash}`)
+
+      const block = await this.getBlockByNumber(tx.blockNumber)
+      assert(block, `Missing block ${tx.blockNumber} for tx ${txHash}`)
+
+      const result = this.captureTx({
+        chain: this.chain,
+        tx: toTransaction(tx),
+        block: toBlock(block),
+        txLogs: receipt.logs
+          .map((log) => logToViemLog(toEVMLog(log)))
+          .sort((a, b) => (a.logIndex ?? 0) - (b.logIndex ?? 0)),
+      })
+      if (result) {
+        interopEvents.push(...result.events)
+        fulfilledCreatorEvents.push(...result.fulfilledCreatorEvents)
+      }
+    }
+
+    const checkedInHistoryEvents =
+      this.store.derivedTxStore.markCheckedInHistory(
+        this.chain,
+        txHashes,
+        pluginNames,
+      )
+
+    return {
+      events: interopEvents,
+      fulfilledCreatorEvents,
+      checkedInHistoryEvents,
+    }
+  }
+
+  async saveProducedInteropEvents(
+    interopEvents: InteropEvent[],
+    fullRange: BlockRangeWithTimestamps,
+    fulfilledCreatorEvents: InteropEvent[] = [],
+    checkedInHistoryEvents: InteropEvent[] = [],
+  ) {
+    const upsertRange = () =>
+      this.db.interopPluginSyncedRange.upsert({
+        pluginName: this.cluster.name,
+        chain: this.chain,
+        ...fullRange,
+      })
+
+    const hasEventWrites =
+      interopEvents.length > 0 ||
+      fulfilledCreatorEvents.length > 0 ||
+      checkedInHistoryEvents.length > 0
+    if (!hasEventWrites && !this.storedErrorMayExist) {
+      // Most followed blocks produce nothing. A single upsert is atomic on its
+      // own, so skip the BEGIN/COMMIT round trips.
+      await upsertRange()
+    } else {
+      await this.runInTransaction(async () => {
+        await this.store.saveNewEvents(interopEvents) // TODO: make this idempotent?
+        await this.store.updateDerivedFulfilled(fulfilledCreatorEvents)
+        await this.store.updateDerivedCheckedInHistory(checkedInHistoryEvents)
+        await upsertRange()
+        await this.clearChainSyncError()
+      })
+      // Only now is the clear committed; a rollback above must leave the flag
+      // set so the next attempt writes it again.
+      this.storedErrorMayExist = false
+    }
+
+    this.logger.debug('Events captured for resyncable cluster', {
+      plugin: this.cluster.name,
+      chain: this.chain,
+      blockNumber: fullRange.toBlock,
+      events: interopEvents.length,
+    })
+  }
+
+  /**
+   * Writes only when an error may be stored, see `storedErrorMayExist`. The
+   * caller resets that flag once the write is known to be committed, because
+   * this may run inside a transaction that still rolls back afterwards.
+   */
+  async clearChainSyncError() {
+    if (!this.storedErrorMayExist) {
+      return
+    }
+    await this.db.interopPluginSyncState.setLastError(
+      this.cluster.name,
+      this.chain,
+      null,
+    )
+  }
+
+  async saveChainSyncError(error: unknown) {
+    this.storedErrorMayExist = true
+    await this.db.interopPluginSyncState.setLastError(
+      this.cluster.name,
+      this.chain,
+      errorToString(error),
+    )
+  }
+
+  async getResyncState(): Promise<{
+    resyncFrom?: UnixTime
+    wipeRequired: boolean
+  }> {
+    const syncState =
+      await this.db.interopPluginSyncState.findByPluginNameAndChain(
+        this.cluster.name,
+        this.chain,
+      )
+    return {
+      resyncFrom: syncState?.resyncRequestedFrom ?? undefined,
+      wipeRequired: syncState?.wipeRequired ?? false,
+    }
+  }
+
+  buildLogQuery() {
+    return buildLogQueryForCluster(this.cluster, this.chain)
+  }
+
+  protected runInTransaction<T>(fn: () => Promise<T>): Promise<T> {
+    return this.db.transaction(fn)
+  }
+
+  getBlockByNumber(blockNumber: bigint): Promise<RpcBlock | null> {
+    return this.rpcClient.getBlockByNumber(blockNumber, false)
+  }
+
+  getLogs(filter: {
+    fromBlock: bigint
+    toBlock: bigint
+    address?: EthereumAddress[]
+    topics: string[][]
+  }): Promise<RpcLog[]> {
+    return this.rpcClient.getLogs(filter)
+  }
+
+  getTransactionReceipt(hash: string): Promise<RpcReceipt | null> {
+    return this.rpcClient.getTransactionReceipt(hash)
+  }
+
+  getTransactionByHash(hash: string): Promise<RpcTransaction | null> {
+    return this.rpcClient.getTransactionByHash(hash)
+  }
+
+  getLastSyncedRange(): Promise<InteropPluginSyncedRangeRecord | undefined> {
+    return this.db.interopPluginSyncedRange.findByPluginNameAndChain(
+      this.cluster.name,
+      this.chain,
+    )
+  }
+
+  getOldestEventForPluginAndChain(): Promise<InteropEventRecord | undefined> {
+    return this.db.interopEvent.getOldestEventForPluginAndChain(
+      this.cluster.plugins.map((plugin) => plugin.name),
+      this.chain,
+    )
+  }
+
+  getItemsToCapture(block: Block, logs: Log[]) {
+    return getItemsToCapture(this.chain, block, logs)
+  }
+
+  private getRpcMetricsContext() {
+    return {
+      pluginCluster: this.cluster.name,
+      chain: this.chain,
+    }
+  }
+}
+
+function toTransaction(tx: RpcTransaction): LogToCapture['tx'] {
+  return toInteropTransaction(tx)
+}
+
+function toBlock(block: RpcBlock): TxToCapture['block'] {
+  assert(block.hash, `Missing hash for block ${block.number}`)
+  assert(block.number !== null, 'Missing block number')
+
+  return {
+    number: Number(block.number),
+    hash: block.hash,
+    logsBloom: block.logsBloom,
+    timestamp: Number(block.timestamp),
+    transactions: [],
+  }
+}

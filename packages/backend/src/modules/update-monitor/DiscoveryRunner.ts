@@ -1,173 +1,165 @@
 import { Logger } from '@l2beat/backend-tools'
 import {
-  AllProviders,
+  type AllProviders,
+  addReferencedDiscoveries,
   ConfigReader,
-  DiscoveryConfig,
-  DiscoveryEngine,
-  TemplateService,
-  toDiscoveryOutput,
+  type ConfigRegistry,
+  clusterEntries,
+  combinePermissionsIntoDiscovery,
+  type DiscoveryEngine,
+  type DiscoveryOutput,
+  DiscoveryRegistry,
+  flattenDiscoveredSources,
+  getDiscoveryPaths,
+  modelPermissions,
+  remapDiscoverySourceNames,
+  type TemplateService,
+  toRawDiscoveryOutput,
 } from '@l2beat/discovery'
-import type { DiscoveryOutput } from '@l2beat/discovery-types'
 import {
-  AllProviderStats,
-  ProviderStats,
-} from '@l2beat/discovery/dist/discovery/provider/Stats'
-import { assert } from '@l2beat/shared-pure'
-import { isError } from 'lodash'
-import { Gauge } from 'prom-client'
+  assert,
+  ChainSpecificAddress,
+  type UnixTime,
+  unique,
+  withoutUndefinedKeys,
+} from '@l2beat/shared-pure'
+import isError from 'lodash/isError'
 
 export interface DiscoveryRunnerOptions {
   logger: Logger
-  injectInitialAddresses: boolean
   maxRetries?: number
   retryDelayMs?: number
 }
 
-// 10 minutes
-const MAX_RETRIES = 30
-const RETRY_DELAY_MS = 20_000
+export interface DiscoveryRunResult {
+  discovery: DiscoveryOutput
+  flatSources: Record<string, string>
+}
 
 export class DiscoveryRunner {
   constructor(
     private readonly allProviders: AllProviders,
     private readonly discoveryEngine: DiscoveryEngine,
-    private readonly configReader: ConfigReader,
-    readonly chain: string,
     private readonly templateService: TemplateService,
   ) {}
 
-  async getBlockNumber(): Promise<number> {
-    return await this.allProviders.getLatestBlockNumber(this.chain)
+  private async discover(
+    projectName: string,
+    discoveryTimestamp: number,
+    logger: Logger,
+    configReader?: ConfigReader,
+  ): Promise<DiscoveryRunResult> {
+    logger.info(
+      `Attempting discovery of ${projectName} at timestamp ${discoveryTimestamp}`,
+    )
+
+    const discoveryPaths = getDiscoveryPaths()
+    configReader ??= new ConfigReader(discoveryPaths.discovery)
+
+    const discoveries = await this.discoverMany(
+      [projectName],
+      discoveryTimestamp,
+      configReader,
+      logger,
+    )
+    // Projects reached through an entrypoint are deliberately not
+    // rediscovered: modelling runs against their committed discovery, and
+    // keeping the two sides in sync is handled through Update Monitor.
+    addReferencedDiscoveries(discoveries, projectName, configReader, logger)
+
+    const permissionsOutput = await modelPermissions(
+      projectName,
+      discoveries,
+      configReader,
+      this.templateService,
+      discoveryPaths,
+      { debug: false },
+    )
+    const projectDiscovery = discoveries.get(projectName)
+    combinePermissionsIntoDiscovery(
+      projectDiscovery.discoveryOutput,
+      permissionsOutput,
+      clusterEntries(discoveries),
+    )
+
+    assert(projectDiscovery.analysis)
+    // TODO: Should not be here - drop it and use implementation name once it's ready
+    // if somebody changes the name and decides to re-colorize
+    // then .flat folder will be incorrect
+    const remappedResults = remapDiscoverySourceNames(
+      projectDiscovery.analysis,
+      projectDiscovery.discoveryOutput,
+    )
+    const flatSources = flattenDiscoveredSources(remappedResults, Logger.SILENT)
+
+    return {
+      discovery: withoutUndefinedKeys(projectDiscovery.discoveryOutput),
+      flatSources,
+    }
+  }
+
+  private async discoverMany(
+    toDiscover: string[],
+    dependencyTimestamp: number,
+    configReader: ConfigReader,
+    logger: Logger,
+  ) {
+    const discoveries = new DiscoveryRegistry()
+    for (const dependency of toDiscover) {
+      const dependencyConfig = configReader.readConfig(dependency)
+      logger.info(
+        `Discovering ${dependencyConfig.name} at timestamp ${dependencyTimestamp}`,
+      )
+      const { analyses } = await this.discoveryEngine.discover(
+        this.allProviders,
+        dependencyConfig.structure,
+        dependencyTimestamp,
+      )
+
+      const chains = unique(
+        analyses.map((c) => ChainSpecificAddress.longChain(c.address)),
+      )
+
+      const usedBlockNumbers: Record<string, number> = {}
+      for (const chain of chains) {
+        const provider = await this.allProviders.get(chain, dependencyTimestamp)
+        usedBlockNumbers[chain] = provider.blockNumber
+      }
+
+      const discovery = toRawDiscoveryOutput(
+        this.templateService,
+        dependencyConfig,
+        dependencyTimestamp,
+        usedBlockNumbers,
+        analyses,
+      )
+      discoveries.set(dependency, discovery, analyses)
+    }
+    return discoveries
   }
 
   async run(
-    projectConfig: DiscoveryConfig,
-    blockNumber: number,
-    options: DiscoveryRunnerOptions,
-  ) {
-    const config = options.injectInitialAddresses
-      ? await this.updateInitialAddresses(projectConfig)
-      : projectConfig
-
-    const discovery = await this.discoverWithRetry(
-      config,
-      blockNumber,
-      options.logger,
-      options.maxRetries,
-      options.retryDelayMs,
-    )
-
-    return discovery
-  }
-
-  private async discover(
-    config: DiscoveryConfig,
-    blockNumber: number,
-  ): Promise<DiscoveryOutput> {
-    const provider = this.allProviders.get(config.chain, blockNumber)
-    const result = await this.discoveryEngine.discover(provider, config)
-
-    setDiscoveryMetrics(this.allProviders.getStats(config.chain), config.chain)
-
-    return toDiscoveryOutput(
-      config.name,
-      config.chain,
-      config.hash,
-      blockNumber,
-      result,
-      this.templateService.getShapeFilesHash(),
-    )
-  }
-
-  async discoverWithRetry(
-    config: DiscoveryConfig,
-    blockNumber: number,
+    config: ConfigRegistry,
+    timestamp: UnixTime,
     logger: Logger,
-    maxRetries = MAX_RETRIES,
-    delayMs = RETRY_DELAY_MS,
-  ): Promise<DiscoveryOutput> {
-    let discovery: DiscoveryOutput | undefined = undefined
-    let err: Error | undefined = undefined
-
-    for (let i = 0; i <= maxRetries; i++) {
-      try {
-        discovery = await this.discover(config, blockNumber)
-        break
-      } catch (error) {
-        err = isError(err) ? (error as Error) : new Error(JSON.stringify(error))
-      }
-
+    configReader?: ConfigReader,
+  ): Promise<DiscoveryRunResult> {
+    try {
+      return await this.discover(config.name, timestamp, logger, configReader)
+    } catch (error) {
+      const err = isError(error)
+        ? (error as Error)
+        : new Error(JSON.stringify(error))
       const errorString = JSON.stringify(
         err,
         Object.getOwnPropertyNames(err),
         2,
       )
-      logger.warn(
-        `DiscoveryRunner: Retrying ${config.name} (chain: ${config.chain}) | attempt:${i} | error:${errorString}`,
-      )
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-    }
 
-    if (discovery === undefined) {
-      assert(
-        err !== undefined,
-        'Programmer error: Error should not be undefined there',
+      logger.warn(
+        `DiscoveryRunner: Failed to discover ${config.name} - error: ${errorString}`,
       )
       throw err
     }
-
-    return discovery
-  }
-
-  // There was a case connected with Amarok (better described in L2B-1521)
-  // the problem was with stack too deep in the discovery caused by misconfigured new contract
-  // that had a lot of relatives (e.g. Uniswap, DAI)
-  // unfortunately, it resulted in not discovering important contracts because they cannot be put on the stack
-  // this function ensures that initial addresses are taken from discovered.json
-  // so this way we will always discover "known" contracts
-  async updateInitialAddresses(config: DiscoveryConfig) {
-    const discovery = this.configReader.readDiscovery(config.name, this.chain)
-    const initialAddresses = discovery.contracts.map((c) => c.address)
-    return new DiscoveryConfig({
-      ...config.raw,
-      initialAddresses,
-      maxAddresses: (config.raw.maxAddresses ?? 200) * 3,
-      maxDepth: (config.raw.maxDepth ?? 6) * 3,
-    })
   }
 }
-
-function setDiscoveryMetrics(stats: AllProviderStats, chain: string) {
-  setProviderGauge(lowLevelProviderGauge, stats.lowLevelCounts, chain)
-  setProviderGauge(cacheProviderGauge, stats.cacheCounts, chain)
-  setProviderGauge(highLevelProviderGauge, stats.highLevelCounts, chain)
-}
-
-function setProviderGauge(
-  gauge: ProviderGauge,
-  stats: ProviderStats,
-  chain: string,
-) {
-  for (const key of Object.keys(stats)) {
-    gauge.set({ chain: chain, method: key }, stats[key as keyof ProviderStats])
-  }
-}
-
-type ProviderGauge = Gauge<'chain' | 'method'>
-const lowLevelProviderGauge: ProviderGauge = new Gauge({
-  name: 'update_monitor_low_level_provider_stats',
-  help: 'Low level provider calls done during discovery',
-  labelNames: ['chain', 'method'],
-})
-
-const cacheProviderGauge: ProviderGauge = new Gauge({
-  name: 'update_monitor_cache_provider_stats',
-  help: 'Cache hit counts done during discovery',
-  labelNames: ['chain', 'method'],
-})
-
-const highLevelProviderGauge: ProviderGauge = new Gauge({
-  name: 'update_monitor_high_level_provider_stats',
-  help: 'High level provider calls done during discovery',
-  labelNames: ['chain', 'method'],
-})

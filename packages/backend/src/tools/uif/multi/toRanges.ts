@@ -1,4 +1,8 @@
-import { Configuration, ConfigurationRange, SavedConfiguration } from './types'
+import type {
+  Configuration,
+  ConfigurationRange,
+  SavedConfiguration,
+} from './types'
 
 export function toRanges<T>(
   configurations: SavedConfiguration<T>[],
@@ -14,8 +18,8 @@ export function toRanges<T>(
     .filter((height, i, arr) => arr.indexOf(height) === i)
 
   let lastRange: ConfigurationRange<T> = {
-    from: -Infinity,
-    to: Infinity,
+    from: Number.NEGATIVE_INFINITY,
+    to: Number.POSITIVE_INFINITY,
     configurations: [],
   }
   const ranges: ConfigurationRange<T>[] = [lastRange]
@@ -23,7 +27,7 @@ export function toRanges<T>(
     lastRange.to = start - 1
     lastRange = {
       from: start,
-      to: Infinity,
+      to: Number.POSITIVE_INFINITY,
       configurations: [],
     }
     ranges.push(lastRange)
@@ -31,7 +35,7 @@ export function toRanges<T>(
 
   for (const configuration of configurations) {
     const min = getConfigurationMin(configuration)
-    const max = configuration.maxHeight ?? Infinity
+    const max = configuration.maxHeight ?? Number.POSITIVE_INFINITY
 
     for (const range of ranges) {
       if (!(max < range.from || min > range.to)) {

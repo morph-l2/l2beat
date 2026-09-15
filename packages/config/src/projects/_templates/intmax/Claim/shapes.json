@@ -1,0 +1,12 @@
+{
+  "Claim": {
+    "hash": "0xe45dd30cce4dd4d2fbbdcaf6165fb2e148035a2e139b6b671cee3e56c8d4f4c0",
+    "address": "scr:0x1899bF9D0e40Dd1bB6C3CCF2123A0Bd1DE0F0548",
+    "blockNumber": 17474807
+  },
+  "Claim_v5_0_0": {
+    "hash": "0x2fc0520ce384d608e88ee2f8c51b51bbe47b361bed51aa7063c675e15aa02cd3",
+    "address": "scr:0x5216C8D0F2188a91aD07Fe4F334F220b2F7b59EA",
+    "blockNumber": 19518196
+  }
+}

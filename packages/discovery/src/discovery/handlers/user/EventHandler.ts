@@ -1,0 +1,408 @@
+import { assert, type ChainSpecificAddress, unique } from '@l2beat/shared-pure'
+import { type Parser, type Validator, v } from '@l2beat/validate'
+import { type providers, utils } from 'ethers'
+import groupBy from 'lodash/groupBy'
+import { isDeepStrictEqual } from 'util'
+import { executeBlip } from '../../../blip/executeBlip'
+import type { BlipEnv, BlipSexp } from '../../../blip/type'
+import { validateBlip } from '../../../blip/validateBlip'
+import type { ContractValue } from '../../output/types'
+import { orderLogs } from '../../provider/BatchingAndCachingProvider'
+import type { IProvider } from '../../provider/IProvider'
+import { prefixAddresses } from '../../utils/prefixAddresses'
+import type { Handler, HandlerResult } from '../Handler'
+import { getEventFragment } from '../utils/getEventFragment'
+import { toContractValue } from '../utils/toContractValue'
+import { toEventFragment } from '../utils/toEventFragment'
+
+interface LogRow {
+  log: utils.LogDescription
+  value: ContractValue
+}
+
+function oneOrMany<T>(schema: Validator<T>): Validator<T | T[]>
+// @ts-ignore We allow this error for simplicity of use
+function oneOrMany<T>(schema: Parser<T>): Parser<T | T[]>
+function oneOrMany<T>(schema: Validator<T>): Validator<T | T[]> {
+  return v.union([schema, v.array(schema)])
+}
+
+export const EventHandlerAction = v.object({
+  event: oneOrMany(v.string()),
+  where: v
+    .unknown()
+    .check((v): v is BlipSexp => validateBlip(v))
+    .optional(),
+})
+export type EventHandlerAction = v.infer<typeof EventHandlerAction>
+
+const common = {
+  type: v.literal('event'),
+  select: oneOrMany(v.string()).optional(),
+  groupBy: v.string().optional(),
+  ignoreRelative: v.boolean().optional(),
+}
+
+const setOnlySchema = v.object({
+  ...common,
+  set: oneOrMany(EventHandlerAction),
+  add: v.undefined().optional(),
+  remove: v.undefined().optional(),
+})
+
+const addAndRemoveSchema = v.object({
+  ...common,
+  set: v.undefined().optional(),
+  flatten: v.boolean().optional(),
+  dedupBy: oneOrMany(v.string()).optional(),
+  add: oneOrMany(EventHandlerAction),
+  remove: oneOrMany(EventHandlerAction).optional(),
+})
+
+export type EventHandlerDefinition = v.infer<typeof EventHandlerDefinition>
+export const EventHandlerDefinition = v.union([
+  setOnlySchema,
+  addAndRemoveSchema,
+])
+
+export class EventHandler implements Handler {
+  readonly dependencies: string[] = []
+  readonly abi: utils.Interface
+  readonly topic0s: string[]
+
+  constructor(
+    readonly field: string,
+    readonly definition: EventHandlerDefinition,
+    stringAbi: string[],
+  ) {
+    const events: string[] = []
+    const actions: EventHandlerAction[] = [
+      ensureArray(definition.set ?? []),
+      ensureArray(definition.add ?? []),
+      ensureArray(definition.remove ?? []),
+    ].flat()
+
+    for (const action of actions) {
+      if (action === undefined) {
+        continue
+      }
+
+      const actionEvents = ensureArray(action.event)
+      const abiCompatible = eventsAreCompatible(action, stringAbi)
+      if (!abiCompatible) {
+        throw new Error(
+          'ABI compatibility error: The following events have incompatible parameter structures:\n' +
+            `• Received events:\n${actionEvents.map((e) => `  - ${e}`).join('\n')}\n\n` +
+            'All events in an action must contain compatible parameter names and types. ' +
+            'Check that these fields match across all event ABIs:\n' +
+            '  1. Parameter names\n' +
+            '  2. Parameter types',
+        )
+      }
+
+      events.push(...actionEvents)
+    }
+
+    const fragments = events.map((e) => getEventFragment(e, unique(stringAbi)))
+    const uniqueFragments = unique(fragments, (f) => f.format())
+    this.abi = new utils.Interface(uniqueFragments)
+    this.topic0s = [
+      ...new Set(uniqueFragments.map((f) => this.abi.getEventTopic(f))),
+    ]
+  }
+
+  async execute(
+    provider: IProvider,
+    address: ChainSpecificAddress,
+  ): Promise<HandlerResult> {
+    const logs = await fetchLogs(provider, address, this.topic0s)
+
+    const logRows: LogRow[] = []
+    for (const rawLog of logs) {
+      const log = this.abi.parseLog(rawLog)
+      const value: Record<string, ContractValue> = {}
+
+      for (const key of Object.keys(log.args).filter((k) => !isNumber(k))) {
+        value[key] = toContractValue(log.args[key])
+      }
+
+      logRows.push({ log, value })
+    }
+
+    const env: BlipEnv = {
+      blockNumber: provider.blockNumber,
+      timestamp: provider.timestamp,
+      chainName: provider.chain,
+      address: address.toString(),
+    }
+
+    let value: ContractValue | undefined
+    if (this.definition.groupBy !== undefined) {
+      const groupByKey = this.definition.groupBy
+      const grouped = groupBy(logRows, (e) => extractKey(e.value, groupByKey))
+      value = {}
+      for (const key in grouped) {
+        // biome-ignore lint/style/noNonNullAssertion: we know it's there
+        value[key] = this.processLogs(provider.chain, env, grouped[key]!)
+      }
+    } else {
+      value = this.processLogs(provider.chain, env, logRows)
+    }
+
+    return {
+      field: this.field,
+      value,
+      ignoreRelative: this.definition.ignoreRelative,
+    }
+  }
+
+  processLogs(
+    longChain: string,
+    env: BlipEnv,
+    logRows: LogRow[],
+  ): ContractValue | ContractValue[] | undefined {
+    const select = ensureArray(this.definition.select ?? [])
+
+    const extractArray = this.definition.set !== undefined
+    if (this.definition.set !== undefined) {
+      const setActions = ensureArray(this.definition.set)
+      logRows = this.executeSets(longChain, env, logRows, setActions)
+    } else if (this.definition.add !== undefined) {
+      const addActions = ensureArray(this.definition.add)
+      const removeActions = ensureArray(this.definition.remove ?? [])
+      if (this.definition.flatten) {
+        logRows = flattenSelectedLogRows(logRows, select)
+      }
+
+      // `dedupBy`, when set, is the row identity (what makes two logs "the same").
+      // When omitted, the dedup key falls back to `select` (legacy behavior).
+      const dedupBy =
+        this.definition.dedupBy !== undefined
+          ? ensureArray(this.definition.dedupBy)
+          : select
+
+      logRows = this.executeAddRemove(
+        longChain,
+        env,
+        logRows,
+        addActions,
+        removeActions,
+        dedupBy,
+      )
+    }
+
+    let values = logRows.map((r) => r.value)
+    if (select.length > 0) {
+      values = logRows.map((entry) => extractKeys(entry.value, select))
+    }
+
+    const onlySingleKey = values.every((v) => Object.keys(v).length === 1)
+    if (onlySingleKey) {
+      // biome-ignore lint/style/noNonNullAssertion: We know it's there
+      values = values.map((o) => Object.values(o)[0]!)
+    }
+
+    return extractArray ? values[0] : values
+  }
+
+  executeSets(
+    longChain: string,
+    env: BlipEnv,
+    logs: LogRow[],
+    setActions: EventHandlerAction[],
+  ): LogRow[] {
+    let result: LogRow | undefined = undefined
+
+    for (const entry of logs) {
+      const keep = setActions.some((action) =>
+        evaluateAction(longChain, env, entry, action),
+      )
+      if (!keep) {
+        continue
+      }
+
+      result = entry
+    }
+
+    return ensureArray(result ?? [])
+  }
+
+  executeAddRemove(
+    longChain: string,
+    env: BlipEnv,
+    logs: LogRow[],
+    addActions: EventHandlerAction[],
+    removeActions: EventHandlerAction[],
+    dedupBy: string[],
+  ): LogRow[] {
+    const result: Map<string, LogRow> = new Map()
+
+    for (const entry of logs) {
+      const add = addActions.some((action) =>
+        evaluateAction(longChain, env, entry, action),
+      )
+      const remove = removeActions.some((action) =>
+        evaluateAction(longChain, env, entry, action),
+      )
+
+      assert(
+        !(add && remove),
+        'Conflict detected in log processing:\n' +
+          '  A log entry cannot trigger both add AND remove actions simultaneously\n' +
+          'Potential resolutions:\n' +
+          '  1. Check event handler conditions for overlaps\n' +
+          '  2. Verify mutually exclusive filters in add/remove actions\n' +
+          '  3. Make sure that remove where clause is opposite to add one',
+      )
+
+      const keyValue =
+        dedupBy.length > 0 ? extractKeys(entry.value, dedupBy) : entry.value
+      const string = JSON.stringify(keyValue)
+
+      if (add) {
+        result.set(string, entry)
+      } else if (remove) {
+        result.delete(string)
+      }
+    }
+
+    return [...result.values()]
+  }
+}
+
+function flattenSelectedLogRows(logRows: LogRow[], select: string[]): LogRow[] {
+  assert(
+    select.length === 1,
+    'Event handler flatten requires exactly one selected field',
+  )
+
+  // biome-ignore lint/style/noNonNullAssertion: checked above
+  const selectedKey = select[0]!
+  const result: LogRow[] = []
+  for (const row of logRows) {
+    const selectedValue = extractKey(row.value, selectedKey)
+    assert(
+      typeof row.value === 'object' && !Array.isArray(row.value),
+      'Event handler flatten requires object log values',
+    )
+    assert(
+      selectedValue !== undefined,
+      `Event handler flatten requires selected field [${selectedKey}]`,
+    )
+    // Some contracts batch additions but emit one scalar per removal.
+    // Normalize both forms before applying the chronological add/remove logic.
+    for (const item of ensureArray(selectedValue)) {
+      result.push({
+        log: row.log,
+        value: { ...row.value, [selectedKey]: item },
+      })
+    }
+  }
+
+  return result
+}
+
+async function fetchLogs(
+  provider: IProvider,
+  address: ChainSpecificAddress,
+  topic0s: string[],
+): Promise<providers.Log[]> {
+  const logs = await Promise.all(
+    topic0s.map(async (t) => await provider.getLogs(address, [t])),
+  )
+
+  return logs.flat().sort(orderLogs)
+}
+
+function evaluateAction(
+  longChain: string,
+  env: BlipEnv,
+  log: LogRow,
+  { event, where }: EventHandlerAction,
+) {
+  const eventMatch = ensureArray(event).some(
+    (e) => getEventName(e) === log.log.name,
+  )
+
+  return (
+    eventMatch &&
+    executeBlip(prefixAddresses(longChain, log.value), where ?? true, env)
+  )
+}
+
+function extractKeys(
+  value: ContractValue,
+  keys: string[],
+): { [key: string]: ContractValue | undefined } {
+  const result: ContractValue = {}
+
+  for (const selectKey of keys) {
+    result[selectKey] = extractKey(value, selectKey)
+  }
+
+  return result
+}
+
+// Supports dot-notation for reaching into nested values, e.g.
+// "config.chainSelector" for a named object or "config.1" for a tuple/struct
+// (decoded structs are positional arrays, so a nested struct field is addressed
+// by its index). Plain keys (no dot) behave as before. Safe because Solidity
+// parameter names cannot contain a dot.
+function extractKey(value: ContractValue, key: string): ContractValue {
+  let current: ContractValue = value
+  for (const part of key.split('.')) {
+    assert(
+      typeof current === 'object' && current !== null,
+      `Cannot extract [${part}] from a non-object while resolving [${key}]`,
+    )
+    const next: ContractValue | undefined = Array.isArray(current)
+      ? current[Number(part)]
+      : current[part]
+    assert(next !== undefined, `Invalid extraction key [${key}], not defined`)
+    current = next
+  }
+  return current
+}
+
+function ensureArray<T>(v: T | T[]): T[] {
+  return Array.isArray(v) ? v : [v]
+}
+
+function getEventName(eventString: string): string {
+  if (eventString.includes(' ')) {
+    const fragment = toEventFragment(eventString)
+    return fragment.name
+  }
+  return eventString
+}
+
+function eventsAreCompatible(
+  action: EventHandlerAction,
+  stringAbi: string[],
+): boolean {
+  const events = ensureArray(action.event)
+  const fragments = events.map((e) => getEventFragment(e, stringAbi))
+
+  const inputsPerEvent = fragments.map((f) => f.inputs.map((elem) => elem))
+  const smallest = inputsPerEvent.reduce((min, current) =>
+    current.length < min.length ? current : min,
+  )
+  const abiCompatible = inputsPerEvent.every((inputs) => {
+    if (smallest.length > 0) {
+      return smallest.every((elem) =>
+        inputs.some((i) => isDeepStrictEqual(i, elem)),
+      )
+    }
+    return false
+  })
+
+  return abiCompatible
+}
+
+function isNumber(str: string): boolean {
+  const trimmed = str.trim()
+  if (trimmed === '') return false
+
+  const num = Number(trimmed)
+  return !isNaN(num) && isFinite(num)
+}

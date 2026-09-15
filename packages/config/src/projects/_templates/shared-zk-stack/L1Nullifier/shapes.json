@@ -1,0 +1,17 @@
+{
+  "L1Nullifier": {
+    "hash": "0xee5f07a0a52bb635b92413824db2b40db68a92e518d16de01f89812e2b017c8c",
+    "address": "eth:0xda2866AF0e170d0867a3F3bB52Db10D6E09Df78A",
+    "blockNumber": 22188285
+  },
+  "L1Nullifier_v27": {
+    "hash": "0x1b9ca25473dea2662396a14da1cb10541b22430b82bb0c1a64636531bd0122f6",
+    "address": "eth:0x3B4FD84B27fE7B9247d5B8C6d1A29B2889C81518",
+    "blockNumber": 22374168
+  },
+  "L1Nullifier_v29": {
+    "hash": "0x9771a3711c6bb3931cbf0903da92da8e5323f016d1f6ba67696ac20dec6d47f1",
+    "address": "eth:0x71759C4eA628293F5a99aAB1585dF1c8dA4718e0",
+    "blockNumber": 23588465
+  }
+}

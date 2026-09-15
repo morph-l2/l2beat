@@ -1,0 +1,12 @@
+{
+  "FaultProofLockingPool": {
+    "hash": "0xa2f3d72c38c59611025b7d2765dc5d0542591a1565ce37db44c40958951a46fb",
+    "address": "eth:0xE141db3Ed25A58BB8BBd331AE373605108aaAAe4",
+    "blockNumber": 22738909
+  },
+  "FaultProofLockingPool_2": {
+    "hash": "0xcabb2cd13c685a5b53321cd5f7811a6b9ca84e1546108391c1f197c778cc0c7d",
+    "address": "eth:0x1061528C33b8034952fb7355cC481e193b29FCa6",
+    "blockNumber": 23019188
+  }
+}

@@ -1,17 +1,20 @@
-import React from 'react'
+import type React from 'react'
 
-import { cn } from '../utils/cn'
+import { ArrowRightIcon } from '~/icons/ArrowRight'
+import { cn } from '~/utils/cn'
 import { PlainLink } from './PlainLink'
-import { ArrowRightIcon } from './icons'
 
-export interface LinkWithThumbnailProps {
+interface LinkWithThumbnailProps {
   title: string
   description?: string
   src: string
+  width: number
+  height: number
   href: string
   topAccessory?: React.ReactNode
   orientation?: 'vertical' | 'horizontal'
   className?: string
+  customCtaText?: string
 }
 
 export function LinkWithThumbnail({
@@ -22,53 +25,72 @@ export function LinkWithThumbnail({
     <PlainLink
       href={props.href}
       className={cn(
-        'group flex gap-6 rounded-md bg-gray-100 transition-all dark:bg-zinc-900 dark:hover:bg-zinc-800 hover:bg-zinc-300',
-        orientation === 'vertical' && 'max-w-96 flex-col',
+        'group flex gap-6 rounded-md transition-colors',
+        orientation === 'horizontal' &&
+          'bg-surface-primary hover:bg-surface-secondary',
+        orientation === 'vertical' && 'flex-col',
         props.className,
       )}
     >
       <img
         src={props.src}
+        alt={`Thumbnail of ${props.title}`}
         className={cn(
-          'aspect-video w-full object-cover will-change-transform',
+          'aspect-video w-full object-cover object-center will-change-transform',
           orientation === 'vertical' &&
-            'rounded-t-md transition-all group-hover:scale-[1.03] group-hover:rounded-md',
+            'rounded-md border border-divider transition-[scale] group-hover:scale-[1.03]',
           orientation === 'horizontal' &&
-            'max-w-36 rounded-md transition-all md:max-w-48 group-hover:scale-105',
+            'max-w-36 rounded-md transition-[scale] group-hover:scale-105 md:max-w-48',
         )}
+        height={props.height}
+        width={props.width}
       />
       <div
         className={cn(
-          orientation === 'vertical' && 'mt-6 mb-12 px-8',
+          orientation === 'vertical' &&
+            'mb-6 flex h-full flex-col justify-between px-1',
           orientation === 'horizontal' &&
-            'self-center transition-all group-hover:translate-x-0.5',
+            'self-center py-[15px] transition-transform group-hover:translate-x-0.5',
         )}
       >
-        {props.topAccessory && <div className="mb-2">{props.topAccessory}</div>}
+        <div>
+          {props.topAccessory && <div>{props.topAccessory}</div>}
+          <p
+            className={cn(
+              orientation === 'vertical' &&
+                'mt-2 text-heading-18 group-hover:underline lg:text-heading-20',
+              orientation === 'horizontal' &&
+                'text-heading-16 md:text-heading-18',
+              'text-balance',
+            )}
+          >
+            {props.title}
+          </p>
+          {props.description && (
+            <div
+              className={cn(orientation === 'horizontal' && 'hidden md:block')}
+            >
+              <p
+                className={cn(
+                  'font-normal text-paragraph-14 text-secondary',
+                  orientation === 'horizontal' && 'line-clamp-1',
+                  orientation === 'vertical' &&
+                    'mt-3 line-clamp-3 group-hover:underline',
+                )}
+              >
+                {props.description}
+              </p>
+            </div>
+          )}
+        </div>
         <p
           className={cn(
-            orientation === 'vertical' && 'text-2xl',
-            orientation === 'horizontal' && 'text-lg',
-            'text-balance font-bold leading-[1.1]',
+            'flex flex-wrap items-center gap-1 font-bold text-label-value-14 text-link underline transition-colors group-hover:text-blue-550',
+            orientation === 'horizontal' && 'md:mt-3',
+            orientation === 'vertical' && 'mt-3',
           )}
         >
-          {props.title}
-        </p>
-        {props.description && (
-          <div className="hidden md:block">
-            <p
-              className={cn(
-                'mt-1.5 text-xs text-opacity-80',
-                orientation === 'horizontal' && 'line-clamp-1 pr-2',
-                orientation === 'vertical' && 'line-clamp-3',
-              )}
-            >
-              {props.description}
-            </p>
-          </div>
-        )}
-        <p className="mt-3 flex flex-wrap items-center gap-1 font-semibold text-blue-700 text-sm underline transition-colors dark:text-blue-500 group-hover:text-blue-550">
-          Learn more
+          {props.customCtaText ?? 'Read now'}
           <ArrowRightIcon className="fill-current" />
         </p>
       </div>

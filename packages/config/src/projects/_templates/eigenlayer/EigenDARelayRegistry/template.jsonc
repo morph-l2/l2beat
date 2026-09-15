@@ -1,0 +1,22 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "category": "shared",
+  "description": "Registry for EigenDA relay keys, maps key to address.",
+  "fields": {
+    "relayers": {
+      "severity": "HIGH",
+      "type": "RISK_PARAMETER",
+      "handler": {
+        "type": "event",
+        "select": ["relay", "relayURL"],
+        "add": { "event": "RelayAdded" }
+      },
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "Can store and serve both unencoded blobs as well as encoded chunks."
+        }
+      ]
+    }
+  }
+}

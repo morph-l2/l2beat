@@ -1,9 +1,9 @@
-import { ContractValue } from '@l2beat/discovery-types'
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
+import { type Bytes, EthereumAddress } from '@l2beat/shared-pure'
+import type { ContractValue } from '../../output/types'
 
 export function bytes32ToContractValue(
   value: Bytes,
-  returnType: 'address' | 'bytes' | 'number',
+  returnType: 'address' | 'bytes' | 'number' | 'uint8',
 ): ContractValue {
   if (returnType === 'number') {
     const parsed = BigInt(value.toString())
@@ -11,8 +11,12 @@ export function bytes32ToContractValue(
       return parsed.toString()
     }
     return Number(parsed)
-  } else if (returnType === 'address') {
+  }
+  if (returnType === 'address') {
     return EthereumAddress(value.slice(12, 32).toString()).toString()
+  }
+  if (returnType === 'uint8') {
+    return Number(value.get(31))
   }
   return value.toString()
 }

@@ -1,14 +1,13 @@
 import { Logger } from '@l2beat/backend-tools'
-import { Database } from '@l2beat/database'
+import type { Database } from '@l2beat/database'
 import { expect, mockFn, mockObject } from 'earl'
 import { describeDatabase, mockDatabase } from '../../../test/database'
 import { IndexerService } from '../IndexerService'
 import { _TEST_ONLY_resetUniqueIds } from '../ids'
 import { ManagedMultiIndexer } from './ManagedMultiIndexer'
-import {
+import type {
   Configuration,
   ManagedMultiIndexerOptions,
-  RemovalConfiguration,
   SavedConfiguration,
 } from './types'
 
@@ -21,7 +20,6 @@ const common = {
   indexerService: mockObject<IndexerService>({
     getSavedConfigurations: async () => [saved('a', 100, null, null)],
   }),
-  logger: Logger.SILENT,
   serializeConfiguration: SERIALIZE,
   db: mockDatabase(),
 }
@@ -34,29 +32,35 @@ describe(ManagedMultiIndexer.name, () => {
   describe('constructor', () => {
     it('throws on empty configurations', () => {
       expect(() => {
-        new TestIndexer({ ...common, configurations: [] })
+        new TestIndexer({ ...common, configurations: [] }, Logger.SILENT)
       }).toThrow('Configurations should not be empty')
     })
 
     it('throws on duplicate indexer ids', () => {
-      new TestIndexer({ ...common, name: 'same-name' })
+      new TestIndexer({ ...common, name: 'same-name' }, Logger.SILENT)
       expect(() => {
-        new TestIndexer({ ...common, name: 'same-name' })
+        new TestIndexer({ ...common, name: 'same-name' }, Logger.SILENT)
       }).toThrow('Indexer id same-name is duplicated!')
     })
 
     it('throws on duplicate configuration ids', () => {
-      new TestIndexer({
-        ...common,
-        configurations: [mockObject<Configuration<string>>({ id: 'a' })],
-      })
-      expect(() => {
-        new TestIndexer({
+      new TestIndexer(
+        {
           ...common,
-          name: 'other-name',
           configurations: [mockObject<Configuration<string>>({ id: 'a' })],
-        })
-      }).toThrow('Configuration id a is duplicated!')
+        },
+        Logger.SILENT,
+      )
+      expect(() => {
+        new TestIndexer(
+          {
+            ...common,
+            name: 'other-name',
+            configurations: [mockObject<Configuration<string>>({ id: 'a' })],
+          },
+          Logger.SILENT,
+        )
+      }).toThrow('Configuration id a is duplicated in other-name')
     })
   })
 
@@ -67,11 +71,14 @@ describe(ManagedMultiIndexer.name, () => {
         insertConfigurations: async () => {},
       })
 
-      const indexer = new TestIndexer({
-        ...common,
-        indexerService,
-        configurations: [actual('a', 100, null), actual('b', 100, null)],
-      })
+      const indexer = new TestIndexer(
+        {
+          ...common,
+          indexerService,
+          configurations: [actual('a', 100, null), actual('b', 100, null)],
+        },
+        Logger.SILENT,
+      )
 
       const newHeight = await indexer.initialize()
 
@@ -97,13 +104,23 @@ describe(ManagedMultiIndexer.name, () => {
       const db = mockObject<Database>({
         transaction: async (fun) => await fun(),
       })
-      const indexer = new TestIndexer({ ...common, indexerService, db })
+      const indexer = new TestIndexer(
+        { ...common, indexerService, db },
+        Logger.SILENT,
+      )
 
       await indexer.updateSavedConfigurations({
         toAdd: [actual('a', 100, null)],
-        toUpdate: [saved('b', 100, 1000, 1000, 'props')],
-        toDelete: ['c', 'd'],
-        toRemoveData: [removal('b', 50, 99), removal('b', 1001, 1500)],
+        toUpdate: [
+          saved('b', 100, 1000, 1000, 'props'),
+          saved('c', 100, 1000, 1000, 'props'),
+        ],
+        toTrimData: [
+          { id: 'b'.repeat(12), range: [50, 99] },
+          { id: 'b'.repeat(12), range: [1001, 1500] },
+        ],
+        toDelete: ['d'],
+        toWipeData: [{ id: 'c'.repeat(12) }, { id: 'd'.repeat(12) }],
       })
 
       expect(indexerService.insertConfigurations).toHaveBeenOnlyCalledWith(
@@ -113,17 +130,25 @@ describe(ManagedMultiIndexer.name, () => {
       )
       expect(indexerService.upsertConfigurations).toHaveBeenOnlyCalledWith(
         INDEXER_ID,
-        [saved('b', 100, 1000, 1000, 'props')],
+        [
+          saved('b', 100, 1000, 1000, 'props'),
+          saved('c', 100, 1000, 1000, 'props'),
+        ],
         SERIALIZE,
       )
       expect(indexerService.deleteConfigurations).toHaveBeenOnlyCalledWith(
         INDEXER_ID,
-        ['c', 'd'],
+        ['d'],
       )
-      expect(indexer.removeData).toHaveBeenOnlyCalledWith([
-        removal('b', 50, 99),
-        removal('b', 1001, 1500),
+      expect(indexer.trimData).toHaveBeenOnlyCalledWith([
+        { id: 'b'.repeat(12), range: [50, 99] },
+        { id: 'b'.repeat(12), range: [1001, 1500] },
       ])
+      expect(indexer.wipeData).toHaveBeenOnlyCalledWith([
+        { id: 'c'.repeat(12) },
+        { id: 'd'.repeat(12) },
+      ])
+
       expect(db.transaction).toHaveBeenCalledTimes(1)
     })
   })
@@ -134,11 +159,14 @@ describe(ManagedMultiIndexer.name, () => {
         getSavedConfigurations: async () => [saved('a', 100, null, null)],
       })
 
-      const indexer = new TestIndexer({
-        ...common,
-        indexerService,
-        configurations: [actual('a', 100, null)],
-      })
+      const indexer = new TestIndexer(
+        {
+          ...common,
+          indexerService,
+          configurations: [actual('a', 100, null)],
+        },
+        Logger.SILENT,
+      )
       await indexer.initialize()
 
       // Configuration starts at 100, this range will be empty
@@ -161,12 +189,15 @@ describe(ManagedMultiIndexer.name, () => {
         transaction: async (fun) => await fun(),
       })
 
-      const indexer = new TestIndexer({
-        ...common,
-        db,
-        indexerService,
-        configurations: [actual('a', 100, null), actual('b', 100, null)],
-      })
+      const indexer = new TestIndexer(
+        {
+          ...common,
+          db,
+          indexerService,
+          configurations: [actual('a', 100, null), actual('b', 100, null)],
+        },
+        Logger.SILENT,
+      )
       const saveData = mockFn((targetHeight) => Promise.resolve(targetHeight))
       indexer.multiUpdate = mockFn<ManagedMultiIndexer<string>['multiUpdate']>(
         async (_, targetHeight) => () => saveData(targetHeight),
@@ -190,9 +221,7 @@ describe(ManagedMultiIndexer.name, () => {
     })
 
     it('cannot return more than currentHeight', async () => {
-      const indexer = new TestIndexer({
-        ...common,
-      })
+      const indexer = new TestIndexer({ ...common }, Logger.SILENT)
 
       await indexer.initialize()
 
@@ -206,20 +235,6 @@ describe(ManagedMultiIndexer.name, () => {
         /Returned height must be between from and to/,
       )
     })
-
-    //   it('cannot return more than targetHeight', async () => {
-    //     const indexer = new TestIndexer(
-    //       [actual('a', 100, 300), actual('b', 100, 400)],
-    //       [saved('a', 100, 300, null), saved('b', 100, 400, null)],
-    //     )
-    //     await indexer.initialize()
-
-    //     indexer.multiUpdate.resolvesTo(() => Promise.resolve(350))
-
-    //     await expect(indexer.update(200, 300)).toBeRejectedWith(
-    //       /returned height must be between from and to/,
-    //     )
-    //   })
   })
 
   describe(ManagedMultiIndexer.prototype.findRange.name, () => {
@@ -229,18 +244,21 @@ describe(ManagedMultiIndexer.name, () => {
       const indexerService = mockObject<IndexerService>({
         getSavedConfigurations: async () => [saved('a', 100, 200, null)],
       })
-      indexer = new TestIndexer({
-        ...common,
-        indexerService,
-        configurations: [actual('a', 100, 200)],
-      })
+      indexer = new TestIndexer(
+        {
+          ...common,
+          indexerService,
+          configurations: [actual('a', 100, 200)],
+        },
+        Logger.SILENT,
+      )
       await indexer.initialize()
     })
 
     it('finds range correctly for a value before the start', () => {
       const fromBeforeStart = 10
       expect(indexer.findRange(fromBeforeStart)).toEqual({
-        from: -Infinity,
+        from: Number.NEGATIVE_INFINITY,
         to: 99,
         configurations: [],
       })
@@ -277,7 +295,7 @@ describe(ManagedMultiIndexer.name, () => {
       const fromAfterStart = 250
       expect(indexer.findRange(fromAfterStart)).toEqual({
         from: 201,
-        to: Infinity,
+        to: Number.POSITIVE_INFINITY,
         configurations: [],
       })
     })
@@ -291,7 +309,10 @@ describe(ManagedMultiIndexer.name, () => {
           updateConfigurationsCurrentHeight: async () => {},
         })
 
-        const indexer = new TestIndexer({ ...common, indexerService })
+        const indexer = new TestIndexer(
+          { ...common, indexerService },
+          Logger.SILENT,
+        )
 
         await indexer.updateConfigurationsCurrentHeight(100)
 
@@ -304,7 +325,7 @@ describe(ManagedMultiIndexer.name, () => {
 
   describe(ManagedMultiIndexer.prototype.invalidate.name, () => {
     it('returns target height', async () => {
-      const indexer = new TestIndexer({ ...common })
+      const indexer = new TestIndexer({ ...common }, Logger.SILENT)
 
       const targetHeight = await indexer.invalidate(100)
 
@@ -316,7 +337,10 @@ describe(ManagedMultiIndexer.name, () => {
     const indexerService = mockObject<IndexerService>({
       setInitialState: async () => {},
     })
-    const indexer = new TestIndexer({ ...common, indexerService })
+    const indexer = new TestIndexer(
+      { ...common, indexerService },
+      Logger.SILENT,
+    )
 
     await indexer.setInitialState(100, 'config-hash')
 
@@ -330,7 +354,10 @@ describe(ManagedMultiIndexer.name, () => {
     const indexerService = mockObject<IndexerService>({
       setSafeHeight: async () => {},
     })
-    const indexer = new TestIndexer({ ...common, indexerService })
+    const indexer = new TestIndexer(
+      { ...common, indexerService },
+      Logger.SILENT,
+    )
 
     await indexer.setSafeHeight(100)
 
@@ -422,8 +449,8 @@ describe(ManagedMultiIndexer.name, () => {
         )
       expect(after).toEqualUnsorted([saved('a', 400, null, 550)])
 
-      expect(indexer.removeData).toHaveBeenOnlyCalledWith([
-        removal('d', 100, 550),
+      expect(indexer.wipeData).toHaveBeenOnlyCalledWith([
+        { id: 'd'.repeat(12) },
       ])
     })
 
@@ -449,8 +476,8 @@ describe(ManagedMultiIndexer.name, () => {
       expect(after).toEqualUnsorted([saved('d', 50, null, null)])
 
       // remove all data
-      expect(indexer.removeData).toHaveBeenOnlyCalledWith([
-        removal('d', 100, 550),
+      expect(indexer.wipeData).toHaveBeenOnlyCalledWith([
+        { id: 'd'.repeat(12) },
       ])
     })
 
@@ -476,8 +503,8 @@ describe(ManagedMultiIndexer.name, () => {
       expect(after).toEqualUnsorted([saved('d', 150, null, 550)])
 
       // remove part of data
-      expect(indexer.removeData).toHaveBeenOnlyCalledWith([
-        removal('d', 100, 149),
+      expect(indexer.trimData).toHaveBeenOnlyCalledWith([
+        { id: 'd'.repeat(12), range: [100, 149] },
       ])
     })
 
@@ -502,8 +529,8 @@ describe(ManagedMultiIndexer.name, () => {
         )
       expect(after).toEqualUnsorted([saved('d', 1000, null, null)])
 
-      expect(indexer.removeData).toHaveBeenOnlyCalledWith([
-        removal('d', 100, 999),
+      expect(indexer.trimData).toHaveBeenOnlyCalledWith([
+        { id: 'd'.repeat(12), range: [100, 999] },
       ])
     })
 
@@ -528,7 +555,8 @@ describe(ManagedMultiIndexer.name, () => {
         )
       expect(after).toEqualUnsorted([saved('d', 100, 1000, 550)])
 
-      expect(indexer.removeData).not.toHaveBeenCalled()
+      expect(indexer.trimData).not.toHaveBeenCalled()
+      expect(indexer.wipeData).not.toHaveBeenCalled()
     })
 
     it('maxHeight changed with need to trim', async () => {
@@ -552,8 +580,8 @@ describe(ManagedMultiIndexer.name, () => {
         )
       expect(after).toEqualUnsorted([saved('d', 100, 200, 200)])
 
-      expect(indexer.removeData).toHaveBeenOnlyCalledWith([
-        removal('d', 201, 550),
+      expect(indexer.trimData).toHaveBeenOnlyCalledWith([
+        { id: 'd'.repeat(12), range: [201, 550] },
       ])
     })
 
@@ -589,14 +617,20 @@ describe(ManagedMultiIndexer.name, () => {
 })
 
 class TestIndexer extends ManagedMultiIndexer<string> {
-  constructor(override readonly options: ManagedMultiIndexerOptions<string>) {
-    super(options)
+  override readonly options: ManagedMultiIndexerOptions<string>
+
+  constructor(options: ManagedMultiIndexerOptions<string>, logger: Logger) {
+    super(options, logger)
+    this.options = options
   }
+
   multiUpdate = mockFn<ManagedMultiIndexer<string>['multiUpdate']>(
     async (_, targetHeight) => () => Promise.resolve(targetHeight),
   )
-  removeData =
-    mockFn<ManagedMultiIndexer<string>['removeData']>().resolvesTo(undefined)
+  override trimData =
+    mockFn<ManagedMultiIndexer<string>['trimData']>().resolvesTo(undefined)
+  override wipeData =
+    mockFn<ManagedMultiIndexer<string>['wipeData']>().resolvesTo(undefined)
 }
 
 function actual(
@@ -629,10 +663,6 @@ function saved(
   }
 }
 
-function removal(id: string, from: number, to: number): RemovalConfiguration {
-  return { id: id.repeat(12), from, to }
-}
-
 async function getSavedConfigurations(indexerService: IndexerService) {
   return await indexerService.getSavedConfigurations('indexer')
 }
@@ -646,14 +676,16 @@ async function initializeMockIndexer(
   if (saved.length > 0) {
     await indexerService.upsertConfigurations('indexer', saved, (v) => v)
   }
-  const indexer = new TestIndexer({
-    parents: [],
-    name: 'indexer',
-    indexerService,
-    configurations,
-    logger: Logger.SILENT,
-    serializeConfiguration: (v) => JSON.stringify(v),
-    db: database ?? mockDatabase(),
-  })
+  const indexer = new TestIndexer(
+    {
+      parents: [],
+      name: 'indexer',
+      indexerService,
+      configurations,
+      serializeConfiguration: (v) => JSON.stringify(v),
+      db: database ?? mockDatabase(),
+    },
+    Logger.SILENT,
+  )
   return indexer
 }

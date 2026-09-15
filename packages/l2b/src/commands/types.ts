@@ -1,43 +1,83 @@
-import { Layer2Provider, Layer3Provider } from '@l2beat/config'
-import { assert, EthereumAddress } from '@l2beat/shared-pure'
-import { Type, extendType, string } from 'cmd-ts'
+import type { LogLevel } from '@l2beat/backend-tools'
+import {
+  assert,
+  ChainSpecificAddress,
+  EthereumAddress,
+  Hash256,
+} from '@l2beat/shared-pure'
+import { extendType, string, type Type } from 'cmd-ts'
 import { stat } from 'fs/promises'
 
 export const EthereumAddressValue: Type<string, EthereumAddress> = {
-  async from(str): Promise<EthereumAddress> {
+  from(str): Promise<EthereumAddress> {
     return new Promise((resolve, _) => {
       resolve(EthereumAddress(str))
     })
   },
 }
 
-const SUPPORTED_STACKS: {
-  stack: Layer2Provider | Layer3Provider
-  slug: string
-}[] = [
-  { stack: 'Arbitrum', slug: 'arbitrum' },
-  { stack: 'Loopring', slug: 'loopring' },
-  { stack: 'OP Stack', slug: 'opstack' },
-  { stack: 'OVM', slug: 'ovm' },
-  { stack: 'Polygon', slug: 'polygon' },
-  { stack: 'StarkEx', slug: 'starkex' },
-  { stack: 'Starknet', slug: 'starknet' },
-  { stack: 'ZK Stack', slug: 'zks' },
-  { stack: 'ZKsync Lite', slug: 'zksync' },
-]
+export const ChainSpecificAddressValue: Type<string, ChainSpecificAddress> = {
+  from(str): Promise<ChainSpecificAddress> {
+    return new Promise((resolve, _) => {
+      resolve(ChainSpecificAddress(str))
+    })
+  },
+}
 
-export const ProjectStack = extendType(string, {
-  async from(slug) {
-    const result = SUPPORTED_STACKS.find((x) => x.slug === slug)?.stack
+export function Separated<T>(
+  type: Type<string, T>,
+  separator = ',',
+): Type<string, T[]> {
+  return {
+    async from(str) {
+      const values = str.split(separator)
+      const parsed = await Promise.all(values.map(type.from))
+      return parsed
+    },
+  }
+}
+
+export const PositiveRpcBoundNumber: Type<string, number> = extendType(string, {
+  async from(str) {
+    const num = await Promise.resolve(Number.parseInt(str, 10))
     assert(
-      result !== undefined,
-      `You need to provide a valid stack, choose from ${SUPPORTED_STACKS.map(
-        (x) => x.slug,
-      ).join(', ')}`,
+      !isNaN(num) && num > 0 && num <= 1000000,
+      'Call rate bound per minute must be a positive integer between 1 and 1,000,000',
     )
-    return result
+    return num
   },
 })
+
+export const Hash256Value: Type<string, Hash256> = {
+  from(str): Promise<Hash256> {
+    return new Promise((resolve, _) => {
+      resolve(Hash256(str))
+    })
+  },
+}
+
+const LEVEL = {
+  NONE: true,
+  CRITICAL: true,
+  ERROR: true,
+  WARN: true,
+  INFO: true,
+  DEBUG: true,
+  TRACE: true,
+}
+
+export const LogLevelValue: Type<string, LogLevel> = {
+  from(str): Promise<LogLevel> {
+    return new Promise((resolve, reject) => {
+      if (LEVEL[str as keyof typeof LEVEL] !== undefined) {
+        resolve(str as LogLevel)
+      } else {
+        const allLogLevels = Object.keys(LEVEL).join(', ')
+        reject(new Error(`Undefined LogLevel provided, use ${allLogLevels}`))
+      }
+    })
+  },
+}
 
 export const ExistingPath = extendType(string, {
   async from(path) {

@@ -1,0 +1,95 @@
+import type { Project } from '@l2beat/config'
+import type { TrackedTxCostsConfig } from '@l2beat/shared/frontend'
+import { assert, type TrackedTxsConfigSubtype } from '@l2beat/shared-pure'
+import compact from 'lodash/compact'
+import groupBy from 'lodash/groupBy'
+import { getDefaultSubtype } from '~/components/chart/liveness/getDefaultSubtype'
+import type { LivenessSectionProps } from '~/components/projects/sections/liveness/LivenessSection'
+import type { LivenessProject } from '~/server/features/layer2s/liveness/types'
+import { checkIfLivenessExists } from '~/server/features/layer2s/liveness/utils/checkIfLivenessExists'
+import { getHasTrackedContractChanged } from '~/server/features/layer2s/liveness/utils/getHasTrackedContractChanged'
+import type { ProjectsChangeReport } from '~/server/features/projects-change-report/getProjectsChangeReport'
+import { optionToRange } from '~/utils/range/range'
+import { getTrackedTransactions } from '../tracked-txs/getTrackedTransactions'
+
+export async function getLivenessSection(
+  project: Project<
+    never,
+    'archivedAt' | 'trackedTxsConfig' | 'livenessConfig' | 'livenessInfo'
+  >,
+  liveness: LivenessProject | undefined,
+  projectChangeReport: ProjectsChangeReport['projects'][string] | undefined,
+): Promise<
+  | Omit<
+      LivenessSectionProps,
+      | 'projectId'
+      | 'id'
+      | 'title'
+      | 'sectionOrder'
+      | 'milestones'
+      | 'project'
+      | 'hideSubtypeSwitch'
+    >
+  | undefined
+> {
+  const trackedTransactions = getTrackedTransactions(project, 'liveness')
+  if (!trackedTransactions) return undefined
+  assert(project.trackedTxsConfig, 'trackedTxsConfig is required')
+
+  const configSubtypes = groupBy(
+    project.trackedTxsConfig.filter(
+      (x): x is TrackedTxCostsConfig => x.type === 'liveness',
+    ),
+    (c) => c.subtype,
+  )
+  const duplicatedData = project.livenessConfig?.duplicateData.to
+
+  const configuredSubtypes = (
+    compact([
+      ...Object.keys(configSubtypes),
+      duplicatedData,
+    ]) as TrackedTxsConfigSubtype[]
+  ).filter(
+    (subtype) => project.livenessInfo?.overwrites?.[subtype] !== 'no-data', // we do not want to show disabled subtypes
+  )
+
+  const defaultRange = project.archivedAt
+    ? optionToRange('max')
+    : optionToRange('30d')
+  const subtype = getDefaultSubtype(configuredSubtypes)
+
+  const hasData = await checkIfLivenessExists(
+    project.id,
+    getSourceSubtype(subtype, project.livenessConfig?.duplicateData),
+    defaultRange[0] ?? undefined,
+  )
+  if (!hasData) return undefined
+
+  const hasTrackedContractsChanged = project.trackedTxsConfig
+    ? getHasTrackedContractChanged(
+        project as Project<'trackedTxsConfig'>,
+        projectChangeReport,
+      )
+    : false
+
+  return {
+    configuredSubtypes,
+    anomalies: liveness?.anomalies ?? [],
+    hasTrackedContractsChanged,
+    trackedTransactions,
+    duplicateData: project.livenessConfig?.duplicateData,
+    defaultRange,
+    isArchived: project.archivedAt !== undefined,
+  }
+}
+
+// A subtype configured to duplicate another one has no records of its own;
+// the chart reads the source subtype, so the existence check must as well.
+function getSourceSubtype(
+  subtype: TrackedTxsConfigSubtype,
+  duplicateData:
+    | { from: TrackedTxsConfigSubtype; to: TrackedTxsConfigSubtype }
+    | undefined,
+): TrackedTxsConfigSubtype {
+  return duplicateData?.to === subtype ? duplicateData.from : subtype
+}

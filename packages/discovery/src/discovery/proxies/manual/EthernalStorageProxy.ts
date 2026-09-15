@@ -1,11 +1,12 @@
-import { ProxyDetails } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
-
-import { IProvider } from '../../provider/IProvider'
+import { ChainSpecificAddress, type EthereumAddress } from '@l2beat/shared-pure'
+import type { ContractValue } from '../../output/types'
+import type { IProvider } from '../../provider/IProvider'
+import { getPastUpgradesSingleEvent } from '../pastUpgrades'
+import type { ProxyDetails } from '../types'
 
 export async function getEternalStorageProxy(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<ProxyDetails | undefined> {
   const implementation = await provider.callMethod<EthereumAddress>(
     address,
@@ -20,11 +21,21 @@ export async function getEternalStorageProxy(
   if (!implementation || !admin) {
     return undefined
   }
+  const pastUpgrades = await getPastUpgradesSingleEvent(
+    provider,
+    address,
+    'event Upgraded(uint256 version, address indexed implementation)',
+  )
   return {
     type: 'Eternal Storage proxy',
     values: {
-      $admin: admin,
-      $implementation: implementation,
+      $admin: ChainSpecificAddress.fromLong(provider.chain, admin).toString(),
+      $implementation: ChainSpecificAddress.fromLong(
+        provider.chain,
+        implementation,
+      ).toString(),
+      $pastUpgrades: pastUpgrades as ContractValue,
+      $upgradeCount: pastUpgrades.length,
     },
   }
 }

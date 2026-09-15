@@ -1,17 +1,16 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
-import { providers, utils } from 'ethers'
-import * as z from 'zod'
+import { ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import { type providers, utils } from 'ethers'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 import { rpcWithRetries } from '../../provider/LowLevelProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { Handler, HandlerResult } from '../Handler'
 
-export type OrbitPostsBlobsDefinition = z.infer<
+export type OrbitPostsBlobsDefinition = v.infer<
   typeof OrbitPostsBlobsDefinition
 >
-export const OrbitPostsBlobsDefinition = z.strictObject({
-  type: z.literal('orbitPostsBlobs'),
+export const OrbitPostsBlobsDefinition = v.strictObject({
+  type: v.literal('orbitPostsBlobs'),
 })
 
 const DATA_LOCATION_IN_BLOBS = 3
@@ -26,17 +25,12 @@ export class OrbitPostsBlobsHandler implements Handler {
   constructor(
     readonly field: string,
     readonly definition: OrbitPostsBlobsDefinition,
-    readonly logger: DiscoveryLogger,
   ) {}
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, [
-      'Checking if orbit stack chain posts blobs to L1',
-    ])
-
     const lastEvents =
       (await this.getLast10Events(provider, address, provider.blockNumber)) ??
       []
@@ -54,35 +48,46 @@ export class OrbitPostsBlobsHandler implements Handler {
 
   async getLast10Events(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
     blockNumber: number,
   ): Promise<providers.Log[] | undefined> {
+    const rawAddress = ChainSpecificAddress.address(address)
     let currentBlockNumber = blockNumber
     const blockStep = 1000
+    let multiplier = 1
     const fetchedEvents: providers.Log[] = []
     while (currentBlockNumber > 0) {
       const events = await provider.raw(
-        `arbitrum_sequencer_batches.${address}.${Math.max(
+        `arbitrum_sequencer_batches.${rawAddress}.${Math.max(
           0,
-          currentBlockNumber - blockStep,
+          currentBlockNumber - blockStep * multiplier,
         )}.${currentBlockNumber}`,
-        async ({ eventProvider }) => {
-          const fromBlock = Math.max(0, currentBlockNumber - blockStep)
+        async ({ eventProvider }, logger) => {
+          const fromBlock = Math.max(
+            0,
+            currentBlockNumber - blockStep * multiplier,
+          )
           return await rpcWithRetries(
             async () => {
               return await eventProvider.getLogs({
-                address: address.toString(),
+                address: rawAddress.toString(),
                 topics: [abi.getEventTopic('SequencerBatchDelivered')],
                 fromBlock,
                 toBlock: currentBlockNumber,
               })
             },
-            () =>
-              `getLogs ${address.toString()} ${fromBlock} - ${currentBlockNumber}`,
+            logger,
+            `getLogs ${rawAddress.toString()} ${fromBlock} - ${currentBlockNumber}`,
           )
         },
       )
-      currentBlockNumber -= blockStep
+      currentBlockNumber -= blockStep * multiplier
+
+      if (events.length === 0) {
+        multiplier += 1
+      } else {
+        multiplier = 1
+      }
 
       fetchedEvents.push(...events)
       if (fetchedEvents.length >= 10) {

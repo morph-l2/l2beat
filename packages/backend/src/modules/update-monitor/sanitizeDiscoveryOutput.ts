@@ -1,16 +1,9 @@
-import { DiscoveryOutput } from '@l2beat/discovery-types'
+import { type DiscoveryOutput, neuterErrors } from '@l2beat/discovery'
 
 export function sanitizeDiscoveryOutput(discovery: DiscoveryOutput) {
-  const sanitizedContracts = discovery.contracts.map((c) => {
+  const sanitizedEntries = discovery.entries.map((c) => {
     if (c.errors !== undefined) {
-      c.errors = Object.keys(c.errors).reduce<Record<string, string>>(
-        (acc, key) => {
-          // Set all error messages to a generic error message
-          acc[key] = 'Processing error occurred.'
-          return acc
-        },
-        {},
-      )
+      c.errors = neuterErrors(c.errors)
     }
 
     return c
@@ -18,6 +11,6 @@ export function sanitizeDiscoveryOutput(discovery: DiscoveryOutput) {
 
   return {
     ...discovery,
-    contracts: sanitizedContracts,
+    entries: sanitizedEntries,
   }
 }

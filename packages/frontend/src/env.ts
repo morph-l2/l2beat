@@ -1,0 +1,158 @@
+import { v as z } from '@l2beat/validate'
+
+const coerceBoolean = z.string().transform((val) => {
+  return val !== 'false' && val !== '0'
+})
+const stringArray = z.string().transform((val) => {
+  if (!val) {
+    return []
+  }
+  return val.split(',')
+})
+
+const positiveInteger = z
+  .string()
+  .transform(Number)
+  .check(
+    (val) => Number.isInteger(val) && val > 0,
+    'Expected a positive integer',
+  )
+
+const featureFlag = coerceBoolean.optional()
+
+const CLIENT_CONFIG = {
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
+  DEPLOYMENT_ENV: z.enum(['preview', 'staging', 'production']).optional(),
+  CLIENT_SIDE_GITCOIN_ROUND_LIVE: featureFlag.default(false),
+  CLIENT_SIDE_HOME_PAGE: featureFlag.default(false),
+  CLIENT_SIDE_SHOW_HIRING_BADGE: featureFlag.default(false),
+  CLIENT_SIDE_TRACKED_TXS_OUTAGE: featureFlag.default(false),
+  CLIENT_SIDE_DEFI_ENABLED: featureFlag.default(false),
+  CLIENT_SIDE_GARDEN_ENABLED: featureFlag.default(false),
+  CLIENT_SIDE_OPENPANEL_CLIENT_ID: z.string().optional(),
+  CLIENT_SIDE_COMPARE_PROJECTS: featureFlag.default(false),
+}
+const ClientEnv = z.object(CLIENT_CONFIG)
+export const CLIENT_ENV_KEYS = Object.keys(CLIENT_CONFIG)
+
+const SERVER_CONFIG = {
+  ...CLIENT_CONFIG,
+  DATABASE_URL: z
+    .string()
+    .check((v) => !!new URL(v))
+    .default('postgresql://postgres:password@localhost:5432/l2beat_local'),
+  TOKENS_DATABASE_URL: z
+    .string()
+    .check((v) => !!new URL(v))
+    .default('postgresql://postgres:password@localhost:5432/l2beat_local'),
+  DATABASE_LOG_ENABLED: coerceBoolean.default(false),
+  TOKENS_DATABASE_LOG_ENABLED: coerceBoolean.default(false),
+  // Postgres kills any statement running longer than this, so a slow or
+  // abandoned request cannot keep occupying the database.
+  DATABASE_STATEMENT_TIMEOUT_MS: positiveInteger.default(20_000),
+  DISABLE_CACHE: coerceBoolean.default(false),
+  MOCK: coerceBoolean.default(false),
+  EXCLUDED_ACTIVITY_PROJECTS: stringArray.optional(),
+  EXCLUDED_TVS_PROJECTS: stringArray.optional(),
+  COOLIFY_URL: z.string().optional(),
+  COOLIFY_RESOURCE_UUID: z.string().optional(),
+
+  LOG_LEVEL: z
+    .enum(['NONE', 'CRITICAL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE'])
+    .default('INFO'),
+
+  // Elastic Search
+  ES_ENABLED: coerceBoolean.default(false),
+  ES_NODE: z
+    .string()
+    .check((v) => !!new URL(v))
+    .optional(),
+  ES_API_KEY: z.string().optional(),
+  ES_INDEX_PREFIX: z.string().optional(),
+  ES_BUFFER_ALERT_BYTES: z
+    .unknown()
+    .transform((v) => Number(v))
+    .optional(),
+  ES_FLUSH_INTERVAL: z
+    .unknown()
+    .transform((v) => Number(v))
+    .optional(),
+  INTEROP_CHAINS: stringArray.optional(),
+  INTEROP_UPCOMING_CHAINS: stringArray.optional(),
+}
+const ServerEnv = z.object(SERVER_CONFIG)
+
+type Env = z.infer<typeof ServerEnv>
+
+export const rawEnv = getRawEnv()
+export const env = parseEnv(rawEnv)
+
+function parseEnv(rawEnv: ReturnType<typeof getRawEnv>): Env {
+  const isClient = typeof window !== 'undefined'
+
+  for (const key in rawEnv) {
+    if (rawEnv[key as keyof Env] === '') {
+      delete rawEnv[key as keyof Env]
+    }
+  }
+
+  const parsed = isClient ? ClientEnv.parse(rawEnv) : ServerEnv.parse(rawEnv)
+  return new Proxy<Env>(parsed as Env, {
+    get(target, key, receiver) {
+      if (!Reflect.has(SERVER_CONFIG, key) && key !== 'toJSON') {
+        throw new Error(`Accessing invalid env: ${key.toString()}`)
+      }
+
+      return Reflect.get(target, key, receiver)
+    },
+  })
+}
+
+function getRawEnv(): Record<
+  keyof z.infer<typeof ServerEnv>,
+  string | undefined
+> {
+  if (typeof process === 'undefined') {
+    return window.__ENV__
+  }
+
+  // As NextJS bundler inlines the env variables, we need to do this manually
+  // https://nextjs.org/docs/pages/guides/environment-variables#bundling-environment-variables-for-the-browser
+  return {
+    // Server
+    DATABASE_URL: process.env.DATABASE_URL,
+    TOKENS_DATABASE_URL: process.env.TOKENS_DATABASE_URL,
+    DATABASE_LOG_ENABLED: process.env.DATABASE_LOG_ENABLED,
+    TOKENS_DATABASE_LOG_ENABLED: process.env.TOKENS_DATABASE_LOG_ENABLED,
+    DATABASE_STATEMENT_TIMEOUT_MS: process.env.DATABASE_STATEMENT_TIMEOUT_MS,
+    DISABLE_CACHE: process.env.DISABLE_CACHE,
+    MOCK: process.env.MOCK,
+    NODE_ENV: process.env.NODE_ENV,
+    COOLIFY_URL: process.env.COOLIFY_URL,
+    COOLIFY_RESOURCE_UUID: process.env.COOLIFY_RESOURCE_UUID,
+    DEPLOYMENT_ENV: process.env.DEPLOYMENT_ENV,
+    EXCLUDED_ACTIVITY_PROJECTS: process.env.EXCLUDED_ACTIVITY_PROJECTS,
+    EXCLUDED_TVS_PROJECTS: process.env.EXCLUDED_TVS_PROJECTS,
+    ES_ENABLED: process.env.ES_ENABLED,
+    ES_NODE: process.env.ES_NODE,
+    ES_API_KEY: process.env.ES_API_KEY,
+    ES_INDEX_PREFIX: process.env.ES_INDEX_PREFIX,
+    ES_BUFFER_ALERT_BYTES: process.env.ES_BUFFER_ALERT_BYTES,
+    ES_FLUSH_INTERVAL: process.env.ES_FLUSH_INTERVAL,
+    LOG_LEVEL: process.env.LOG_LEVEL,
+    INTEROP_CHAINS: process.env.INTEROP_CHAINS,
+    INTEROP_UPCOMING_CHAINS: process.env.INTEROP_UPCOMING_CHAINS,
+    // Client
+    CLIENT_SIDE_GITCOIN_ROUND_LIVE: process.env.CLIENT_SIDE_GITCOIN_ROUND_LIVE,
+    CLIENT_SIDE_HOME_PAGE: process.env.CLIENT_SIDE_HOME_PAGE,
+    CLIENT_SIDE_SHOW_HIRING_BADGE: process.env.CLIENT_SIDE_SHOW_HIRING_BADGE,
+    CLIENT_SIDE_TRACKED_TXS_OUTAGE: process.env.CLIENT_SIDE_TRACKED_TXS_OUTAGE,
+    CLIENT_SIDE_DEFI_ENABLED: process.env.CLIENT_SIDE_DEFI_ENABLED,
+    CLIENT_SIDE_GARDEN_ENABLED: process.env.CLIENT_SIDE_GARDEN_ENABLED,
+    CLIENT_SIDE_OPENPANEL_CLIENT_ID:
+      process.env.CLIENT_SIDE_OPENPANEL_CLIENT_ID,
+    CLIENT_SIDE_COMPARE_PROJECTS: process.env.CLIENT_SIDE_COMPARE_PROJECTS,
+  }
+}

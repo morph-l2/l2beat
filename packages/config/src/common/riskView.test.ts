@@ -1,17 +1,23 @@
-import { Bytes, Sentiment } from '@l2beat/shared-pure'
+import { Bytes } from '@l2beat/shared-pure'
 import { expect } from 'earl'
-import { ScalingProjectRiskViewEntry } from './ScalingProjectRisk'
-import { pickWorseRisk, sumRisk } from './riskView'
+import type { Sentiment, TableReadyValue } from '../types'
+import {
+  EXIT_WINDOW_NITRO,
+  EXIT_WINDOW_PERMISSIONLESS_BOLD,
+  EXIT_WINDOW_STARKNET,
+  pickWorseRisk,
+  sumRisk,
+} from './riskView'
 
 function createFakeRisk(
   sentiment: Sentiment,
-  definingMetric?: number,
-): ScalingProjectRiskViewEntry {
+  orderHint?: number,
+): TableReadyValue {
   return {
     description: 'description',
     value: Bytes.randomOfLength(32).toString(),
     sentiment,
-    definingMetric,
+    orderHint,
   }
 }
 
@@ -31,7 +37,7 @@ describe(pickWorseRisk.name, () => {
     expect(pickWorseRisk(neutralRisk, warnRisk)).toEqual(warnRisk)
   })
 
-  it('if two have the same sentiment and no definingMetric is specified for one it throws', () => {
+  it('if two have the same sentiment and no order is specified for one it throws', () => {
     const badRisk2 = createFakeRisk('bad')
     const warnRisk2 = createFakeRisk('warning', 23)
 
@@ -54,7 +60,7 @@ describe(pickWorseRisk.name, () => {
 })
 
 describe(sumRisk.name, () => {
-  it('returns the sum of the risks if theyre the same and good', () => {
+  it('returns the sum of the risks if they are the same and good', () => {
     const risk1 = createFakeRisk('warning', 40)
     const risk2 = createFakeRisk('warning', 2)
     const expected = createFakeRisk('warning', 42)
@@ -87,5 +93,34 @@ describe(sumRisk.name, () => {
     const risk2 = createFakeRisk('bad', 2)
 
     expect(sumRisk(risk1, risk2, () => createFakeRisk('bad', 0))).toEqual(risk2)
+  })
+})
+
+describe('exit window descriptions', () => {
+  it('does not use None as a prose exit window for Nitro', () => {
+    const result = EXIT_WINDOW_NITRO(60, 120, 60, 60, 60, true)
+    const description = result.regular?.description ?? ''
+
+    expect(result.regular?.value).toEqual('None')
+    expect(description).toInclude('users have only no time to exit')
+    expect(result.warning).toEqual(undefined)
+  })
+
+  it('does not use None as a prose exit window for Permissionless BoLD', () => {
+    const result = EXIT_WINDOW_PERMISSIONLESS_BOLD(60, 120, 30)
+    const description = result.regular?.description ?? ''
+
+    expect(result.regular?.value).toEqual('None')
+    expect(description).toInclude('users have no time to exit')
+    expect(result.warning).toEqual(undefined)
+  })
+
+  it('does not use None as a prose exit window for Starknet', () => {
+    const result = EXIT_WINDOW_STARKNET(60)
+    const description = result.regular?.description ?? ''
+
+    expect(result.regular?.value).toEqual('None')
+    expect(description).toInclude('leaving users no time to exit')
+    expect(result.warning).toEqual(undefined)
   })
 })

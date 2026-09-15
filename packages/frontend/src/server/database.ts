@@ -1,0 +1,120 @@
+import type { Database, KyselyLogEvent } from '@l2beat/database'
+import { compiledToSqlQuery, createDatabase } from '@l2beat/database'
+import { env } from '~/env'
+import { getLogger } from './utils/logger'
+
+let db: Database | undefined
+
+export function getDb() {
+  if (!db) {
+    db = !env.MOCK
+      ? createDatabase({
+          application_name: createConnectionTag(),
+          connectionString: env.DATABASE_URL,
+          ssl: ssl(),
+          ...pool(),
+          ...statementTimeout(),
+          log: env.DATABASE_LOG_ENABLED ? makeDbLogger('Database') : undefined,
+        })
+      : createThrowingProxy()
+  }
+
+  return db
+}
+
+function createThrowingProxy() {
+  return new Proxy({} as Database, {
+    get: () => {
+      throw new Error(
+        'DB has been called on mock! Report it to engineering team :)',
+      )
+    },
+  })
+}
+
+// Tag is limited to 63 characters, so it will cut off the excess
+export function createConnectionTag() {
+  const suffix =
+    env.DEPLOYMENT_ENV === 'production'
+      ? 'prod'
+      : env.DEPLOYMENT_ENV === 'staging'
+        ? 'staging'
+        : env.DEPLOYMENT_ENV === 'preview'
+          ? 'preview'
+          : 'dev'
+  const base = `FE-${suffix}`
+
+  if (env.COOLIFY_RESOURCE_UUID) {
+    return `${base}-${env.COOLIFY_RESOURCE_UUID}`
+  }
+
+  return base
+}
+
+function ssl() {
+  return env.NODE_ENV === 'production' ||
+    env.DATABASE_URL.includes('amazonaws.com')
+    ? { rejectUnauthorized: false }
+    : undefined
+}
+
+export function pool() {
+  switch (env.DEPLOYMENT_ENV) {
+    case 'production':
+      return {
+        min: 50,
+        max: 200,
+      }
+    case 'staging':
+    case 'preview':
+      return {
+        min: 2,
+        max: 5,
+      }
+    default:
+      return {
+        min: 2,
+      }
+  }
+}
+
+/**
+ * Server-side timeout: Postgres cancels the statement itself, so the query
+ * stops even when the HTTP request that started it has already timed out or
+ * been abandoned. `query_timeout` would only reject the client promise and
+ * leave the statement running.
+ */
+export function statementTimeout() {
+  return { statement_timeout: env.DATABASE_STATEMENT_TIMEOUT_MS }
+}
+
+export function makeDbLogger(tag: string) {
+  const logger = getLogger().for(tag)
+
+  return (event: KyselyLogEvent) => {
+    if (event.level === 'error') {
+      logger.error('Query failed', {
+        durationMs: event.queryDurationMillis,
+        error: event.error,
+        sql: compiledToSqlQuery(event.query),
+        ...(env.NODE_ENV === 'production'
+          ? {
+              sqlTemplate: event.query.sql,
+              queryParameters: JSON.stringify(event.query.parameters),
+            }
+          : {}),
+      })
+    } else {
+      logger.info('Query executed', {
+        durationMs: event.queryDurationMillis,
+        sql: compiledToSqlQuery(event.query),
+        ...(env.NODE_ENV === 'production'
+          ? {
+              sqlTemplate: event.query.sql,
+              queryParameters: JSON.stringify(event.query.parameters),
+            }
+          : {}),
+      })
+    }
+  }
+}

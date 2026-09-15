@@ -1,0 +1,12 @@
+{
+  "CanonicalTournamentParametersProvider": {
+    "hash": "0xaa7c54ef41d2337899da5975625ffdc941805ad6670c5f3df21aaa9e4548e7d6",
+    "address": "eth:0xcC0a49320891Bf35bca834aF1045ab89Ecd44c0c",
+    "blockNumber": 22716869
+  },
+  "CanonicalTournamentParametersProvider.sol": {
+    "hash": "0x9c0867836a0d04ba2719643f629eb48a6ece90ddf802d1bc437a2429b2796abd",
+    "address": "eth:0xc8d8639C3ec8925A00d4F262299807DC632c3113",
+    "blockNumber": 23775846
+  }
+}

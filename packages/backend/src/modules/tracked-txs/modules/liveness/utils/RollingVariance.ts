@@ -1,4 +1,4 @@
-import { sum } from 'lodash'
+import sum from 'lodash/sum'
 
 export class RunningStatistics {
   private count = 0
@@ -38,7 +38,7 @@ export class RunningStatistics {
 
   getVariance(): number {
     if (this.count < 2) {
-      return NaN // variance is undefined with less than two values
+      return Number.NaN // variance is undefined with less than two values
     }
     return this.m2 / this.count
   }

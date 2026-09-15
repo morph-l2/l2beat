@@ -1,0 +1,222 @@
+import { UnixTime } from '@l2beat/shared-pure'
+import { expect } from 'earl'
+import { describeDatabase } from '../test/database'
+import { testDeletingArchivedRecords } from '../utils/deleteArchivedRecords.test'
+import { TvsBlockTimestampRepository } from './TvsBlockTimestampRepository'
+
+describeDatabase(TvsBlockTimestampRepository.name, (db) => {
+  const repository = db.tvsBlockTimestamp
+
+  describe(TvsBlockTimestampRepository.prototype.upsertMany.name, () => {
+    it('adds new rows', async () => {
+      const records = [
+        blockTimestamp('a', 'ethereum', UnixTime(100), 1000),
+        blockTimestamp('b', 'arbitrum', UnixTime(200), 2000),
+      ]
+
+      await repository.upsertMany(records)
+
+      const result = await repository.getAll()
+      expect(result).toEqualUnsorted(records)
+    })
+
+    it('handles empty array', async () => {
+      const inserted = await repository.upsertMany([])
+      expect(inserted).toEqual(0)
+    })
+
+    it('performs batch insert when more than 1000 records', async () => {
+      const records = []
+      for (let i = 0; i < 1500; i++) {
+        records.push(blockTimestamp('a', 'ethereum', UnixTime(i), i + 1000))
+      }
+
+      const inserted = await repository.upsertMany(records)
+      expect(inserted).toEqual(1500)
+    })
+
+    it('updates existing records on conflict', async () => {
+      const initialRecords = [
+        blockTimestamp('a', 'ethereum', UnixTime(100), 1000),
+        blockTimestamp('b', 'arbitrum', UnixTime(200), 2000),
+      ]
+
+      await repository.upsertMany(initialRecords)
+
+      const updatedRecords = [
+        blockTimestamp('a', 'ethereum', UnixTime(100), 1500),
+        blockTimestamp('b', 'arbitrum', UnixTime(200), 2500),
+      ]
+
+      const inserted = await repository.upsertMany(updatedRecords)
+      expect(inserted).toEqual(2)
+
+      const result = await repository.getAll()
+      expect(result).toEqualUnsorted(updatedRecords)
+    })
+  })
+
+  describe(
+    TvsBlockTimestampRepository.prototype.findBlockNumberByChainAndTimestamp
+      .name,
+    () => {
+      it('finds block number for given chain and timestamp', async () => {
+        await repository.upsertMany([
+          blockTimestamp('a', 'ethereum', UnixTime(100), 1000),
+          blockTimestamp('b', 'arbitrum', UnixTime(100), 2000),
+          blockTimestamp('a', 'ethereum', UnixTime(200), 3000),
+        ])
+
+        const result = await repository.findBlockNumberByChainAndTimestamp(
+          'ethereum',
+          UnixTime(100),
+        )
+
+        expect(result).toEqual(1000)
+      })
+
+      it('returns undefined when no matching record exists', async () => {
+        await repository.upsertMany([
+          blockTimestamp('a', 'ethereum', UnixTime(100), 1000),
+        ])
+
+        const result = await repository.findBlockNumberByChainAndTimestamp(
+          'ethereum',
+          UnixTime(200),
+        )
+
+        expect(result).toEqual(undefined)
+      })
+    },
+  )
+
+  describe(TvsBlockTimestampRepository.prototype.deleteByConfigIds.name, () => {
+    it('deletes all rows for given configuration ids', async () => {
+      await repository.upsertMany([
+        blockTimestamp('a', 'ethereum', UnixTime(1), 1001),
+        blockTimestamp('a', 'ethereum', UnixTime(2), 1002),
+        blockTimestamp('b', 'arbitrum', UnixTime(1), 2001),
+        blockTimestamp('c', 'ethereum', UnixTime(1), 3001),
+      ])
+
+      const deleted = await repository.deleteByConfigIds([
+        'a'.repeat(12),
+        'b'.repeat(12),
+      ])
+
+      expect(deleted).toEqual(3)
+
+      const results = await repository.getAll()
+      expect(results).toEqualUnsorted([
+        blockTimestamp('c', 'ethereum', UnixTime(1), 3001),
+      ])
+    })
+
+    it('returns 0 for empty ids', async () => {
+      await repository.upsertMany([
+        blockTimestamp('a', 'ethereum', UnixTime(1), 1001),
+      ])
+
+      const deleted = await repository.deleteByConfigIds([])
+      expect(deleted).toEqual(0)
+
+      const results = await repository.getAll()
+      expect(results).toEqualUnsorted([
+        blockTimestamp('a', 'ethereum', UnixTime(1), 1001),
+      ])
+    })
+
+    it('returns 0 when no matching config found', async () => {
+      await repository.upsertMany([
+        blockTimestamp('a', 'ethereum', UnixTime(1), 1001),
+      ])
+
+      const deleted = await repository.deleteByConfigIds(['b'.repeat(12)])
+      expect(deleted).toEqual(0)
+
+      const results = await repository.getAll()
+      expect(results).toEqualUnsorted([
+        blockTimestamp('a', 'ethereum', UnixTime(1), 1001),
+      ])
+    })
+  })
+
+  describe(
+    TvsBlockTimestampRepository.prototype.deleteByConfigInTimeRange.name,
+    () => {
+      it('deletes data in range for matching config', async () => {
+        await repository.upsertMany([
+          blockTimestamp('b', 'ethereum', UnixTime(1), 1001),
+          blockTimestamp('b', 'ethereum', UnixTime(2), 1002),
+          blockTimestamp('b', 'ethereum', UnixTime(3), 1003),
+          blockTimestamp('c', 'arbitrum', UnixTime(2), 2002),
+        ])
+
+        const deleted = await repository.deleteByConfigInTimeRange(
+          'b'.repeat(12),
+          UnixTime(1),
+          UnixTime(2),
+        )
+
+        expect(deleted).toEqual(2)
+
+        const results = await repository.getAll()
+        expect(results).toEqualUnsorted([
+          blockTimestamp('b', 'ethereum', UnixTime(3), 1003),
+          blockTimestamp('c', 'arbitrum', UnixTime(2), 2002),
+        ])
+      })
+
+      it('returns 0 if no matching config found', async () => {
+        await repository.upsertMany([
+          blockTimestamp('b', 'ethereum', UnixTime(1), 1001),
+        ])
+
+        const deleted = await repository.deleteByConfigInTimeRange(
+          'c'.repeat(12),
+          UnixTime(1),
+          UnixTime(2),
+        )
+
+        expect(deleted).toEqual(0)
+
+        const results = await repository.getAll()
+        expect(results).toEqualUnsorted([
+          blockTimestamp('b', 'ethereum', UnixTime(1), 1001),
+        ])
+      })
+    },
+  )
+
+  describe('archived cleaning methods', () => {
+    testDeletingArchivedRecords(
+      {
+        deleteHourlyUntil: (dateRange) =>
+          repository.deleteHourlyUntil(dateRange),
+        deleteSixHourlyUntil: (dateRange) =>
+          repository.deleteSixHourlyUntil(dateRange),
+        insertMany: (records) => repository.upsertMany(records),
+        getAll: () => repository.getAll(),
+      },
+      (timestamp) => blockTimestamp('a', 'ethereum', timestamp, 1),
+    )
+  })
+
+  afterEach(async () => {
+    await repository.deleteAll()
+  })
+})
+
+function blockTimestamp(
+  configId: string,
+  chain: string,
+  timestamp: UnixTime,
+  blockNumber: number,
+) {
+  return {
+    configurationId: configId.repeat(12),
+    chain,
+    timestamp,
+    blockNumber,
+  }
+}

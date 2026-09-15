@@ -1,55 +1,71 @@
-import React from 'react'
+import type React from 'react'
+import { useState } from 'react'
+import { cn } from '~/utils/cn'
 
-export interface ReadMoreProps {
+interface ReadMoreProps {
   children: string
   maxLength?: number
+  onlyOnMobile?: boolean
 }
 
-export function ReadMore({
-  children,
-  maxLength: maxChildrenLength = 260,
-}: ReadMoreProps) {
-  // Accounting for the ellipsis
-  const maxLength = maxChildrenLength - 3
+export function ReadMore(props: ReadMoreProps) {
+  const maxLength = (props.maxLength ?? 260) - 3
 
   const alwaysVisible =
-    children.length > maxLength
-      ? children.slice(0, maxLength).split(' ').slice(0, -1).join(' ')
-      : children
-  const collapsible = children.slice(alwaysVisible.length)
+    props.children.length > maxLength
+      ? props.children.slice(0, maxLength).split(' ').slice(0, -1).join(' ')
+      : props.children
+  const collapsible = props.children.slice(alwaysVisible.length)
 
   if (!collapsible) {
-    return <>{children}</>
+    return <>{props.children}</>
   }
 
   return (
-    <CustomReadMore alwaysVisible={alwaysVisible} collapsible={collapsible} />
+    <CustomReadMore
+      alwaysVisible={alwaysVisible}
+      collapsible={collapsible}
+      onlyOnMobile={props.onlyOnMobile}
+    />
   )
 }
 
-export interface CustomReadMoreProps {
+interface CustomReadMoreProps {
   alwaysVisible: React.ReactNode
   collapsible: React.ReactNode
+  onlyOnMobile?: boolean
 }
 
-export function CustomReadMore({
+function CustomReadMore({
   alwaysVisible,
   collapsible,
+  onlyOnMobile,
 }: CustomReadMoreProps) {
+  const [collapsed, setCollapsed] = useState(true)
+
   return (
-    <span className="group" data-role="read-more">
+    <span className="group" data-collapsed={collapsed}>
       {alwaysVisible}
-      <span className="group-data-[collapsed=false]:hidden md:hidden">...</span>
       <span
-        className="hidden group-data-[collapsed=false]:inline md:inline"
-        data-role="read-more-collapsible"
+        className={cn(
+          'group-data-[collapsed=false]:hidden',
+          onlyOnMobile && 'md:hidden',
+        )}
+      >
+        ...
+      </span>
+      <span
+        className={cn(
+          'hidden group-data-[collapsed=false]:inline',
+          onlyOnMobile && 'md:inline',
+        )}
       >
         {collapsible}
       </span>
-      <span className="md:hidden"> </span>
+      <span className={cn(onlyOnMobile && 'md:hidden')}> </span>
       <button
-        data-role="read-more-toggle"
-        className="cursor-pointer underline md:hidden"
+        className={cn('cursor-pointer underline', onlyOnMobile && 'md:hidden')}
+        onClick={() => setCollapsed((collapsed) => !collapsed)}
       >
         <span className="group-data-[collapsed=false]:hidden">Read more</span>
         <span className="hidden group-data-[collapsed=false]:inline">

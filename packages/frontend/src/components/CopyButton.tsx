@@ -1,28 +1,68 @@
-import React from 'react'
+import { useState } from 'react'
 
-import { SatisfiedIcon } from './icons'
-import { CopyIcon } from './icons/symbols/CopyIcon'
-import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip/Tooltip'
+import { useCopyToClipboard } from '~/hooks/useCopyToClipboard'
+import { useTimeout } from '~/hooks/useTimeout'
+import { CopyIcon } from '~/icons/Copy'
+import { SatisfiedIcon } from '~/icons/Satisfied'
+import { cn } from '~/utils/cn'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipPortal,
+  TooltipTrigger,
+} from './core/tooltip/Tooltip'
 
-interface Props {
-  toCopy: string
+interface CopyButtonProps {
+  toCopy: string | (() => string)
   className?: string
+  iconClassName?: string
+  copyText?: string
 }
 
-export function CopyButton(props: Props) {
+export function CopyButton({
+  toCopy,
+  className,
+  iconClassName,
+  copyText = 'Copy URL',
+}: CopyButtonProps) {
+  const copy = useCopyToClipboard()
+  const [copied, setCopied] = useState(false)
+
+  useTimeout(() => setCopied(false), copied ? 1400 : null)
+
+  function copyToClipboard() {
+    copy(typeof toCopy === 'function' ? toCopy() : toCopy)
+      .then(() => setCopied(true))
+      .catch(() => setCopied(false))
+    setCopied(true)
+  }
+
   return (
-    <Tooltip className={props.className}>
-      <TooltipTrigger doNotHideOnClick>
-        <button
-          data-role="copy-button"
-          className="group flex items-center justify-center"
-          data-to-copy={props.toCopy}
-        >
-          <CopyIcon className="size-6 fill-blue-700 group-data-[copied=true]:hidden dark:fill-blue-500 dark:hover:fill-blue-550 hover:fill-blue-600" />
-          <SatisfiedIcon className="hidden size-6 fill-green-700 group-data-[copied=true]:block dark:fill-green-450" />
-        </button>
+    <Tooltip>
+      <TooltipTrigger
+        className={cn(className)}
+        onClick={(event) => {
+          event.preventDefault()
+          copyToClipboard()
+        }}
+      >
+        {copied ? (
+          <SatisfiedIcon
+            className={cn('fill-green-700 dark:fill-green-450', iconClassName)}
+          />
+        ) : (
+          <CopyIcon className={cn('fill-current', iconClassName)} />
+        )}
       </TooltipTrigger>
-      <TooltipContent prefferedPosition="top">Copy URL</TooltipContent>
+      <TooltipPortal>
+        <TooltipContent
+          className="z-1000"
+          hideWhenDetached
+          onPointerDownOutside={(event) => event.preventDefault()}
+        >
+          {copied ? 'Copied!' : copyText}
+        </TooltipContent>
+      </TooltipPortal>
     </Tooltip>
   )
 }

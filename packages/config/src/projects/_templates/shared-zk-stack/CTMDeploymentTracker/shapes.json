@@ -1,0 +1,12 @@
+{
+  "CTMDeploymentTracker": {
+    "hash": "0xcee2deb7a9bedb917df6dd05f9d321a686e9a4111e150deab4700c701cd8d4a7",
+    "address": "eth:0x1E405E5cdF127Dc98Eb490AB0e97345f892Ff7E1",
+    "blockNumber": 22188285
+  },
+  "CTMDeploymentTracker_v29": {
+    "hash": "0xaf17ca5ee2e209df804f29aa9bf13e346e1e2d636d4fa392b9583436f074a9bd",
+    "address": "eth:0x00e9d8A4b35C32880A10Feb391aDEDA0D3F90991",
+    "blockNumber": 23588465
+  }
+}

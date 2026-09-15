@@ -1,0 +1,12 @@
+{
+  "MiddleTournamentFactory": {
+    "hash": "0xca62561a58ddfaf341366f30819a55664d933b0781068e495763548beb24d0f1",
+    "address": "eth:0x2B3272E7Bcf06d36b9A902dfc0dD0d9384F2A4c4",
+    "blockNumber": 22716598
+  },
+  "MiddleTournamentFactory.sol": {
+    "hash": "0xeb7fc0f4a375b9cf3c1468aacfebfe761d71625cc5e0420953dc7ce4a152db3d",
+    "address": "eth:0x47c7f40841F842f7691cB9Fd6Cd63673B79dCe79",
+    "blockNumber": 23775846
+  }
+}

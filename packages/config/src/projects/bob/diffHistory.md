@@ -1,0 +1,5982 @@
+Generated with discovered.json: 0x8f30addc1491738a467e3799f1efddc7abc87ca7
+
+# Diff at Wed, 08 Jul 2026 08:23:37 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@bd632cb3b3a14cad96138a9cfe1677d08dcc197d block: 1783072732
+- current timestamp: 1783498944
+
+## Description
+
+Upgraded Kailua to v1.3.0 release, program hash reproduced. Also rotated ms member.
+
+## Watched changes
+
+```diff
+    contract KailuaVerifier (eth:0xa23bf38299bbCbAA01b9ea8a1d3412D9f405b97d) [N/A] {
+    +++ description: None
+      values.$implementation:
+-        "eth:0xF59DA245d3D69E5432Afd05008E8D332C1bfAb4e"
++        "eth:0xC9934Db60031aDd319d008f8d643E3b723f28e43"
+      values.$pastUpgrades.1:
++        ["2026-07-08T07:35:47.000Z","0x211cae5e55a0b57029752e11536fb7a4175d8059cb9d4ec37ca7e50d635809dd",["eth:0xC9934Db60031aDd319d008f8d643E3b723f28e43"]]
+      values.$upgradeCount:
+-        1
++        2
+      values.FPVM_IMAGE_ID:
+-        "0x3768ea4f0e0d940f69c4cc5bd39a9e2772bfe3cb57818ce526bbe68033ee5934"
++        "0xb2e2b1513e80ea1e8f998e51bf8e7754eec21dbd0463e0b6b115165ba6bac2bf"
+      values.ROLLUP_CONFIG_HASH:
+-        "0x8afe7ad42347f5d9f9ad307825d14a39630504005cb998d5132dcd0d0485d64d"
++        "0x56ed6a78ed98a992a16a46513ee4ee496a86302a96d0f2bcee133c21351cd681"
+      implementationNames.eth:0xF59DA245d3D69E5432Afd05008E8D332C1bfAb4e:
+-        "KailuaVerifier"
+      implementationNames.eth:0xC9934Db60031aDd319d008f8d643E3b723f28e43:
++        "KailuaVerifier"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) [GnosisSafe] {
+    +++ description: None
+      values.$members.4:
+-        "eth:0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
++        "eth:0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C"
+    }
+```
+
+Generated with discovered.json: 0xc4b6aa14972b20d03cd5056e8b7f516f278902f5
+
+# Diff at Fri, 03 Jul 2026 10:00:00 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@4572e5b954c85d78517dc66fc4a82b8ddc679e2a block: 1773320760
+- current timestamp: 1783072732
+
+## Description
+
+Upgrade to Kailua [v1.2.0](https://github.com/boundless-xyz/kailua/releases/tag/v1.2.0).
+
+- Vanguard advantage activated: previously `0s` (disabled), now `1mo` with a designated vanguard (`0x7cB1022D…`). The vanguard can delay the first child proposal of each parent tournament by up to a month; sibling proposals stay permissionless (v1.2.0 retains the `childCount() == 1` gate).
+- `KailuaGame` impl rotated ([diff](https://disco.l2beat.com/diff/eth:0x4BE239c86364eD73fc244A5F50c8ccB101a492eF/eth:0xD37b0BEdD9094988a31dBbB6BF77dC97269E742b)) — now holds a direct `KAILUA_VERIFIER` reference (read once from the treasury at construction) and calls the verifier for proof checking. The vanguard gate is unchanged (`assignVanguard`, `vanguardAdvantage`, `childCount() == 1`), but tournament payout economics were reworked (see below).
+- `KailuaTreasury` rotated ([diff](https://disco.l2beat.com/diff/eth:0x9B3E1661bccAF907893B71e4016c01513ae9263C/eth:0x9937033Cc967eED9d753e31c77D2F146d002ae53)) — drops the `RISC_ZERO_VERIFIER`, `FPVM_IMAGE_ID`, and `ROLLUP_CONFIG_HASH` immutables (moved to KailuaVerifier) and holds a `KAILUA_VERIFIER` reference instead.
+- `KailuaVerifier` (new in v1.2.0) — proxy-wrapped, holds the proof config that used to sit on KailuaTreasury, and replaces the previous `RiscZeroVerifierRouter` + emergency-stop path. Adds optional fault-proof permits: a prover can lock collateral to reserve an exclusive window for collecting the fault-proof reward (anti-front-run). On bob the permit window is effectively off (`PERMIT_DELAY=0`, `PERMIT_DURATION=1` → 1-second active window); fault-proof submission remains permissionless.
+- Tournament payout economics reworked (independent of the vanguard gate). Slashed participation bonds now split 1/3 prover / 1/3 winner / 1/3 burn (`ELIMINATION_SPLIT_DENOM=3`, `PROVER_NUM=1`, `WINNER_NUM=1`) accrued via `eliminationRewards` / `winnerSharesByParent` and claimed with `claimEliminationRewards()`, replacing the old full-bond `claimEliminationBonds(uint256)` / `eliminations[]` mechanic. And `KailuaGame.getPayoutRecipient` now routes the fault-proof reward through `KAILUA_VERIFIER.faultProofPermitBeneficiary` before falling back to the fault/validity prover (inert on bob given the 1-second permit window).
+- New FPVM image ID deployed alongside the v1.2.0 contracts.
+
+## Watched changes
+
+```diff
+    contract TimelockController (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711) [global/TimelockController] {
+    +++ description: A timelock with access control. The current minimum delay is 3d.
+      values.accessControl.PROPOSER_ROLE.members.0:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+      values.accessControl.CANCELLER_ROLE.members.0:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+      values.accessControl.EXECUTOR_ROLE.members.0:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.12:
++        {"id":"0x5fb8d6ab7b9ad6614a645faf85120306acf72c02bc66de00b027c8ec57eff377","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0x2f2ff15db09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc10000000000000000000000002e5bcc9959db5f5016f830e47943b07242cb2609"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.13:
++        {"id":"0x336fa76c82918a2642423bcae028021a204288e86965316b58737fb6e6a2d985","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0x2f2ff15dd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e630000000000000000000000002e5bcc9959db5f5016f830e47943b07242cb2609"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.14:
++        {"id":"0x0c0f9e544f5acb8eafdf44bbd4a1f21cde030970ad1f76c01504ff1c291f0e9d","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0x2f2ff15dfd643c72710c63c0180259aba6b2d05451e3591a24e58b62239378085726f7830000000000000000000000002e5bcc9959db5f5016f830e47943b07242cb2609"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.15:
++        {"id":"0x89a458a6781bd045d785361e429a3df71167dff9e14996fa5f98ca7c5eb9d4c3","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0xd547741fb09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc1000000000000000000000000f616a4f81857cfee54a4a049ec187172574bd412"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.16:
++        {"id":"0x4acc61e26f03e0270258c3fe8aec76d8ce5c80e8e100972e3091fc77c8882819","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0xd547741fd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63000000000000000000000000f616a4f81857cfee54a4a049ec187172574bd412"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.17:
++        {"id":"0xf239631e46b22677b2b8b3b35d3780a1de298d9234c6906ce98aa3168d52cc97","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0xd547741ffd643c72710c63c0180259aba6b2d05451e3591a24e58b62239378085726f783000000000000000000000000f616a4f81857cfee54a4a049ec187172574bd412"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.15:
++        {"id":"0x5fb8d6ab7b9ad6614a645faf85120306acf72c02bc66de00b027c8ec57eff377","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0x2f2ff15db09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc10000000000000000000000002e5bcc9959db5f5016f830e47943b07242cb2609","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.16:
++        {"id":"0x336fa76c82918a2642423bcae028021a204288e86965316b58737fb6e6a2d985","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0x2f2ff15dd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e630000000000000000000000002e5bcc9959db5f5016f830e47943b07242cb2609","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.17:
++        {"id":"0x0c0f9e544f5acb8eafdf44bbd4a1f21cde030970ad1f76c01504ff1c291f0e9d","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0x2f2ff15dfd643c72710c63c0180259aba6b2d05451e3591a24e58b62239378085726f7830000000000000000000000002e5bcc9959db5f5016f830e47943b07242cb2609","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.18:
++        {"id":"0x89a458a6781bd045d785361e429a3df71167dff9e14996fa5f98ca7c5eb9d4c3","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0xd547741fb09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc1000000000000000000000000f616a4f81857cfee54a4a049ec187172574bd412","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.19:
++        {"id":"0x4acc61e26f03e0270258c3fe8aec76d8ce5c80e8e100972e3091fc77c8882819","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0xd547741fd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63000000000000000000000000f616a4f81857cfee54a4a049ec187172574bd412","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.20:
++        {"id":"0xf239631e46b22677b2b8b3b35d3780a1de298d9234c6906ce98aa3168d52cc97","index":0,"target":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","value":0,"data":"0xd547741ffd643c72710c63c0180259aba6b2d05451e3591a24e58b62239378085726f783000000000000000000000000f616a4f81857cfee54a4a049ec187172574bd412","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
+      values.Canceller.0:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+      values.Executor.0:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+      values.Proposer.0:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x1efDd13f831ceeEa14940806705A53D3211CD698) [risc0/RiscZeroVerifierEmergencyStop] {
+    +++ description: A verifier wrapper for the eth:0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9 that allows pausing (emergency stop) the verifier by its owner.
+      values.owner:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaGame (eth:0x4BE239c86364eD73fc244A5F50c8ccB101a492eF) [risc0/KailuaGame]
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x68dC2cB4e61774873971c499D9b239ec5Ac540E3) [risc0/RiscZeroVerifierEmergencyStop] {
+    +++ description: A verifier wrapper for the eth:0x20ff7C2Cf391a5F096A2Cc181cb41916680f8E97 that allows pausing (emergency stop) the verifier by its owner.
+      values.owner:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+    }
+```
+
+```diff
+    EOA  (eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0x9937033Cc967eED9d753e31c77D2F146d002ae53","description":"propose new state roots before anyone else, giving a first-mover advantage on the optimistic clock.","role":".vanguard"}]
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x844D5f01161E3559d36f23d0Aa9E9620949aF782) [risc0/RiscZeroVerifierEmergencyStop] {
+    +++ description: A verifier wrapper for the eth:0x5005aBa3DFf7C940fcc1e48DccCAD611a80eEB85 that allows pausing (emergency stop) the verifier by its owner.
+      values.owner:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+    }
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) [opstack/DisputeGameFactory] {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game1337:
+-        "eth:0x4BE239c86364eD73fc244A5F50c8ccB101a492eF"
++        "eth:0xD37b0BEdD9094988a31dBbB6BF77dC97269E742b"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaTreasury (eth:0x9B3E1661bccAF907893B71e4016c01513ae9263C) [risc0/KailuaTreasury]
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 0s.
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x9F9994Eb4Cb5200198FEfb470f8b50301662e696) [risc0/RiscZeroVerifierEmergencyStop] {
+    +++ description: A verifier wrapper for the eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D that allows pausing (emergency stop) the verifier by its owner.
+      values.owner:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) [GnosisSafe] {
+    +++ description: None
+      receivedPermissions.9:
++        {"permission":"upgrade","from":"eth:0xa23bf38299bbCbAA01b9ea8a1d3412D9f405b97d","role":"admin"}
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0xDa8f3de6fBBdb261Ac771B813a578A7aBdA6B2b1) [risc0/RiscZeroVerifierEmergencyStop] {
+    +++ description: A verifier wrapper for the eth:0x54aCE3ED46529B4d4F3770C8Bad5dDC48717B9bF that allows pausing (emergency stop) the verifier by its owner.
+      values.owner:
+-        "eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412"
++        "eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609"
+    }
+```
+
+```diff
+    EOA  (eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412) {
+    +++ description: None
+      receivedPermissions.0:
+-        {"permission":"interact","from":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","description":"cancel queued transactions.","role":".Canceller"}
+      receivedPermissions.1:
+-        {"permission":"interact","from":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","description":"execute transactions that are ready.","role":".Executor"}
+      receivedPermissions.2:
+-        {"permission":"interact","from":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","description":"manage all access control roles.","role":".defaultAdminAC","via":[{"address":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","delay":259200}]}
+      receivedPermissions.3:
+-        {"permission":"interact","from":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","description":"propose transactions.","role":".Proposer"}
+      receivedPermissions.4:
+-        {"permission":"interact","from":"eth:0x1efDd13f831ceeEa14940806705A53D3211CD698","description":"pause the verifier.","role":".owner"}
+      receivedPermissions.6:
+-        {"permission":"interact","from":"eth:0x68dC2cB4e61774873971c499D9b239ec5Ac540E3","description":"pause the verifier.","role":".owner"}
+      receivedPermissions.7:
+-        {"permission":"interact","from":"eth:0x844D5f01161E3559d36f23d0Aa9E9620949aF782","description":"pause the verifier.","role":".owner"}
+      receivedPermissions.8:
+-        {"permission":"interact","from":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","description":"add/remove verifiers and the selectors they are mapped to.","role":".owner","via":[{"address":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","delay":259200}]}
+      receivedPermissions.9:
+-        {"permission":"interact","from":"eth:0x9F9994Eb4Cb5200198FEfb470f8b50301662e696","description":"pause the verifier.","role":".owner"}
+      receivedPermissions.10:
+-        {"permission":"interact","from":"eth:0xDa8f3de6fBBdb261Ac771B813a578A7aBdA6B2b1","description":"pause the verifier.","role":".owner"}
+      directlyReceivedPermissions:
+-        [{"permission":"act","from":"eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711","delay":259200,"role":".Executor"}]
+    }
+```
+
+```diff
++   Status: CREATED
+    contract Safe (eth:0x2E5bcc9959dB5F5016F830E47943b07242CB2609) [GnosisSafe]
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract KailuaTreasury (eth:0x9937033Cc967eED9d753e31c77D2F146d002ae53) [risc0/KailuaTreasury]
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 1mo.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaVerifier (eth:0xa23bf38299bbCbAA01b9ea8a1d3412D9f405b97d) [N/A]
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (eth:0xD37b0BEdD9094988a31dBbB6BF77dC97269E742b) [risc0/KailuaGame]
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+## Source code changes
+
+```diff
+.../bob/{.flat@1773320760 => .flat}/KailuaGame.sol | 6964 +++++---------------
+ .../{.flat@1773320760 => .flat}/KailuaTreasury.sol | 6935 +++++--------------
+ .../bob/.flat/KailuaVerifier/KailuaVerifier.sol    |  509 ++
+ .../projects/bob/.flat/KailuaVerifier/Proxy.p.sol  |  120 +
+ .../null => ./src/projects/bob/.flat/Safe/Safe.sol | 1216 ++++
+ .../src/projects/bob/.flat/Safe/SafeProxy.p.sol    |   42 +
+ 6 files changed, 5141 insertions(+), 10645 deletions(-)
+```
+
+Generated with discovered.json: 0xf08f3153b141a3551c781e57b771cdf8622a519a
+
+# Diff at Wed, 01 Jul 2026 10:33:00 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@cfafbf3de953d9f519656c89c622fe51a04d547a block: 1773320760
+- current timestamp: 1773320760
+
+## Description
+
+Config: small template adjustments
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1773320760 (main branch discovery), not current.
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0x20ff7C2Cf391a5F096A2Cc181cb41916680f8E97) [taiko/RiscZeroGroth16Verifier] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 2.0.0-rc.3).
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D) [taiko/RiscZeroGroth16Verifier] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 3.0.0).
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0x54aCE3ED46529B4d4F3770C8Bad5dDC48717B9bF) [taiko/RiscZeroGroth16Verifier] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 2.0.3).
+      template:
++        "taiko/RiscZeroGroth16Verifier"
+      description:
++        "Verifier contract for RISC Zero Groth16 proofs (version 2.0.3)."
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9) [taiko/RiscZeroGroth16Verifier] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 2.2.0).
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0xf70aBAb028Eb6F4100A24B203E113D94E87DE93C) [taiko/RiscZeroGroth16VerifierLegacy] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs. This older implementation exposes control-root and selector constants but does not expose a VERSION getter.
+      template:
++        "taiko/RiscZeroGroth16VerifierLegacy"
+      description:
++        "Verifier contract for RISC Zero Groth16 proofs. This older implementation exposes control-root and selector constants but does not expose a VERSION getter."
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+Generated with discovered.json: 0x6d80e5f5434ed7ba1c1326cb5b2e61224e6beb59
+
+# Diff at Tue, 30 Jun 2026 20:24:38 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@d6a4cf0104ece715f88d9597c7e158a2841e88fd block: 1773320760
+- current timestamp: 1773320760
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1773320760 (main branch discovery), not current.
+
+```diff
+    contract OptimismPortal2 (eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) [opstack/OptimismPortal2] {
+    +++ description: The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      usedTypes.0.arg.8:
++        "FaultDisputeGame"
+    }
+```
+
+Generated with discovered.json: 0xd0f063d688a6a29661339453fc4543df60406b51
+
+# Diff at Tue, 09 Jun 2026 12:43:31 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@ae67a38d37457ad735e5d55080d2e5479d5df7dc block: 1773320760
+- current timestamp: 1773320760
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1773320760 (main branch discovery), not current.
+
+```diff
+    EOA  (eth:0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11) {
+    +++ description: None
+      receivedPermissions.0.description:
++        "Allowed to commit transactions from the current layer to the host chain."
+      receivedPermissions.0.permission:
+-        "sequence"
++        "interact"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) [GnosisSafe] {
+    +++ description: None
+      receivedPermissions.0:
+-        {"permission":"guard","from":"eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46","role":".guardian"}
+      receivedPermissions.1:
++        {"permission":"interact","from":"eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46","description":"Allowed to pause withdrawals. In op stack systems with a proof system, the Guardian can also blacklist dispute games and set the respected game type (permissioned / permissionless).","role":".guardian"}
+    }
+```
+
+Generated with discovered.json: 0x6f99e8f1fd4339a4fbeaa14062cac38ba1b04786
+
+# Diff at Thu, 04 Jun 2026 17:38:21 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@8ad83b88dd9180e282e419267cebe10e93daf01d block: 1773320760
+- current timestamp: 1773320760
+
+## Description
+
+New game name (aggregateVerifier) added to portal.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1773320760 (main branch discovery), not current.
+
+```diff
+    contract OptimismPortal2 (eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) [opstack/OptimismPortal2] {
+    +++ description: The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      usedTypes.0.arg.621:
++        "AggregateVerifier"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierRouter (eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319) [risc0/RiscZeroVerifierRouter] {
+    +++ description: A router proxy that routes to verifiers based on selectors. The mapping can be changed by a permissioned owner (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711).
++++ severity: HIGH
+      values.verifier_242f9d5b:
++        "eth:0x844D5f01161E3559d36f23d0Aa9E9620949aF782"
++++ severity: HIGH
+      values.verifier_310fe598:
++        "eth:0x44c220f0598345195cE99AD6A57aDfFcb9Ea33e7"
++++ severity: HIGH
+      values.verifier_73c457ba:
++        "eth:0x9F9994Eb4Cb5200198FEfb470f8b50301662e696"
++++ severity: HIGH
+      values.verifier_9f39696c:
++        "eth:0x68dC2cB4e61774873971c499D9b239ec5Ac540E3"
++++ severity: HIGH
+      values.verifier_bb001d44:
++        "eth:0x1efDd13f831ceeEa14940806705A53D3211CD698"
++++ severity: HIGH
+      values.verifier_f536085a:
++        "eth:0xDa8f3de6fBBdb261Ac771B813a578A7aBdA6B2b1"
+      fieldMeta:
++        {"verifier_310fe598":{"severity":"HIGH"},"verifier_9f39696c":{"severity":"HIGH"},"verifier_f536085a":{"severity":"HIGH"},"verifier_bb001d44":{"severity":"HIGH"},"verifier_73c457ba":{"severity":"HIGH"},"verifier_242f9d5b":{"severity":"HIGH"}}
+    }
+```
+
+```diff
+    EOA  (eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412) {
+    +++ description: None
+      receivedPermissions.5:
++        {"permission":"interact","from":"eth:0x44c220f0598345195cE99AD6A57aDfFcb9Ea33e7","description":"pause the verifier.","role":".owner"}
+      receivedPermissions.6:
++        {"permission":"interact","from":"eth:0x68dC2cB4e61774873971c499D9b239ec5Ac540E3","description":"pause the verifier.","role":".owner"}
+      receivedPermissions.10:
++        {"permission":"interact","from":"eth:0xDa8f3de6fBBdb261Ac771B813a578A7aBdA6B2b1","description":"pause the verifier.","role":".owner"}
+    }
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroGroth16Verifier (eth:0x20ff7C2Cf391a5F096A2Cc181cb41916680f8E97) [taiko/RiscZeroGroth16Verifier]
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 2.0.0-rc.3).
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroVerifierEmergencyStop (eth:0x44c220f0598345195cE99AD6A57aDfFcb9Ea33e7) [risc0/RiscZeroVerifierEmergencyStop]
+    +++ description: A verifier wrapper for the eth:0xf70aBAb028Eb6F4100A24B203E113D94E87DE93C that allows pausing (emergency stop) the verifier by its owner.
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroGroth16Verifier (eth:0x54aCE3ED46529B4d4F3770C8Bad5dDC48717B9bF) [N/A]
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroVerifierEmergencyStop (eth:0x68dC2cB4e61774873971c499D9b239ec5Ac540E3) [risc0/RiscZeroVerifierEmergencyStop]
+    +++ description: A verifier wrapper for the eth:0x20ff7C2Cf391a5F096A2Cc181cb41916680f8E97 that allows pausing (emergency stop) the verifier by its owner.
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroVerifierEmergencyStop (eth:0xDa8f3de6fBBdb261Ac771B813a578A7aBdA6B2b1) [risc0/RiscZeroVerifierEmergencyStop]
+    +++ description: A verifier wrapper for the eth:0x54aCE3ED46529B4d4F3770C8Bad5dDC48717B9bF that allows pausing (emergency stop) the verifier by its owner.
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroGroth16Verifier (eth:0xf70aBAb028Eb6F4100A24B203E113D94E87DE93C) [N/A]
+    +++ description: None
+```
+
+Generated with discovered.json: 0x22c2c59c3fa75cd7617ea8c5867128b5464f00a1
+
+# Diff at Fri, 15 May 2026 12:35:44 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@a5152b9ba7ad7f85f2af3d814f74630fcaa7c917 block: 1773320760
+- current timestamp: 1773320760
+
+## Description
+
+Shape hashes update after flattener improvements
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1773320760 (main branch discovery), not current.
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D) [taiko/RiscZeroGroth16Verifier] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 3.0.0).
+      sourceHashes.0:
+-        "0x6d31c3046dca02d527c9c812462cb52b4402d54884c3abe822cb6ac8371e4a5b"
++        "0xba12695f53ef79b4c552abf284ab9133ca47c0fc1908e05a8b941e5a176795cb"
+    }
+```
+
+```diff
+    contract RiscZeroSetVerifier (eth:0x5005aBa3DFf7C940fcc1e48DccCAD611a80eEB85) [risc0/RiscZeroSetVerifier] {
+    +++ description: Set verifier contract for RISC Zero proofs (version 0.9.0). It allows verifying a whole set of proofs identified with a Merkle root at once, afterwards each individual proof could be efficiently verified just by checking Merkle inclusion against the verified root.
+      sourceHashes.0:
+-        "0xbe8d5d7346b3a0c693ac88e25f6f3d4479a63d664b7760a277a0291be6ca2f81"
++        "0xd12e5ce718cbb92c582928b83200e21985fc933c614e710418f28a4e6d425685"
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9) [taiko/RiscZeroGroth16Verifier] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 2.2.0).
+      sourceHashes.0:
+-        "0x3bc7088771e0885ea308b56e1dd5ff9818b17e6ad8856232189a849e5db10cac"
++        "0xa39c2d6256fc134bea7f86fee8cb7b0cdb6bcafe0c25f69d86fe3309a298dc52"
+    }
+```
+
+Generated with discovered.json: 0x4061049f25662896532596c9725ba5fa0e5d136e
+
+# Diff at Fri, 08 May 2026 07:51:09 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@488d190650457a1fba9b18a83f14a17ab8b2c84c block: 1773320760
+- current timestamp: 1773320760
+
+## Description
+
+Use the new flattener implementation
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1773320760 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (eth:0x091dF5E1284E49fA682407096aD34cfD42B95B72) [lido/L1ERC20TokenBridge] {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      sourceHashes.1:
+-        "0xc4b0423b7d0fcada3862027e805c2fc79676feb6f4bc3978e5a86b390bfd7be3"
++        "0x40e05a5687c31241ba914eeb7831d870e410c699c2cc59094759947e8d4148fa"
+    }
+```
+
+```diff
+    contract TimelockController (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711) [global/TimelockController] {
+    +++ description: A timelock with access control. The current minimum delay is 3d.
+      sourceHashes.0:
+-        "0x5b8836fe706f4142d9d19316f7ae849ba43b55173015f72bc3f9216f7a86cf0d"
++        "0xd75c3ac3fe43e81cc406b9316c4f35ab4c97b399585f8ed181cc438845d520be"
+    }
+```
+
+```diff
+    contract PermissionedDisputeGame (eth:0x15F80920C8Fec136e2A804E04f26203FF8dAd19A) [opstack/PermissionedDisputeGame] {
+    +++ description: Same as FaultDisputeGame, but only two permissioned addresses are designated as proposer and challenger.
+      sourceHashes.0:
+-        "0x284eddae8c2726c3558d3ce1656fcd222947612b13d4d440519d6a82fc68acec"
++        "0x23375b62bc80656613e6e37217856dbef4aa805d14edc5827ca5e26e87cf4af4"
+    }
+```
+
+```diff
+    contract DelayedWETH (eth:0x1A08BA77CB95184Ea0C31e56f199Db068eb6B35d) [opstack/DelayedWETH] {
+    +++ description: Contract designed to hold the bonded ETH for each game. It is designed as a wrapper around WETH to allow an owner to function as a backstop if a game would incorrectly distribute funds.
+      sourceHashes.1:
+-        "0x6ad951c662b7a889a64dd91252b0b8bc9694fd4df15a08bdec6693673a44dda1"
++        "0xee6bf3279fe5b849ed7e945391e2f05982b56336bdd0c0764e365d9efe3a70b9"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x1efDd13f831ceeEa14940806705A53D3211CD698) [risc0/RiscZeroVerifierEmergencyStop] {
+    +++ description: A verifier wrapper for the eth:0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9 that allows pausing (emergency stop) the verifier by its owner.
+      sourceHashes.0:
+-        "0x215b7779ba88b0e55cbc280c1640649f7ac41a2b2d76176efef0cfd88fe563f6"
++        "0x285eacaac2ca4f68ef5e866028ae0bc88ebc6f583afc9035f289ad34efc034e3"
+    }
+```
+
+```diff
+    contract PreimageOracle (eth:0x1fb8cdFc6831fc866Ed9C51aF8817Da5c287aDD3) [opstack/PreimageOracle] {
+    +++ description: The PreimageOracle contract is used to load the required data from L1 for a dispute game.
+      sourceHashes.0:
+-        "0xd9838f1f137bd5397f583f33c414ec9c0fc3dc69401213fae0f09c36d4ac8e47"
++        "0x16701fcaa0e04e5481701a81736e7c8ee2c8aa32da272bf74e0589e6a90c3615"
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D) [taiko/RiscZeroGroth16Verifier] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 3.0.0).
+      sourceHashes.0:
+-        "0xb44ee6b08f1771b57cb0eaac00eb8ac68c0b86d1f4cbd25e8b80debe791ad2eb"
++        "0x6d31c3046dca02d527c9c812462cb52b4402d54884c3abe822cb6ac8371e4a5b"
+    }
+```
+
+```diff
+    contract L1StandardBridge (eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) [opstack/L1StandardBridge] {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      sourceHashes.1:
+-        "0x0114d3af66179d6404d14360203dc6bcf404f23e2db4ee1b5848e923e131bc00"
++        "0xcacd38e7b52353ad3463da40b7e7a29b028f95500a82590d2b8f8ffd26b83f6d"
+    }
+```
+
+```diff
+    contract KailuaGame (eth:0x4BE239c86364eD73fc244A5F50c8ccB101a492eF) [risc0/KailuaGame] {
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+      sourceHashes.0:
+-        "0xeb03c515a41cf0488257e2d087c87b453cdc683dcdd31975049260130672f399"
++        "0x581a61e7da581e185e1da46358ca16a60179cf765c2dfb14b491232c7251c51d"
+    }
+```
+
+```diff
+    contract RiscZeroSetVerifier (eth:0x5005aBa3DFf7C940fcc1e48DccCAD611a80eEB85) [risc0/RiscZeroSetVerifier] {
+    +++ description: Set verifier contract for RISC Zero proofs (version 0.9.0). It allows verifying a whole set of proofs identified with a Merkle root at once, afterwards each individual proof could be efficiently verified just by checking Merkle inclusion against the verified root.
+      sourceHashes.0:
+-        "0x5e5ad63d9792c63d8edff748005e7da98af9a6dcd9bf0fbdcb17b7c1e9ab7edd"
++        "0xbe8d5d7346b3a0c693ac88e25f6f3d4479a63d664b7760a277a0291be6ca2f81"
+    }
+```
+
+```diff
+    contract OptimismMintableERC20Factory (eth:0x5557408ab14013ce9Dbb300dE0D87D386BB09cb6) [opstack/OptimismMintableERC20Factory] {
+    +++ description: A helper contract that generates OptimismMintableERC20 contracts on the network it's deployed to. OptimismMintableERC20 is a standard extension of the base ERC20 token contract designed to allow the L1StandardBridge contracts to mint and burn tokens. This makes it possible to use an OptimismMintableERC20 as this chain's representation of a token on the host chain, or vice-versa.
+      sourceHashes.1:
+-        "0x25bad2bdb7df4347412a48e271dea1489299460192b43b8ca52ed191b4940992"
++        "0x307d4cb83e682629880fe9bb874a188805e3b93cb11a2cbf80095975f1e5b04e"
+    }
+```
+
+```diff
+    contract L1ERC721Bridge (eth:0x5fF93263D5181b2A826f8c51d54BC0da2d20D50a) [opstack/L1ERC721Bridge] {
+    +++ description: Used to bridge ERC-721 tokens from host chain to this chain.
+      sourceHashes.1:
+-        "0x75cd470a9d1c1afc343b599b1c14731f55bb36fe8a4e844ddb88a0b791918795"
++        "0x1f65fda230b6d0df44e466b06418b2e12a401ef82c07521ad18d2f4ae6c70fb2"
+    }
+```
+
+```diff
+    contract MIPS (eth:0x6463dEE3828677F6270d83d45408044fc5eDB908) [opstack/MIPS] {
+    +++ description: The MIPS contract is used to execute the final step of the dispute game which objectively determines the winner of the dispute.
+      sourceHashes.0:
+-        "0xff203abbbb6edba7fff3caefb2752c4e7b786992b19c4f0f8ab568bc0a5fbf04"
++        "0x4a578c18a0b50fb7778c6a6b805dcb18427478d4002c8f7f28c2146dcfbf3a33"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x844D5f01161E3559d36f23d0Aa9E9620949aF782) [risc0/RiscZeroVerifierEmergencyStop] {
+    +++ description: A verifier wrapper for the eth:0x5005aBa3DFf7C940fcc1e48DccCAD611a80eEB85 that allows pausing (emergency stop) the verifier by its owner.
+      sourceHashes.0:
+-        "0x215b7779ba88b0e55cbc280c1640649f7ac41a2b2d76176efef0cfd88fe563f6"
++        "0x285eacaac2ca4f68ef5e866028ae0bc88ebc6f583afc9035f289ad34efc034e3"
+    }
+```
+
+```diff
+    contract OptimismPortal2 (eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) [opstack/OptimismPortal2] {
+    +++ description: The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      sourceHashes.1:
+-        "0xec3fef2865ee3bd465fea37851bfc490f143eba36d1e45d220832d39770aa8f2"
++        "0x3e7e2cb08ba995795937c9c2e8ea9d0e4d2e2de852f389055073384d5f79c59d"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierRouter (eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319) [risc0/RiscZeroVerifierRouter] {
+    +++ description: A router proxy that routes to verifiers based on selectors. The mapping can be changed by a permissioned owner (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711).
+      sourceHashes.0:
+-        "0x09d9c9ba25591eb4e658e547eb5f5cc798449477bf745e6fa9f516a339f88364"
++        "0x3cae3ae6b0f352872c4065d61e6035712203a33041678708105f24c097febd2a"
+    }
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) [opstack/DisputeGameFactory] {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
+      sourceHashes.1:
+-        "0x19f3f7c7ee3977705261bfb86f826d5f97b885796f2246be7cc3e815c3e95dca"
++        "0x7daf6049672fd2ab7dc8dd3b6287e1d0a40958346c5e2857c4616a73dcac4da6"
+    }
+```
+
+```diff
+    contract KailuaTreasury (eth:0x9B3E1661bccAF907893B71e4016c01513ae9263C) [risc0/KailuaTreasury] {
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 0s.
+      sourceHashes.0:
+-        "0x35b14b7fe8f45053c4a94391397d28b9c761b99f61f05a08762e1f6acb6faa1f"
++        "0x1f5d136d9ef3211ce0ae011887b99791adcb1bb954819882098164842ddd6508"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x9F9994Eb4Cb5200198FEfb470f8b50301662e696) [risc0/RiscZeroVerifierEmergencyStop] {
+    +++ description: A verifier wrapper for the eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D that allows pausing (emergency stop) the verifier by its owner.
+      sourceHashes.0:
+-        "0x215b7779ba88b0e55cbc280c1640649f7ac41a2b2d76176efef0cfd88fe563f6"
++        "0x285eacaac2ca4f68ef5e866028ae0bc88ebc6f583afc9035f289ad34efc034e3"
+    }
+```
+
+```diff
+    contract SystemConfig (eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) [opstack/SystemConfig] {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      sourceHashes.1:
+-        "0x09e12b8c0307a4da75a8b84ed7c88ced81e386ec09025ec5b36873b4f69614d0"
++        "0xaa1b3bedab4e63198240e9dea4503f0e615e4d18a545961c9f11b72143279fbc"
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9) [taiko/RiscZeroGroth16Verifier] {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 2.2.0).
+      sourceHashes.0:
+-        "0x0ec6714f2eae54d69f7eb8da9f402541927894bca21763405f3a4083e9c1c93a"
++        "0x3bc7088771e0885ea308b56e1dd5ff9818b17e6ad8856232189a849e5db10cac"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) [GnosisSafe] {
+    +++ description: None
+      sourceHashes.1:
+-        "0xd42bbf9f7dcd3720a7fc6bdc6edfdfae8800a37d6dd4decfa0ef6ca4a2e88940"
++        "0x22c7fb8365a538c05d34b77dd9c1967d1ddb7427eda69f84989d4c56603312b7"
+    }
+```
+
+```diff
+    contract AnchorStateRegistry (eth:0xC9AC21AcD8696B64270716528bF83630Ea7a293c) [opstack/AnchorStateRegistry_post13] {
+    +++ description: Contains the latest confirmed state root that can be used as a starting point in a dispute game. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      sourceHashes.1:
+-        "0x1601463fd2e47d8994c28a90b556c6933f38e8685214f702dc41a5ae08d9787c"
++        "0xf808a203af41f7932eb8e39985e56a7c75c940a260fb17d76d1003a3793281b5"
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA) [opstack/L1CrossDomainMessenger] {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      sourceHashes.1:
+-        "0xfa9c986019a03bd66efb7584a7064e708f6fb71956643a9d4daa2c0972a29c03"
++        "0x1f2c13ad1144ce6548e578b834c33b0d65b1564aeb0d5c708ed4e7fb50535cc6"
+    }
+```
+
+```diff
+    contract SuperchainConfig (eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46) [opstack/SuperchainConfigFake_expiry] {
+    +++ description: This is NOT the shared SuperchainConfig contract of the OP stack Superchain but rather a local fork. It manages pause states for each chain connected to it, as well as a global pause state for all chains. The guardian role can pause either separately, but each pause expires after 3mo 1d if left untouched.
+      sourceHashes.1:
+-        "0x53a6b3db7f270298025bbfef7f6c77b420a9808341212fa9cf54a5e157a18567"
++        "0x5fb525d1572fb90d060d122143b915059cbff39e0298b345857fd4267d7f6b28"
+    }
+```
+
+Generated with discovered.json: 0xb5315e332bd94ac2d6892004d67874d6e88e31f3
+
+# Diff at Tue, 05 May 2026 10:22:01 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@b6437082b3ea8fb0d97f4474b1c3452a1ce271b0 block: 1773320760
+- current timestamp: 1773320760
+
+## Description
+
+Include deployer address
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1773320760 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (eth:0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      deployerAddress:
++        "eth:0xe4E5e395E9efb3C1bB37D9c53Ad2F115c6f91FfB"
+    }
+```
+
+```diff
+    contract TimelockController (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711) {
+    +++ description: A timelock with access control. The current minimum delay is 3d.
+      deployerAddress:
++        "eth:0xC450a7c66f97202605c1B46ED0735DbE49c8F4fB"
+    }
+```
+
+```diff
+    contract ProxyAdmin (eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      deployerAddress:
++        "eth:0x43Ea7cC3Fc5C47de680Bd25d3716Ba08dcFEA0B2"
+    }
+```
+
+```diff
+    contract PermissionedDisputeGame (eth:0x15F80920C8Fec136e2A804E04f26203FF8dAd19A) {
+    +++ description: Same as FaultDisputeGame, but only two permissioned addresses are designated as proposer and challenger.
+      deployerAddress:
++        "eth:0x81175155D85377C337d92f1FA52Da166C3A4E7Ac"
+    }
+```
+
+```diff
+    contract DelayedWETH (eth:0x1A08BA77CB95184Ea0C31e56f199Db068eb6B35d) {
+    +++ description: Contract designed to hold the bonded ETH for each game. It is designed as a wrapper around WETH to allow an owner to function as a backstop if a game would incorrectly distribute funds.
+      deployerAddress:
++        "eth:0x81175155D85377C337d92f1FA52Da166C3A4E7Ac"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x1efDd13f831ceeEa14940806705A53D3211CD698) {
+    +++ description: A verifier wrapper for the eth:0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9 that allows pausing (emergency stop) the verifier by its owner.
+      deployerAddress:
++        "eth:0xC450a7c66f97202605c1B46ED0735DbE49c8F4fB"
+    }
+```
+
+```diff
+    contract PreimageOracle (eth:0x1fb8cdFc6831fc866Ed9C51aF8817Da5c287aDD3) {
+    +++ description: The PreimageOracle contract is used to load the required data from L1 for a dispute game.
+      deployerAddress:
++        "eth:0x1D0519EeD308BcD49e4ebc149284F83ebC275284"
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D) {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 3.0.0).
+      deployerAddress:
++        "eth:0xC450a7c66f97202605c1B46ED0735DbE49c8F4fB"
+    }
+```
+
+```diff
+    contract L1StandardBridge (eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      deployerAddress:
++        "eth:0x43Ea7cC3Fc5C47de680Bd25d3716Ba08dcFEA0B2"
+    }
+```
+
+```diff
+    contract KailuaGame (eth:0x4BE239c86364eD73fc244A5F50c8ccB101a492eF) {
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+      deployerAddress:
++        "eth:0x0a1C5E42e423fab63746d375B84d3Fe4cAf9b513"
+    }
+```
+
+```diff
+    contract RiscZeroSetVerifier (eth:0x5005aBa3DFf7C940fcc1e48DccCAD611a80eEB85) {
+    +++ description: Set verifier contract for RISC Zero proofs (version 0.9.0). It allows verifying a whole set of proofs identified with a Merkle root at once, afterwards each individual proof could be efficiently verified just by checking Merkle inclusion against the verified root.
+      deployerAddress:
++        "eth:0xC450a7c66f97202605c1B46ED0735DbE49c8F4fB"
+    }
+```
+
+```diff
+    contract OptimismMintableERC20Factory (eth:0x5557408ab14013ce9Dbb300dE0D87D386BB09cb6) {
+    +++ description: A helper contract that generates OptimismMintableERC20 contracts on the network it's deployed to. OptimismMintableERC20 is a standard extension of the base ERC20 token contract designed to allow the L1StandardBridge contracts to mint and burn tokens. This makes it possible to use an OptimismMintableERC20 as this chain's representation of a token on the host chain, or vice-versa.
+      deployerAddress:
++        "eth:0x43Ea7cC3Fc5C47de680Bd25d3716Ba08dcFEA0B2"
+    }
+```
+
+```diff
+    contract L1ERC721Bridge (eth:0x5fF93263D5181b2A826f8c51d54BC0da2d20D50a) {
+    +++ description: Used to bridge ERC-721 tokens from host chain to this chain.
+      deployerAddress:
++        "eth:0x43Ea7cC3Fc5C47de680Bd25d3716Ba08dcFEA0B2"
+    }
+```
+
+```diff
+    contract MIPS (eth:0x6463dEE3828677F6270d83d45408044fc5eDB908) {
+    +++ description: The MIPS contract is used to execute the final step of the dispute game which objectively determines the winner of the dispute.
+      deployerAddress:
++        "eth:0x1D0519EeD308BcD49e4ebc149284F83ebC275284"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x844D5f01161E3559d36f23d0Aa9E9620949aF782) {
+    +++ description: A verifier wrapper for the eth:0x5005aBa3DFf7C940fcc1e48DccCAD611a80eEB85 that allows pausing (emergency stop) the verifier by its owner.
+      deployerAddress:
++        "eth:0xC450a7c66f97202605c1B46ED0735DbE49c8F4fB"
+    }
+```
+
+```diff
+    contract OptimismPortal2 (eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      deployerAddress:
++        "eth:0x43Ea7cC3Fc5C47de680Bd25d3716Ba08dcFEA0B2"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierRouter (eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319) {
+    +++ description: A router proxy that routes to verifiers based on selectors. The mapping can be changed by a permissioned owner (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711).
+      deployerAddress:
++        "eth:0xC450a7c66f97202605c1B46ED0735DbE49c8F4fB"
+    }
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
+      deployerAddress:
++        "eth:0x0a1C5E42e423fab63746d375B84d3Fe4cAf9b513"
+    }
+```
+
+```diff
+    contract KailuaTreasury (eth:0x9B3E1661bccAF907893B71e4016c01513ae9263C) {
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 0s.
+      deployerAddress:
++        "eth:0x0a1C5E42e423fab63746d375B84d3Fe4cAf9b513"
+    }
+```
+
+```diff
+    contract RiscZeroVerifierEmergencyStop (eth:0x9F9994Eb4Cb5200198FEfb470f8b50301662e696) {
+    +++ description: A verifier wrapper for the eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D that allows pausing (emergency stop) the verifier by its owner.
+      deployerAddress:
++        "eth:0xC450a7c66f97202605c1B46ED0735DbE49c8F4fB"
+    }
+```
+
+```diff
+    contract ProxyAdmin (eth:0xa70ddfb3e00fCFD083E64B200FE867104f703E1c) {
+    +++ description: None
+      deployerAddress:
++        "eth:0x0a1C5E42e423fab63746d375B84d3Fe4cAf9b513"
+    }
+```
+
+```diff
+    contract SystemConfig (eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      deployerAddress:
++        "eth:0x43Ea7cC3Fc5C47de680Bd25d3716Ba08dcFEA0B2"
+    }
+```
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9) {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 2.2.0).
+      deployerAddress:
++        "eth:0xC450a7c66f97202605c1B46ED0735DbE49c8F4fB"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      deployerAddress:
++        "eth:0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C"
+    }
+```
+
+```diff
+    contract AnchorStateRegistry (eth:0xC9AC21AcD8696B64270716528bF83630Ea7a293c) {
+    +++ description: Contains the latest confirmed state root that can be used as a starting point in a dispute game. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      deployerAddress:
++        "eth:0x81175155D85377C337d92f1FA52Da166C3A4E7Ac"
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      deployerAddress:
++        "eth:0x43Ea7cC3Fc5C47de680Bd25d3716Ba08dcFEA0B2"
+    }
+```
+
+```diff
+    contract SuperchainConfig (eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46) {
+    +++ description: This is NOT the shared SuperchainConfig contract of the OP stack Superchain but rather a local fork. It manages pause states for each chain connected to it, as well as a global pause state for all chains. The guardian role can pause either separately, but each pause expires after 3mo 1d if left untouched.
+      deployerAddress:
++        "eth:0x0a1C5E42e423fab63746d375B84d3Fe4cAf9b513"
+    }
+```
+
+```diff
+    contract AddressManager (eth:0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      deployerAddress:
++        "eth:0x43Ea7cC3Fc5C47de680Bd25d3716Ba08dcFEA0B2"
+    }
+```
+
+Generated with discovered.json: 0xb9def753e26c70b370ed847be530d0195bae29d4
+
+# Diff at Thu, 12 Mar 2026 13:08:25 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@7821558a34509d47e2b343e48879506088be050d block: 1772791434
+- current timestamp: 1773320760
+
+## Description
+
+OptimismPortal2 and AnchorStateRegistry upgraded (same tx). proofMaturityDelaySeconds reduced from 604800 (7 days) to 86400 (1 day), disputeGameFinalityDelaySeconds from 302400 (3.5 days) to 86400 (1 day). Actual withdrawal time still depends on Kailua game resolution / proof timing. Templates still match — no new functionality, just constructor parameter changes baked into the new implementations. OptimismPortal2 diff: https://disco.l2beat.com/diff/eth:0x7Cf803296662e8C72A6C1d6450572209aCF7f202/eth:0x3C877699263119022Cdaa251058c1BAc8Fc43287 AnchorStateRegistry diff: https://disco.l2beat.com/diff/eth:0xeb69cC681E8D4a557b30DFFBAd85aFfD47a2CF2E/eth:0xd0216bdcC195abDF77746B6a6347CE85e2535431
+
+## Watched changes
+
+```diff
+    contract OptimismPortal2 (eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      values.$implementation:
+-        "eth:0x7Cf803296662e8C72A6C1d6450572209aCF7f202"
++        "eth:0x3C877699263119022Cdaa251058c1BAc8Fc43287"
+      values.$pastUpgrades.10:
++        ["2026-03-12T10:39:35.000Z","0x0c0e889a96e766d168753f3e596af7d57a9c07f7d84fb0ba05e3d46adf61ddd8",["eth:0x3C877699263119022Cdaa251058c1BAc8Fc43287"]]
+      values.$upgradeCount:
+-        10
++        11
+      values.disputeGameFinalityDelaySeconds:
+-        302400
++        86400
+      values.proofMaturityDelaySeconds:
+-        604800
++        86400
+      implementationNames.eth:0x7Cf803296662e8C72A6C1d6450572209aCF7f202:
+-        "OptimismPortal2"
+      implementationNames.eth:0x3C877699263119022Cdaa251058c1BAc8Fc43287:
++        "OptimismPortal2"
+    }
+```
+
+```diff
+    contract AnchorStateRegistry (eth:0xC9AC21AcD8696B64270716528bF83630Ea7a293c) {
+    +++ description: Contains the latest confirmed state root that can be used as a starting point in a dispute game. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      values.$implementation:
+-        "eth:0xeb69cC681E8D4a557b30DFFBAd85aFfD47a2CF2E"
++        "eth:0xd0216bdcC195abDF77746B6a6347CE85e2535431"
+      values.$pastUpgrades.1:
++        ["2026-03-12T10:39:35.000Z","0x0c0e889a96e766d168753f3e596af7d57a9c07f7d84fb0ba05e3d46adf61ddd8",["eth:0xd0216bdcC195abDF77746B6a6347CE85e2535431"]]
+      values.$upgradeCount:
+-        1
++        2
+      values.disputeGameFinalityDelaySeconds:
+-        302400
++        86400
+      implementationNames.eth:0xeb69cC681E8D4a557b30DFFBAd85aFfD47a2CF2E:
+-        "AnchorStateRegistry"
+      implementationNames.eth:0xd0216bdcC195abDF77746B6a6347CE85e2535431:
++        "AnchorStateRegistry"
+    }
+```
+
+Generated with discovered.json: 0xafd6a86c6d5cf320b1babb5e8a37aa4c4ad7f314
+
+# Diff at Fri, 06 Mar 2026 10:05:07 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@4100d91208092499341e9181894e315cc8ef1f26 block: 1772143358
+- current timestamp: 1772791434
+
+## Description
+
+New KailuaGame and KailuaTreasury instances deployed with the same implementation code (identical source hashes). The ROLLUP_CONFIG_HASH changed (0x4910...→0x69d9...) in preparation for BOB's Jovian hardfork activation on March 12, 2026 (mainnet timestamp 1773325801). The Kailua config hash includes hardfork timestamps, so adding jovian_time changes the hash. Ref: https://github.com/bob-collective/bob/pull/960. The KailuaTreasury L2_BLOCK_NUMBER also advanced (29576476→29835945).
+
+KailuaGame diff: https://disco.l2beat.com/diff/eth:0xe34577E7d8bbdf044de236B15DF132B1409ca82a/eth:0x4BE239c86364eD73fc244A5F50c8ccB101a492eF
+
+KailuaTreasury diff: https://disco.l2beat.com/diff/eth:0xE99AF5F4C60E06Beb3827F4ffdD06E88c55fB895/eth:0x9B3E1661bccAF907893B71e4016c01513ae9263C
+
+## Watched changes
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game1337:
+-        "eth:0xe34577E7d8bbdf044de236B15DF132B1409ca82a"
++        "eth:0x4BE239c86364eD73fc244A5F50c8ccB101a492eF"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaGame (eth:0xe34577E7d8bbdf044de236B15DF132B1409ca82a)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaTreasury (eth:0xE99AF5F4C60E06Beb3827F4ffdD06E88c55fB895)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 0s.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (eth:0x4BE239c86364eD73fc244A5F50c8ccB101a492eF)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaTreasury (eth:0x9B3E1661bccAF907893B71e4016c01513ae9263C)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 0s.
+```
+
+Generated with discovered.json: 0xb15c9fd77c1a7287678c8ad8c91872056d324e99
+
+# Diff at Thu, 26 Feb 2026 22:03:44 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@17ff9ba367ef55b34e16f082bde7902f4760911e block: 1769532258
+- current timestamp: 1772143358
+
+## Description
+
+BOB's Kailua dispute system was updated with new KailuaGame and KailuaTreasury contract instances. The DisputeGameFactory's game1337 implementation changed from 0xe4341585 to 0xe34577E7.
+
+The new KailuaTreasury (0xE99AF5F4) retains the 0.5 ETH participation bond but has no vanguard advantage set (previously 1 month). The source code change is the addition of an OP-Contracts v5 compatibility shim: an `anchorStateRegistry()` function that returns `msg.sender`, allowing withdrawals under op-contracts v5.0.0.
+
+The FPVM image ID also updated (0xf176eb82 → 0x4aca4abd), indicating a new ZK verification image for the RISC Zero prover.
+
+KailuaGame diff: https://disco.l2beat.com/diff/eth:0xe4341585B9BbC55A44C20A3C037058891e7A053b/eth:0xe34577E7d8bbdf044de236B15DF132B1409ca82a
+
+KailuaTreasury diff: https://disco.l2beat.com/diff/eth:0x6F27A23Fc28C18EB2C268BFe1d575E051Ad94420/eth:0xE99AF5F4C60E06Beb3827F4ffdD06E88c55fB895
+
+## Watched changes
+
+```diff
+-   Status: DELETED
+    contract KailuaTreasury (eth:0x6F27A23Fc28C18EB2C268BFe1d575E051Ad94420)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 1mo.
+```
+
+```diff
+    EOA  (eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions:
+-        [{"permission":"interact","from":"eth:0x6F27A23Fc28C18EB2C268BFe1d575E051Ad94420","description":"propose new state roots before anyone else, giving a first-mover advantage on the optimistic clock.","role":".vanguard"}]
+    }
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game1337:
+-        "eth:0xe4341585B9BbC55A44C20A3C037058891e7A053b"
++        "eth:0xe34577E7d8bbdf044de236B15DF132B1409ca82a"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaGame (eth:0xe4341585B9BbC55A44C20A3C037058891e7A053b)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (eth:0xe34577E7d8bbdf044de236B15DF132B1409ca82a)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaTreasury (eth:0xE99AF5F4C60E06Beb3827F4ffdD06E88c55fB895)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 0s.
+```
+
+## Source code changes
+
+```diff
+.../projects/bob/{.flat@1769532258 => .flat}/KailuaTreasury.sol  | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+```
+
+Generated with discovered.json: 0x13d49e446b120492a07f5cb3561b918045e47a85
+
+# Diff at Fri, 13 Feb 2026 11:33:08 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@55ab80636f1e0c000e757a7a146f11035a19e9c0 block: 1769532258
+- current timestamp: 1769532258
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1769532258 (main branch discovery), not current.
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
+      values.challengerFromDGF:
++        "UNRESOLVED"
+      values.proposerFromDGF:
++        "UNRESOLVED"
+      values.wethFromDGF:
++        "UNRESOLVED"
+      usedTypes:
++        [{"typeCaster":"SliceAddress","arg":{"offset":124}},{"typeCaster":"SliceAddress","arg":{"offset":144}},{"typeCaster":"SliceAddress","arg":{"offset":72}}]
+    }
+```
+
+Generated with discovered.json: 0x64ba262484c99fb1d7c15926c7614428a5b2bf51
+
+# Diff at Tue, 27 Jan 2026 16:46:34 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@01c924f177b66fde012756076e94adb03520b757 block: 1768989690
+- current timestamp: 1769532258
+
+## Description
+
+New KailuaGame implementation (type 1337) deployed with OP-Contracts v5 compatibility patch. The new implementation adds a mock `anchorStateRegistry()` function that returns `msg.sender` as a workaround - OP-Contracts v5 expects dispute games to have this function for withdrawal finalization.
+
+Diff: https://disco.l2beat.com/diff/eth:0x1E987CF54A39CA2AC5FdC97DCaFbbB805ef356bD/eth:0xe4341585B9BbC55A44C20A3C037058891e7A053b
+
+## Watched changes
+
+```diff
+-   Status: DELETED
+    contract KailuaGame (eth:0x1E987CF54A39CA2AC5FdC97DCaFbbB805ef356bD)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game1337:
+-        "eth:0x1E987CF54A39CA2AC5FdC97DCaFbbB805ef356bD"
++        "eth:0xe4341585B9BbC55A44C20A3C037058891e7A053b"
+    }
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (eth:0xe4341585B9BbC55A44C20A3C037058891e7A053b)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+## Source code changes
+
+```diff
+./src/projects/bob/{.flat@1768989690 => .flat}/KailuaGame.sol | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+```
+
+Generated with discovered.json: 0xc48ba9bfc1c31779625405f6d126a761305a9a04
+
+# Diff at Wed, 21 Jan 2026 10:03:40 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@a72aa7d50f1dddc0c7a6eae7f60679fc94e4eabf block: 1765550347
+- current timestamp: 1768989690
+
+## Description
+
+Upgraded to op-contracts v1.8.0-rc.4 (isthmus). Major version upgrades: OptimismPortal2 3.14.0 → 5.1.1, SystemConfig 2.5.0 → 3.11.0, L1CrossDomainMessenger 2.6.0 → 2.11.0, L1StandardBridge 2.3.0 → 2.8.0, L1ERC721Bridge 2.4.0 → 2.9.0, DisputeGameFactory 1.0.1 → 1.3.0. New dispute game infrastructure deployed with MIPS64, PermissionedDisputeGame, DelayedWETH, and AnchorStateRegistry at new addresses. SystemConfig maximumGasLimit increased from 200M to 500M.
+
+Notable changes specific to Bob: disputeGameFinalityDelaySeconds increased from 1 day to 3.5 days, proofMaturityDelaySeconds increased from 1 day to 7 days. SuperchainConfig upgraded to v2.4.0 with pause expiry feature (3mo 1d).
+
+## Watched changes
+
+```diff
+    contract ProxyAdmin (eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.1.from:
+-        "eth:0x3a1D54496cf461fFc96d3b1a8A0B43B091ea3c13"
++        "eth:0x1A08BA77CB95184Ea0C31e56f199Db068eb6B35d"
+      directlyReceivedPermissions.8:
++        {"permission":"upgrade","from":"eth:0xC9AC21AcD8696B64270716528bF83630Ea7a293c","role":"admin"}
+      directlyReceivedPermissions.9:
+-        {"permission":"upgrade","from":"eth:0xeBA14d52F1b19cA65455E5ECaB72D2FfD9e43fEF","role":"admin"}
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract DelayedWETH (eth:0x3a1D54496cf461fFc96d3b1a8A0B43B091ea3c13)
+    +++ description: Contract designed to hold the bonded ETH for each game. It is designed as a wrapper around WETH to allow an owner to function as a backstop if a game would incorrectly distribute funds.
+```
+
+```diff
+    contract L1StandardBridge (eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      sourceHashes.1:
+-        "0x4e15d99844dc5a4304c2396a66c95ec41218ea311c8e524b118fad7beed0bb53"
++        "0x0114d3af66179d6404d14360203dc6bcf404f23e2db4ee1b5848e923e131bc00"
+      values.$implementation:
+-        "eth:0x0b09ba359A106C9ea3b181CBc5F394570c7d2a7A"
++        "eth:0x61525EaaCDdB97D9184aFc205827E6A4fd0Bf62A"
+      values.version:
+-        "2.3.0"
++        "2.8.0"
+      values.initVersion:
++        3
+      values.proxyAdmin:
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.proxyAdminOwner:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.systemConfig:
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      implementationNames.eth:0x0b09ba359A106C9ea3b181CBc5F394570c7d2a7A:
+-        "L1StandardBridge"
+      implementationNames.eth:0x61525EaaCDdB97D9184aFc205827E6A4fd0Bf62A:
++        "L1StandardBridge"
+    }
+```
+
+```diff
+    contract OptimismMintableERC20Factory (eth:0x5557408ab14013ce9Dbb300dE0D87D386BB09cb6) {
+    +++ description: A helper contract that generates OptimismMintableERC20 contracts on the network it's deployed to. OptimismMintableERC20 is a standard extension of the base ERC20 token contract designed to allow the L1StandardBridge contracts to mint and burn tokens. This makes it possible to use an OptimismMintableERC20 as this chain's representation of a token on the host chain, or vice-versa.
+      sourceHashes.1:
+-        "0x9650b4bba6299e410f01a369a95a2c57e1c3ca35f0d80c13f4f59fc468f370e5"
++        "0x25bad2bdb7df4347412a48e271dea1489299460192b43b8ca52ed191b4940992"
+      values.$implementation:
+-        "eth:0x5493f4677A186f64805fe7317D6993ba4863988F"
++        "eth:0x8ee6fB13c6c9a7e401531168E196Fbf8b05cEabB"
+      values.$pastUpgrades.5:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x8ee6fB13c6c9a7e401531168E196Fbf8b05cEabB"]]
+      values.$upgradeCount:
+-        5
++        6
+      values.version:
+-        "1.10.1"
++        "1.10.2"
+      implementationNames.eth:0x5493f4677A186f64805fe7317D6993ba4863988F:
+-        "OptimismMintableERC20Factory"
+      implementationNames.eth:0x8ee6fB13c6c9a7e401531168E196Fbf8b05cEabB:
++        "OptimismMintableERC20Factory"
+    }
+```
+
+```diff
+    contract L1ERC721Bridge (eth:0x5fF93263D5181b2A826f8c51d54BC0da2d20D50a) {
+    +++ description: Used to bridge ERC-721 tokens from host chain to this chain.
+      sourceHashes.1:
+-        "0x28669b49da3effd51f0f9424ca9cdd455c5b9327c09a40c65fc06f114a6eb837"
++        "0x75cd470a9d1c1afc343b599b1c14731f55bb36fe8a4e844ddb88a0b791918795"
+      values.$implementation:
+-        "eth:0x7aE1d3BD877a4C5CA257404ce26BE93A02C98013"
++        "eth:0x74f1aC50EB0BE98853805D381C884f5f9abDEcf9"
+      values.$pastUpgrades.7:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x7f1d12fB2911EB095278085f721e644C1f675696"]]
+      values.$pastUpgrades.8:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x74f1aC50EB0BE98853805D381C884f5f9abDEcf9"]]
+      values.$upgradeCount:
+-        7
++        9
+      values.version:
+-        "2.4.0"
++        "2.9.0"
+      values.initVersion:
++        3
+      values.proxyAdmin:
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.proxyAdminOwner:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.systemConfig:
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      implementationNames.eth:0x7aE1d3BD877a4C5CA257404ce26BE93A02C98013:
+-        "L1ERC721Bridge"
+      implementationNames.eth:0x74f1aC50EB0BE98853805D381C884f5f9abDEcf9:
++        "L1ERC721Bridge"
+    }
+```
+
+```diff
+    contract OptimismPortal2 (eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      sourceHashes.1:
+-        "0xc483ef9e0a5ec2a0450732e743b3784de0cd3876b8fadfce14c0805a0846d26b"
++        "0xec3fef2865ee3bd465fea37851bfc490f143eba36d1e45d220832d39770aa8f2"
+      values.$implementation:
+-        "eth:0xB250566074B3c0f1B109A531A83f3d9B1a579273"
++        "eth:0x7Cf803296662e8C72A6C1d6450572209aCF7f202"
+      values.$pastUpgrades.8:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x381E729FF983FA4BCEd820e7b922d79bF653B999"]]
+      values.$pastUpgrades.9:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x7Cf803296662e8C72A6C1d6450572209aCF7f202"]]
+      values.$upgradeCount:
+-        8
++        10
+      values.disputeGameFinalityDelaySeconds:
+-        86400
++        302400
+      values.proofMaturityDelaySeconds:
+-        86400
++        604800
+      values.respectedGameTypeUpdatedAt:
+-        1752761915
++        1768920023
+      values.version:
+-        "3.14.0"
++        "5.1.1"
+      values.anchorStateRegistry:
++        "eth:0xC9AC21AcD8696B64270716528bF83630Ea7a293c"
+      values.ethLockbox:
++        "eth:0x0000000000000000000000000000000000000000"
+      values.initVersion:
++        3
+      values.proxyAdmin:
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.proxyAdminOwner:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      implementationNames.eth:0xB250566074B3c0f1B109A531A83f3d9B1a579273:
+-        "OptimismPortal2"
+      implementationNames.eth:0x7Cf803296662e8C72A6C1d6450572209aCF7f202:
++        "OptimismPortal2"
+    }
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
+      sourceHashes.1:
+-        "0x85ca17941ef36ac6b28a4f8f89803d0d41ef419c47586dcd3acdb47ee9617285"
++        "0x19f3f7c7ee3977705261bfb86f826d5f97b885796f2246be7cc3e815c3e95dca"
+      values.$implementation:
+-        "eth:0x4bbA758F006Ef09402eF31724203F316ab74e4a0"
++        "eth:0x74Fac1D45B98bae058F8F566201c9A81B85C7D50"
+      values.$pastUpgrades.2:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x33D1e8571a85a538ed3D5A4d88f46C112383439D"]]
+      values.$pastUpgrades.3:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x74Fac1D45B98bae058F8F566201c9A81B85C7D50"]]
+      values.$upgradeCount:
+-        2
++        4
++++ severity: HIGH
+      values.gameImpls.1:
+-        "eth:0xe3BD00F57B44E7aa4A6C212878427c85D638702A"
++        "eth:0x15F80920C8Fec136e2A804E04f26203FF8dAd19A"
+      values.version:
+-        "1.0.1"
++        "1.3.0"
+      values.initVersion:
++        1
+      values.proxyAdmin:
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.proxyAdminOwner:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      implementationNames.eth:0x4bbA758F006Ef09402eF31724203F316ab74e4a0:
+-        "DisputeGameFactory"
+      implementationNames.eth:0x74Fac1D45B98bae058F8F566201c9A81B85C7D50:
++        "DisputeGameFactory"
+    }
+```
+
+```diff
+    contract SystemConfig (eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      sourceHashes.1:
+-        "0x921de6fc906d159fdcef862d2b9559063f5e7b9b7588fa5f33153360ddf296e7"
++        "0x09e12b8c0307a4da75a8b84ed7c88ced81e386ec09025ec5b36873b4f69614d0"
+      values.$implementation:
+-        "eth:0x340f923E5c7cbB2171146f64169EC9d5a9FfE647"
++        "eth:0x2fA28989fc559836E9d66dFf3010C7F7f41c65ED"
+      values.$pastUpgrades.8:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x2bFE4A5Bd5A41e9d848d843ebCDFa15954e9A557"]]
+      values.$pastUpgrades.9:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x2fA28989fc559836E9d66dFf3010C7F7f41c65ED"]]
+      values.$upgradeCount:
+-        8
++        10
+      values.DISPUTE_GAME_FACTORY_SLOT:
+-        "0x52322a25d9f59ea17656545543306b7aef62bc0cc53a0e65ccfa0c75b97aa906"
+      values.getAddresses.disputeGameFactory:
+-        "eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079"
+      values.maximumGasLimit:
+-        200000000
++        500000000
+      values.version:
+-        "2.5.0"
++        "3.11.0"
+      values.daFootprintGasScalar:
++        0
+      values.guardian:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.initVersion:
++        3
+      values.l2ChainId:
++        60808
+      values.minBaseFee:
++        0
+      values.paused:
++        false
+      values.proxyAdmin:
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.proxyAdminOwner:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.superchainConfig:
++        "eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46"
+      implementationNames.eth:0x340f923E5c7cbB2171146f64169EC9d5a9FfE647:
+-        "SystemConfig"
+      implementationNames.eth:0x2fA28989fc559836E9d66dFf3010C7F7f41c65ED:
++        "SystemConfig"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.1:
+-        {"permission":"interact","from":"eth:0x3a1D54496cf461fFc96d3b1a8A0B43B091ea3c13","description":"can pull funds from the contract in case of emergency.","role":".owner"}
+      receivedPermissions.4.from:
+-        "eth:0x3a1D54496cf461fFc96d3b1a8A0B43B091ea3c13"
++        "eth:0x1A08BA77CB95184Ea0C31e56f199Db068eb6B35d"
+      receivedPermissions.10:
++        {"permission":"upgrade","from":"eth:0xC9AC21AcD8696B64270716528bF83630Ea7a293c","role":"admin","via":[{"address":"eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.13:
+-        {"permission":"upgrade","from":"eth:0xeBA14d52F1b19cA65455E5ECaB72D2FfD9e43fEF","role":"admin","via":[{"address":"eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract PermissionedDisputeGame (eth:0xe3BD00F57B44E7aa4A6C212878427c85D638702A)
+    +++ description: Same as FaultDisputeGame, but only two permissioned addresses are designated as proposer and challenger.
+```
+
+```diff
+    contract L1CrossDomainMessenger (eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      sourceHashes.1:
+-        "0x03bcdc719cb7bd0a1377c01bb50b30a6122b308f673b7d7b15a3bb8628e6bd8c"
++        "0xfa9c986019a03bd66efb7584a7064e708f6fb71956643a9d4daa2c0972a29c03"
+      values.$implementation:
+-        "eth:0x5D5a095665886119693F0B41d8DFeE78da033e8B"
++        "eth:0xb686F13AfF1e427a1f993F29ab0F2E7383729FE0"
+      values.$pastUpgrades.8:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0x22D12E0FAebD62d429514A65EBAe32dd316c12D6"]]
+      values.$pastUpgrades.9:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0xb686F13AfF1e427a1f993F29ab0F2E7383729FE0"]]
+      values.$upgradeCount:
+-        8
++        10
+      values.version:
+-        "2.6.0"
++        "2.11.0"
+      values.initVersion:
++        3
+      values.proxyAdmin:
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.proxyAdminOwner:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.systemConfig:
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      implementationNames.eth:0x5D5a095665886119693F0B41d8DFeE78da033e8B:
+-        "L1CrossDomainMessenger"
+      implementationNames.eth:0xb686F13AfF1e427a1f993F29ab0F2E7383729FE0:
++        "L1CrossDomainMessenger"
+    }
+```
+
+```diff
+    contract SuperchainConfig (eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46) {
+    +++ description: This is NOT the shared SuperchainConfig contract of the OP stack Superchain but rather a local fork. It manages pause states for each chain connected to it, as well as a global pause state for all chains. The guardian role can pause either separately, but each pause expires after 3mo 1d if left untouched.
+      template:
+-        "opstack/SuperchainConfigFake"
++        "opstack/SuperchainConfigFake_expiry"
+      sourceHashes.1:
+-        "0x03dba37173051b02bc81487e181c791bcf1aef664c249e5d035f11f488bdd686"
++        "0x53a6b3db7f270298025bbfef7f6c77b420a9808341212fa9cf54a5e157a18567"
+      description:
+-        "This is NOT the shared SuperchainConfig contract of the OP stack Superchain but rather a local fork. It manages the `PAUSED_SLOT`, a boolean value indicating whether the local chain is paused, and `GUARDIAN_SLOT`, the address of the guardian which can pause and unpause the system."
++        "This is NOT the shared SuperchainConfig contract of the OP stack Superchain but rather a local fork. It manages pause states for each chain connected to it, as well as a global pause state for all chains. The guardian role can pause either separately, but each pause expires after 3mo 1d if left untouched."
+      values.$implementation:
+-        "eth:0x4da82a327773965b8d4D85Fa3dB8249b387458E7"
++        "eth:0xb08Cc720F511062537ca78BdB0AE691F04F5a957"
+      values.$pastUpgrades.1:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0xCe28685EB204186b557133766eCA00334EB441E4"]]
+      values.$pastUpgrades.2:
++        ["2026-01-20T14:40:23.000Z","0xd025dbac937aa7bd1c53511421d35cc97c18a848ebb123cc85e910ab517a8922",["eth:0xb08Cc720F511062537ca78BdB0AE691F04F5a957"]]
+      values.$upgradeCount:
+-        1
++        3
+      values.GUARDIAN_SLOT:
+-        "0xd30e835d3f35624761057ff5b27d558f97bd5be034621e62240e5c0b784abe68"
+      values.PAUSED_SLOT:
+-        "0x54176ff9944c4784e5857ec4e5ef560a462c483bf534eda43f91bb01a470b1b6"
+      values.version:
+-        "1.2.0"
++        "2.4.0"
+      values.initVersion:
++        2
+      values.pauseExpiry:
++        7884000
+      values.pauseExpiryFmt:
++        "3mo 1d"
+      values.proxyAdmin:
++        "eth:0xa70ddfb3e00fCFD083E64B200FE867104f703E1c"
+      values.proxyAdminOwner:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      implementationNames.eth:0x4da82a327773965b8d4D85Fa3dB8249b387458E7:
+-        "SuperchainConfig"
+      implementationNames.eth:0xb08Cc720F511062537ca78BdB0AE691F04F5a957:
++        "SuperchainConfig"
+      category.name:
+-        "Governance"
++        "Shared Infrastructure"
+      category.priority:
+-        3
++        4
+      fieldMeta:
++        {"paused":{"severity":"HIGH"}}
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract AnchorStateRegistry (eth:0xeBA14d52F1b19cA65455E5ECaB72D2FfD9e43fEF)
+    +++ description: Contains the latest confirmed state root that can be used as a starting point in a dispute game.
+```
+
+```diff
+-   Status: DELETED
+    contract MIPS (eth:0xF027F4A985560fb13324e943edf55ad6F1d15Dc1)
+    +++ description: The MIPS contract is used to execute the final step of the dispute game which objectively determines the winner of the dispute.
+```
+
+```diff
++   Status: CREATED
+    contract PermissionedDisputeGame (eth:0x15F80920C8Fec136e2A804E04f26203FF8dAd19A)
+    +++ description: Same as FaultDisputeGame, but only two permissioned addresses are designated as proposer and challenger.
+```
+
+```diff
++   Status: CREATED
+    contract DelayedWETH (eth:0x1A08BA77CB95184Ea0C31e56f199Db068eb6B35d)
+    +++ description: Contract designed to hold the bonded ETH for each game. It is designed as a wrapper around WETH to allow an owner to function as a backstop if a game would incorrectly distribute funds.
+```
+
+```diff
++   Status: CREATED
+    contract MIPS (eth:0x6463dEE3828677F6270d83d45408044fc5eDB908)
+    +++ description: The MIPS contract is used to execute the final step of the dispute game which objectively determines the winner of the dispute.
+```
+
+```diff
++   Status: CREATED
+    contract AnchorStateRegistry (eth:0xC9AC21AcD8696B64270716528bF83630Ea7a293c)
+    +++ description: Contains the latest confirmed state root that can be used as a starting point in a dispute game. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+```
+
+## Source code changes
+
+```diff
+.../AnchorStateRegistry/AnchorStateRegistry.sol    | 418 ++++++++-
+ .../DelayedWETH/DelayedWETH.sol                    | 406 ++++++---
+ .../DisputeGameFactory/DisputeGameFactory.sol      | 297 ++++++-
+ .../L1CrossDomainMessenger.sol                     | 377 +++++++-
+ .../L1ERC721Bridge/L1ERC721Bridge.sol              | 313 ++++++-
+ .../L1StandardBridge/L1StandardBridge.sol          | 313 ++++++-
+ .../bob/{.flat@1765550347 => .flat}/MIPS.sol       | 622 +++++++------
+ .../OptimismMintableERC20Factory.sol               |   4 +-
+ .../OptimismPortal2/OptimismPortal2.sol            | 966 +++++++++++++--------
+ .../PermissionedDisputeGame.sol                    | 142 ++-
+ .../SuperchainConfig/SuperchainConfig.sol          | 465 +++++++---
+ .../SystemConfig/SystemConfig.sol                  | 495 ++++++++---
+ 12 files changed, 3692 insertions(+), 1126 deletions(-)
+```
+
+Generated with discovered.json: 0xf563e953164227ff884db892bde98a9494747e5c
+
+# Diff at Fri, 12 Dec 2025 16:19:49 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@d2235ef7f5c90cb4a3a617fea7d52a655dc22fa1 block: 1764953632
+- current timestamp: 1765550347
+
+## Description
+
+Added game 42 to template.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1764953632 (main branch discovery), not current.
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game2000:
++        "eth:0x0000000000000000000000000000000000000000"
++++ severity: HIGH
+      values.game42:
++        "eth:0x0000000000000000000000000000000000000000"
+      values.initBondGame42:
++        0
+      fieldMeta.game2000:
++        {"severity":"HIGH"}
+      fieldMeta.game42:
++        {"severity":"HIGH"}
+    }
+```
+
+Generated with discovered.json: 0xbab74fe7b51be1ed885772dad35d5faaa6c00e5d
+
+# Diff at Thu, 11 Dec 2025 14:14:15 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@f33847f925c13483ce2ffd9595b070f8d1c55730 block: 1764953632
+- current timestamp: 1764953632
+
+## Description
+
+Config: remove challenger from template and move to config.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1764953632 (main branch discovery), not current.
+
+```diff
+    EOA  (eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.1:
+-        {"permission":"propose","from":"eth:0xe3BD00F57B44E7aa4A6C212878427c85D638702A","role":".proposer"}
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.0:
+-        {"permission":"challenge","from":"eth:0xe3BD00F57B44E7aa4A6C212878427c85D638702A","role":".challenger"}
+    }
+```
+
+Generated with discovered.json: 0xb9f3c3b50c7c1477ee13ac88478e3d5db70434be
+
+# Diff at Fri, 05 Dec 2025 16:55:04 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@1edf3e71cea32596658a3ea017cea9df6408b77c block: 1764751565
+- current timestamp: 1764953632
+
+## Description
+
+Upgrade to v3.0.4:
+
+Fix bug in Kona, update FPVM image id to `0xf176eb82fbbb5d2d281a9cce459062bcdbe65f93d7156829b174fae2b4690c23`.
+
+## Watched changes
+
+```diff
+-   Status: DELETED
+    contract KailuaTreasury (eth:0x220C56BCB401001e5D218604c143D38DA107fC4a)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 1mo.
+```
+
+```diff
+    EOA  (eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "eth:0x220C56BCB401001e5D218604c143D38DA107fC4a"
++        "eth:0x6F27A23Fc28C18EB2C268BFe1d575E051Ad94420"
+    }
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game1337:
+-        "eth:0xe65E24a2130d0a52A0f9B988dFA06D5759eBa22B"
++        "eth:0x1E987CF54A39CA2AC5FdC97DCaFbbB805ef356bD"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaGame (eth:0xe65E24a2130d0a52A0f9B988dFA06D5759eBa22B)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (eth:0x1E987CF54A39CA2AC5FdC97DCaFbbB805ef356bD)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaTreasury (eth:0x6F27A23Fc28C18EB2C268BFe1d575E051Ad94420)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 1mo.
+```
+
+Generated with discovered.json: 0xdb2f663058286364ab69e95e0f44ef5e6ef887f7
+
+# Diff at Wed, 03 Dec 2025 08:47:22 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@cb61f5ec5bdfe1b0d99f8a8bbf88c803aa243605 block: 1763031834
+- current timestamp: 1764751565
+
+## Description
+
+update the FPVM image id from `0x7ce98c36408e86dac21fc16af301740d07a849be0a80529debcb0797fd66f5e3` to `0xd7c1d74ce26e897e8bc7ea094667dcdb04c405ba1836bdb9b0ad773fc9fd0651`, also:
+
+1. switch to permissioned dispute game (type 1): https://app.blocksec.com/explorer/tx/eth/0x0632241f1d1c26ac8f6f32deafaa02c48f35e030c013289ca36d125f8a09ce7b
+2. set implementation for type 1337 (kailua treasury), propose state: https://app.blocksec.com/explorer/tx/eth/0x7e5a439e3040d6ae3a3b604b8a92c584755cb389991c47c6c557979c49c50ec9
+3. resolve game, set implementation for type 1337 (kailua game), switch to gametype 1337 https://app.blocksec.com/explorer/tx/eth/0x3afce50f425057d0505cec3c97729811011862fade71ec3f04ed5d372eb84d69 
+
+tldr: this injects unproven state in the second transaction, which cannot be used for withdrawals but can be used as a base for future state proposals
+
+## Watched changes
+
+```diff
+-   Status: DELETED
+    contract KailuaTreasury (eth:0x0e4152204995877DF34BD26d6dab78baf9393Ae2)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 1mo.
+```
+
+```diff
+    EOA  (eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "eth:0x0e4152204995877DF34BD26d6dab78baf9393Ae2"
++        "eth:0x220C56BCB401001e5D218604c143D38DA107fC4a"
+    }
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game1337:
+-        "eth:0x9b9f9CD7A6BfCB55c18bfA35392F409F98B35B44"
++        "eth:0xe65E24a2130d0a52A0f9B988dFA06D5759eBa22B"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaGame (eth:0x9b9f9CD7A6BfCB55c18bfA35392F409F98B35B44)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaTreasury (eth:0x220C56BCB401001e5D218604c143D38DA107fC4a)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 1mo.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (eth:0xe65E24a2130d0a52A0f9B988dFA06D5759eBa22B)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+Generated with discovered.json: 0xd25958143a8b2d41a1d4b974fbfda59f41f75909
+
+# Diff at Thu, 13 Nov 2025 11:05:32 GMT:
+
+- author: vincfurc (<vincfurc@users.noreply.github.com>)
+- comparing to: main@236e99b8e7528eefed3152e229515862240afbdc block: 1759250312
+- current timestamp: 1763031834
+
+## Description
+
+Two verifiers removed from RiscZeroVerifierRouter, unrelated to BOB verifiers still active.
+
+## Watched changes
+
+```diff
+    contract TimelockController (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711) {
+    +++ description: A timelock with access control. The current minimum delay is 3d.
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.10:
++        {"id":"0xcb59c64b787c143323784e652a53a3df139307efbcefa80b438a461680142a2b","index":0,"target":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","value":0,"data":"0x93d237f650bd176900000000000000000000000000000000000000000000000000000000"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.11:
++        {"id":"0x02c881bb278f937c1b8b577c6a44e474f471442762ddaf1e416b5ae793acf8cc","index":0,"target":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","value":0,"data":"0x93d237f6c101b42b00000000000000000000000000000000000000000000000000000000"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.13:
++        {"id":"0xcb59c64b787c143323784e652a53a3df139307efbcefa80b438a461680142a2b","index":0,"target":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","value":0,"data":"0x93d237f650bd176900000000000000000000000000000000000000000000000000000000","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.14:
++        {"id":"0x02c881bb278f937c1b8b577c6a44e474f471442762ddaf1e416b5ae793acf8cc","index":0,"target":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","value":0,"data":"0x93d237f6c101b42b00000000000000000000000000000000000000000000000000000000","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
+    }
+```
+
+Generated with discovered.json: 0xcf9ef8f345cdbdfe6a98275cf26f85d8e63708a1
+
+# Diff at Tue, 04 Nov 2025 11:32:27 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@9ff7b62a511791b99f61b604fb6b56e4ea223bb0 block: 1759250312
+- current timestamp: 1759250312
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1759250312 (main branch discovery), not current.
+
+```diff
+    contract PermissionedDisputeGame (eth:0xe3BD00F57B44E7aa4A6C212878427c85D638702A) {
+    +++ description: Same as FaultDisputeGame, but only two permissioned addresses are designated as proposer and challenger.
+      sourceHashes.0:
+-        "0x7129ee348039f13e017c18c90ffcb319f67a8fdd3b4a5a28c39aabc8bf0c57f6"
++        "0x0a442058af95748cc6199d889a46c775f9f6f4d29a61df5124ceb93ff631074d"
+    }
+```
+
+```diff
+    contract MIPS (eth:0xF027F4A985560fb13324e943edf55ad6F1d15Dc1) {
+    +++ description: The MIPS contract is used to execute the final step of the dispute game which objectively determines the winner of the dispute.
+      sourceHashes.0:
+-        "0x115725ab57eeed11f754138c0ec5f9bfba41e494b2336c2cd4745778eb26f776"
++        "0xd693f0cc376e99425037555be4a61adb70c597ad1485e838c475743c79a41fa0"
+    }
+```
+
+Generated with discovered.json: 0xa6b4396e05f2fc3f9a0e5c5ea4fab8d889ade523
+
+# Diff at Mon, 03 Nov 2025 17:44:25 GMT:
+
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@6b72018cd9706ce7cba8ec489b67d7193f34dc20 block: 1759250312
+- current timestamp: 1759250312
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1759250312 (main branch discovery), not current.
+
+```diff
+    EOA  (eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.1:
++        {"permission":"propose","from":"eth:0xe3BD00F57B44E7aa4A6C212878427c85D638702A","role":".proposer"}
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.0:
++        {"permission":"challenge","from":"eth:0xe3BD00F57B44E7aa4A6C212878427c85D638702A","role":".challenger"}
+    }
+```
+
+Generated with discovered.json: 0x4f1e60233f231ad10c803244fd349661d0a29522
+
+# Diff at Tue, 30 Sep 2025 16:39:37 GMT:
+
+- author: vincfurc (<10850139+vincfurc@users.noreply.github.com>)
+- comparing to: main@c66a02d28b2467edd595f8a8468988549dd6d3cf block: 1757326876
+- current timestamp: 1759250312
+
+## Description
+
+Operator fee decrease, multisig key rotation.
+
+## Watched changes
+
+```diff
+    contract SystemConfig (eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      values.operatorFeeConstant:
+-        45000000000000
++        15000000000000
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      values.$members.3:
+-        "eth:0x50930d652266EF4127FA3A1906B7Cb9951076628"
++        "eth:0x81175155D85377C337d92f1FA52Da166C3A4E7Ac"
+    }
+```
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1757326876 (main branch discovery), not current.
+
+```diff
+    contract KailuaTreasury (eth:0x0e4152204995877DF34BD26d6dab78baf9393Ae2) {
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 1mo.
+      description:
+-        "Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 30d."
++        "Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 1mo."
+      values.vanguardAdvantageFmt:
+-        "30d"
++        "1mo"
+    }
+```
+
+Generated with discovered.json: 0x4a53fe1d5dab613b7c3e899566488a5bf3bc6145
+
+# Diff at Mon, 15 Sep 2025 09:50:20 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@37882e40cb6029f3a2ae2bb177048e3e846b833d block: 1757326876
+- current timestamp: 1757326876
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1757326876 (main branch discovery), not current.
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.gameImpls.2:
++        "eth:0x0000000000000000000000000000000000000000"
++++ severity: HIGH
+      values.gameImpls.3:
++        "eth:0x0000000000000000000000000000000000000000"
+    }
+```
+
+Generated with discovered.json: 0x3f37f2651510da90fad2308d2b2c13c7f8389cf4
+
+# Diff at Mon, 08 Sep 2025 10:22:22 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@be9ffaec1ec417b3f28ad840def15862a3b29b8f block: 1756900853
+- current timestamp: 1757326876
+
+## Description
+
+- Added RiscZeroSetVerifier contract that allows verifying a set of proofs at once (identified by a Merkle root). Once a set of proofs is verified, each individual proof could be efficiently verified just by checking Merkle inclusion.
+- Guest program for this verifier could be found here: https://github.com/risc0/risc0-ethereum/tree/main/crates/aggregation.
+- This contract does not verify any zkp on itself and rather redirects them to actual verifeirs.
+- Templatized this RiscZeroSetVerifier.
+
+## Watched changes
+
+```diff
+    contract TimelockController (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711) {
+    +++ description: A timelock with access control. The current minimum delay is 3d.
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.9:
++        {"id":"0xaee8ce52716542c6fedc0f10553f1b763702d9bef05dcdcdf8c5cb2ed8d6cabb","index":0,"target":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","value":0,"data":"0xd0a6af30242f9d5b00000000000000000000000000000000000000000000000000000000000000000000000000000000844d5f01161e3559d36f23d0aa9e9620949af782"}
+    }
+```
+
+```diff
+    contract RiscZeroVerifierRouter (eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319) {
+    +++ description: A router proxy that routes to verifiers based on selectors. The mapping can be changed by a permissioned owner (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711).
+      values.verifier7Manual:
+-        "EXPECT_REVERT"
++        "eth:0x844D5f01161E3559d36f23d0Aa9E9620949aF782"
+    }
+```
+
+```diff
+    EOA  (eth:0xF616A4f81857CFEe54A4A049Ec187172574bd412) {
+    +++ description: None
+      receivedPermissions.5:
++        {"permission":"interact","from":"eth:0x844D5f01161E3559d36f23d0Aa9E9620949aF782","description":"pause the verifier.","role":".owner"}
+    }
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroSetVerifier (eth:0x5005aBa3DFf7C940fcc1e48DccCAD611a80eEB85)
+    +++ description: Set verifier contract for RISC Zero proofs (version 0.9.0). It allows verifying a whole set of proofs identified with a Merkle root at once, afterwards each individual proof could be efficiently verified just by checking Merkle inclusion against the verified root.
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroVerifierEmergencyStop (eth:0x844D5f01161E3559d36f23d0Aa9E9620949aF782)
+    +++ description: A verifier wrapper for the eth:0x5005aBa3DFf7C940fcc1e48DccCAD611a80eEB85 that allows pausing (emergency stop) the verifier by its owner.
+```
+
+## Source code changes
+
+```diff
+.../src/projects/bob/.flat/RiscZeroSetVerifier.sol | 816 +++++++++++++++++++++
+ ...:0x844D5f01161E3559d36f23d0Aa9E9620949aF782.sol | 315 ++++++++
+ 2 files changed, 1131 insertions(+)
+```
+
+Generated with discovered.json: 0x235b7cc359f9a2112797866f8ecade24e094eae9
+
+# Diff at Wed, 03 Sep 2025 12:05:12 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@f81a67544a1eef3c7f105dd59187ddee7ac70879 block: 1756804191
+- current timestamp: 1756900853
+
+## Description
+
+- Scheduled tx: new risc zero verifier is being added.
+- KailuaTreasury has been updated to change a few immutables related to proving with no code changes.
+- added handler that will discover the new verifier as soon as it is deployed
+- add template for the groth16 verifier v3
+
+## Watched changes
+
+```diff
+    contract TimelockController (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711) {
+    +++ description: A timelock with access control. The current minimum delay is 3d.
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.12:
++        {"id":"0xaee8ce52716542c6fedc0f10553f1b763702d9bef05dcdcdf8c5cb2ed8d6cabb","index":0,"target":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","value":0,"data":"0xd0a6af30242f9d5b00000000000000000000000000000000000000000000000000000000000000000000000000000000844d5f01161e3559d36f23d0aa9e9620949af782","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaTreasury (eth:0x72284bbB177B13db6F7b703846EEDfB24914B764)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 30d.
+```
+
+```diff
+    EOA  (eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "eth:0x72284bbB177B13db6F7b703846EEDfB24914B764"
++        "eth:0x0e4152204995877DF34BD26d6dab78baf9393Ae2"
+    }
+```
+
+```diff
+    contract DisputeGameFactory (eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game1337:
+-        "eth:0xD5A72E5C2d8fC5e12cba6F81FA67d9A5F4A48B6a"
++        "eth:0x9b9f9CD7A6BfCB55c18bfA35392F409F98B35B44"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaGame (eth:0xD5A72E5C2d8fC5e12cba6F81FA67d9A5F4A48B6a)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaTreasury (eth:0x0e4152204995877DF34BD26d6dab78baf9393Ae2)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 30d.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (eth:0x9b9f9CD7A6BfCB55c18bfA35392F409F98B35B44)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1756804191 (main branch discovery), not current.
+
+```diff
+    contract RiscZeroGroth16Verifier (eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D) {
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 3.0.0).
+      template:
++        "taiko/RiscZeroGroth16Verifier"
+      description:
++        "Verifier contract for RISC Zero Groth16 proofs (version 3.0.0)."
+    }
+```
+
+```diff
+    contract RiscZeroVerifierRouter (eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319) {
+    +++ description: A router proxy that routes to verifiers based on selectors. The mapping can be changed by a permissioned owner (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711).
+      values.verifier7Manual:
++        "EXPECT_REVERT"
+    }
+```
+
+Generated with discovered.json: 0x998241f4d73928dc7b2b4978e7c04c5b81ff0310
+
+# Diff at Tue, 02 Sep 2025 09:11:51 GMT:
+
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@1144aeaf984988c003c97be3791eeda76896f8ca block: 1755696029
+- current timestamp: 1756804191
+
+## Description
+
+Increased operator fee.
+
+## Watched changes
+
+```diff
+    contract SystemConfig (eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      values.operatorFeeConstant:
+-        15000000000000
++        45000000000000
+    }
+```
+
+Generated with discovered.json: 0x57a803bbf6f4a166c09e486ece0fe2cc1d2c5889
+
+# Diff at Mon, 01 Sep 2025 10:01:10 GMT:
+
+Merge mark
+
+Generated with discovered.json: 0x203000013482bfc46287b678aaabacf4f177b270
+
+# Diff at Wed, 20 Aug 2025 13:20:38 GMT:
+
+- chain: ethereum
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@a5cc1e039bdedb279170d2bb52305902c4ef8183 block: 1755593388
+- current timestamp: 1755696029
+
+## Description
+
+Fee changes.
+
+## Watched changes
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      values.basefeeScalar:
+-        10000000
++        2000000
+      values.operatorFeeConstant:
+-        0
++        15000000000000
+    }
+```
+
+Generated with discovered.json: 0xa7ce99a387f5c6fdb9cc11763d894e3e7b92340e
+
+# Diff at Tue, 19 Aug 2025 08:50:03 GMT:
+
+- chain: ethereum
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@68aa16384f50c1fed10bef1bedec004cd66392e4 block: 1754482163
+- current timestamp: 1755593388
+
+## Description
+
+The decoded first scheduled and then executed call can be found [here](https://tools.l2beat.com/decoder-new/?data=u7BsvUHxkfBdDESC-TOnvPbZqsA4499vd_7uAAOxpGfTAA&to=0x8eab2d97dfce405a1692a21b3ff3a172d593d319&chainId=1) and it adds a `RiscZeroVerifierEmergencyStop`
+- Address: `0x9f9994eb4cb5200198fefb470f8b50301662e696`
+- Selector: `0x73c457ba`
+
+Honestly im not sure why all other verifiers are commented out if they can still be used. Will ask basti when he gets back. For now i added this one and kept the previous one.
+
+## Watched changes
+
+```diff
+    contract TimelockController (0x0b144E07A0826182B6b59788c34b32Bfa86Fb711) {
+    +++ description: A timelock with access control. The current minimum delay is 3d.
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
++++ severity: HIGH
+      values.callsExecuted.8:
++        {"id":"0x8f9bc667a318296f0c9a7a2773fd371cfedc904128c7ff5af6c246d383cb46db","index":0,"target":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","value":0,"data":"0xd0a6af3073c457ba000000000000000000000000000000000000000000000000000000000000000000000000000000009f9994eb4cb5200198fefb470f8b50301662e696"}
++++ description: since the RiscZeroVerifierRouter does not emit events on verifier changes, we watch the single upstream permissioned address.
+      values.callsScheduled.11:
++        {"id":"0x8f9bc667a318296f0c9a7a2773fd371cfedc904128c7ff5af6c246d383cb46db","index":0,"target":"eth:0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319","value":0,"data":"0xd0a6af3073c457ba000000000000000000000000000000000000000000000000000000000000000000000000000000009f9994eb4cb5200198fefb470f8b50301662e696","predecessor":"0x0000000000000000000000000000000000000000000000000000000000000000","delay":259200}
+    }
+```
+
+```diff
+    contract RiscZeroVerifierRouter (0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319) {
+    +++ description: A router proxy that routes to verifiers based on selectors. The mapping can be changed by a permissioned owner (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711).
+      values.verifier6Manual:
++        "eth:0x9F9994Eb4Cb5200198FEfb470f8b50301662e696"
+      errors:
+-        {"verifier6Manual":"Processing error occurred."}
+    }
+```
+
+```diff
+    EOA  (0xF616A4f81857CFEe54A4A049Ec187172574bd412) {
+    +++ description: None
+      receivedPermissions.6:
++        {"permission":"interact","from":"eth:0x9F9994Eb4Cb5200198FEfb470f8b50301662e696","description":"pause the verifier.","role":".owner"}
+    }
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroGroth16Verifier (0x2a098988600d87650Fb061FfAff08B97149Fa84D)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroVerifierEmergencyStop (0x9F9994Eb4Cb5200198FEfb470f8b50301662e696)
+    +++ description: A verifier wrapper for the eth:0x2a098988600d87650Fb061FfAff08B97149Fa84D that allows pausing (emergency stop) the verifier by its owner.
+```
+
+## Source code changes
+
+```diff
+...:0x2a098988600d87650Fb061FfAff08B97149Fa84D.sol | 1699 ++++++++++++++++++++
+ ...0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9.sol} |    0
+ ...0x1efDd13f831ceeEa14940806705A53D3211CD698.sol} |    0
+ ...:0x9F9994Eb4Cb5200198FEfb470f8b50301662e696.sol |  315 ++++
+ 4 files changed, 2014 insertions(+)
+```
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1754482163 (main branch discovery), not current.
+
+```diff
+    contract RiscZeroVerifierRouter (0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319) {
+    +++ description: A router proxy that routes to verifiers based on selectors. The mapping can be changed by a permissioned owner (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711).
+      errors:
++        {"verifier6Manual":"Processing error occurred."}
+    }
+```
+
+Generated with discovered.json: 0x0cd169c99228834e7e06575c0c94176449bc6e47
+
+# Diff at Wed, 06 Aug 2025 12:09:36 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@1702d91eebfba5d614c3470bbe1babe10fbe4c2b block: 1753375355
+- current timestamp: 1754482163
+
+## Description
+
+single MS member switched.
+
+## Watched changes
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      values.$members.3:
+-        "eth:0xa4000bDD2bB92ce6750b31F1eeda47Bd1cB8e6e4"
++        "eth:0x50930d652266EF4127FA3A1906B7Cb9951076628"
+    }
+```
+
+Generated with discovered.json: 0x43c5d959245580ab3c4ad8e09c2d1a75589600bb
+
+# Diff at Thu, 24 Jul 2025 16:48:18 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@a3f740c0fd51a5745c45d8f349ab01f4f33f7770 block: 22988923
+- current block number: 22990276
+
+## Description
+
+set dispute game impl changes to high severity.
+
+## Watched changes
+
+```diff
+-   Status: DELETED
+    contract KailuaTreasury (0x0fbC22B052f4745Bc9F80760D2D47E4993F36746)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 30d.
+```
+
+```diff
+    EOA  (0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "eth:0x0fbC22B052f4745Bc9F80760D2D47E4993F36746"
++        "eth:0x72284bbB177B13db6F7b703846EEDfB24914B764"
+    }
+```
+
+```diff
+    contract DisputeGameFactory (0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
++++ severity: HIGH
+      values.game1337:
+-        "eth:0xCD1173B1B7A93E63070E1Ec37E8c8a9316f5AfDb"
++        "eth:0xD5A72E5C2d8fC5e12cba6F81FA67d9A5F4A48B6a"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract KailuaGame (0xCD1173B1B7A93E63070E1Ec37E8c8a9316f5AfDb)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaTreasury (0x72284bbB177B13db6F7b703846EEDfB24914B764)
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 30d.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (0xD5A72E5C2d8fC5e12cba6F81FA67d9A5F4A48B6a)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22988923 (main branch discovery), not current.
+
+```diff
+    contract OptimismPortal2 (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      fieldMeta.respectedGameType:
++        {"severity":"HIGH"}
+    }
+```
+
+```diff
+    contract DisputeGameFactory (0x96123dbFC3253185B594c6a7472EE5A21E9B1079) {
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
+      fieldMeta:
++        {"gameImpls":{"severity":"HIGH"},"game1337":{"severity":"HIGH"}}
+    }
+```
+
+Generated with discovered.json: 0xfa99e90b94d041702d2993969e737a18c819eb96
+
+# Diff at Thu, 24 Jul 2025 12:21:30 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@8ea8c4bdec260dd5774704d85ceb7d7dbf9bbd48 block: 22979976
+- current block number: 22988923
+
+## Description
+
+ignore `lastResolved` in watch mode and push some more info into the contract description.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22979976 (main branch discovery), not current.
+
+```diff
+    contract KailuaTreasury (0x0fbC22B052f4745Bc9F80760D2D47E4993F36746) {
+    +++ description: Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 30d.
+      description:
+-        "Entrypoint for state root proposals. Manages bonds and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory."
++        "Entrypoint for state root proposals. Manages bonds (currently 0.5 ETH) and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory. The current vanguard advantage is defined here as 30d."
+      values.participationBondFmt:
++        "0.5"
+      values.vanguardAdvantageFmt:
++        "30d"
+      usedTypes:
++        [{"typeCaster":"Undecimal","arg":{"decimals":18}}]
+    }
+```
+
+Generated with discovered.json: 0x062861cee1e1bf6aa963ec55b86fe36d2c4e03cc
+
+# Diff at Wed, 23 Jul 2025 06:06:54 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@b127194ffb9a32e4b6fde08f1602fbf66f1843fc block: 22665980
+- current block number: 22979976
+
+## Description
+
+07-23: Upgrade OptimismPortal2 again to change the finality delays ([no code changes](https://disco.l2beat.com/diff/eth:0xB443Da3e07052204A02d630a8933dAc05a0d6fB4/eth:0xB250566074B3c0f1B109A531A83f3d9B1a579273)). 
+- proofMaturityDelaySeconds: 7d->1d
+- disputeGameFinalityDelaySeconds: 3.5d->1d 
+
+Upgrade to standard OP stack v3 contracts (OptiPortal2) with [KAILUA Hybrid mode](https://boundless-xyz.github.io/kailua/design.html) as respected dispute game. Kailua is configured in [Vanguard mode](https://boundless-xyz.github.io/kailua/parameters.html?highlight=vanguard#vanguard-advantage).
+
+summary:
+- standard op stack contracts
+- standard op stack DisputeGameFactory with **custom** game1337 dispute game implementation
+- state validation: hybrid optimistic + zk proven proposal tree:
+  - a proposal must include a bond and a blob with intermediate state roots (3600)
+  - any new proposal under the same parent state root implicitly challenges its siblings
+    - but to eliminate siblings, such a new proposer needs to actively prove something after making their proposal (since the older siblings would win by their challenge window expiring first)
+  - how to compete against siblings:
+    1. MAX_CLOCK_DURATION on a node (KailuaGame) expires without a fault proof or sibling's validity proof = node optimistically wins against all siblings
+    2. a validity proof over the entire range (3600*6 blocks) of a proposal can be zk-proven at any stage, immediately winning the game (**eliminating all siblings**)
+    3. a 'fault proof' **eliminates a single sibling**: proves that a single intermediary state transition (6 blocks) in an opponents proposal results in a different (proven) state root than they committed to
+  - vanguard mode:
+    - first child proposal (to progress the state) can only be made by the vanguard address for `vanguardAdvantage` period (30d)
+      - `proveOutputFault()` and `proveValidity()` are always permissionless during that time (a vanguard's proposal can be (in)validated))
+      - siblings can be created as soon as the vanguard has proposed the first, meaning the vanguard only has the 'optimistic' advantage, giving the 'burden of proof' to other actors
+  - DISPUTE_GAME_FINALITY_DELAY_SECONDS (execution delay) = 3.5d
+    - for everyone incl vanguard this delays finalization of a winning (resolved) state root (for example to have time to blacklist the winning dispute game by the guardian)
+
+some code:
+- diff PermissionedDisputeGame/KailuaGame: https://disco.l2beat.com/diff/eth:0xF27d54dB0587442b01d6036C0F7f67CDaaBa1743/eth:0xCD1173B1B7A93E63070E1Ec37E8c8a9316f5AfDb
+- moved TimelockController of the RiscZeroVerifierRouter to standard template ([diff](https://disco.l2beat.com/diff/eth:0x45828180bbE489350D621d002968A0585406d487/eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711)): 3d delay, EOA-controlled
+- superchainconfigFake: added v1.2.0 template (same code as opstack superchainconf, different gov addresses): https://disco.l2beat.com/diff/eth:0x4da82a327773965b8d4D85Fa3dB8249b387458E7/eth:0x4da82a327773965b8d4D85Fa3dB8249b387458E7
+
+## Watched changes
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.1:
++        {"permission":"upgrade","from":"eth:0x3a1D54496cf461fFc96d3b1a8A0B43B091ea3c13","role":"admin"}
+      directlyReceivedPermissions.3:
++        {"permission":"upgrade","from":"eth:0x5557408ab14013ce9Dbb300dE0D87D386BB09cb6","role":"admin"}
+      directlyReceivedPermissions.4:
++        {"permission":"upgrade","from":"eth:0x5fF93263D5181b2A826f8c51d54BC0da2d20D50a","role":"admin"}
+      directlyReceivedPermissions.6:
++        {"permission":"upgrade","from":"eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079","role":"admin"}
+      directlyReceivedPermissions.4:
+-        {"permission":"upgrade","from":"eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1","role":"admin"}
+      directlyReceivedPermissions.9:
++        {"permission":"upgrade","from":"eth:0xeBA14d52F1b19cA65455E5ECaB72D2FfD9e43fEF","role":"admin"}
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      sourceHashes.1:
+-        "0x79abdbd90460fe2ac0535b5cb7b4c45284322b49a0a090d1c509cdaf35dbc87e"
++        "0x4e15d99844dc5a4304c2396a66c95ec41218ea311c8e524b118fad7beed0bb53"
+      values.$implementation:
+-        "eth:0xEEAfA156A5dd3811Ee0D9F91db57A77eA53A8d31"
++        "eth:0x0b09ba359A106C9ea3b181CBc5F394570c7d2a7A"
+      values.version:
+-        "1.1.1"
++        "2.3.0"
+      values.otherBridge:
++        "eth:0x4200000000000000000000000000000000000010"
+      values.paused:
++        false
+      values.superchainConfig:
++        "eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46"
+      implementationNames.eth:0xEEAfA156A5dd3811Ee0D9F91db57A77eA53A8d31:
+-        "L1StandardBridge"
+      implementationNames.eth:0x0b09ba359A106C9ea3b181CBc5F394570c7d2a7A:
++        "L1StandardBridge"
+    }
+```
+
+```diff
+    EOA  (0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.0.description:
++        "propose new state roots before anyone else, giving a first-mover advantage on the optimistic clock."
+      receivedPermissions.0.role:
+-        ".PROPOSER"
++        ".vanguard"
+      receivedPermissions.0.from:
+-        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "eth:0x0fbC22B052f4745Bc9F80760D2D47E4993F36746"
+      receivedPermissions.0.permission:
+-        "propose"
++        "interact"
+    }
+```
+
+```diff
+    contract OptimismPortal2 (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame.
+      name:
+-        "OptimismPortal"
++        "OptimismPortal2"
+      template:
+-        "opstack/OptimismPortal"
++        "opstack/OptimismPortal2"
+      sourceHashes.1:
+-        "0xd7fe53899c31d6d8e73b6724694736dc3c3c4ebc8f4ddbe989fe9d3dba26692d"
++        "0xc483ef9e0a5ec2a0450732e743b3784de0cd3876b8fadfce14c0805a0846d26b"
+      description:
+-        "The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals."
++        "The OptimismPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals. It specifies which game type can be used for withdrawals, which currently is the KailuaGame."
+      values.$implementation:
+-        "eth:0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc"
++        "eth:0xB250566074B3c0f1B109A531A83f3d9B1a579273"
+      values.$pastUpgrades.1:
++        ["2025-07-17T13:28:47.000Z","0x1d93c182527e3c738f03ffb7baf66bbddfb29e1e60bbd9f5457c7de1a90eaaf1",["eth:0x6322C2f2D6a4305Fc033754d486A5A067Ee5F9b1"]]
+      values.$pastUpgrades.2:
++        ["2025-07-17T13:28:47.000Z","0x1d93c182527e3c738f03ffb7baf66bbddfb29e1e60bbd9f5457c7de1a90eaaf1",["eth:0x2D778797049FE9259d947D1ED8e5442226dFB589"]]
+      values.$pastUpgrades.3:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0xd81f43eDBCAcb4c29a9bA38a13Ee5d79278270cC"]]
+      values.$pastUpgrades.4:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0xe2F826324b2faf99E513D16D266c3F80aE87832B"]]
+      values.$pastUpgrades.5:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0x2D7e764a0D9919e16983a46595CfA81fc34fa7Cd"]]
+      values.$pastUpgrades.6:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0xB443Da3e07052204A02d630a8933dAc05a0d6fB4"]]
+      values.$pastUpgrades.7:
++        ["2025-07-22T19:58:23.000Z","0xa7881069c54f1028d42b83406ac5a768154f8ff34ad37ec7641b4d45766e77c3",["eth:0xB250566074B3c0f1B109A531A83f3d9B1a579273"]]
+      values.$upgradeCount:
+-        1
++        8
+      values.GUARDIAN:
+-        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.L2_ORACLE:
+-        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      values.SYSTEM_CONFIG:
+-        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      values.version:
+-        "1.7.2"
++        "3.14.0"
+      values.disputeGameFactory:
++        "eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079"
+      values.disputeGameFinalityDelaySeconds:
++        86400
+      values.guardian:
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.proofMaturityDelaySeconds:
++        86400
+      values.RespectedGameString:
++        "KailuaGame"
+      values.respectedGameType:
++        1337
+      values.respectedGameTypeUpdatedAt:
++        1752761915
+      values.superchainConfig:
++        "eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46"
+      values.systemConfig:
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      implementationNames.eth:0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc:
+-        "OptimismPortal"
+      implementationNames.eth:0xB250566074B3c0f1B109A531A83f3d9B1a579273:
++        "OptimismPortal2"
+      fieldMeta:
++        {"paused":{"severity":"HIGH","description":"Whether the contract is paused or not. Determined by the SuperchainConfig contract PAUSED_SLOT. Here it pauses withdrawals. If this is paused, also the L1CrossDomainMessenger and ERC-20, ERC-721 deposits are paused."}}
+      usedTypes:
++        [{"typeCaster":"Mapping","arg":{"0":"FaultDisputeGame","1":"PermissionedDisputeGame","1337":"KailuaGame"}}]
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      sourceHashes.1:
+-        "0x29908eb7685943ff431cd384af851ce36a30997bbad880f9b4385bfc3abb86a2"
++        "0x921de6fc906d159fdcef862d2b9559063f5e7b9b7588fa5f33153360ddf296e7"
+      values.$implementation:
+-        "eth:0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590"
++        "eth:0x340f923E5c7cbB2171146f64169EC9d5a9FfE647"
+      values.$pastUpgrades.1:
++        ["2025-07-17T13:28:47.000Z","0x1d93c182527e3c738f03ffb7baf66bbddfb29e1e60bbd9f5457c7de1a90eaaf1",["eth:0x6322C2f2D6a4305Fc033754d486A5A067Ee5F9b1"]]
+      values.$pastUpgrades.2:
++        ["2025-07-17T13:28:47.000Z","0x1d93c182527e3c738f03ffb7baf66bbddfb29e1e60bbd9f5457c7de1a90eaaf1",["eth:0xba2492e52F45651B60B8B38d4Ea5E2390C64Ffb1"]]
+      values.$pastUpgrades.3:
++        ["2025-07-17T13:38:47.000Z","0xfdd53dea057419dee4a1f773029c57925865a0db916df2eddf1dbc988e6f3d56",["eth:0xAB9d6cB7A427c0765163A7f45BB91cAfe5f2D375"]]
+      values.$pastUpgrades.4:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0xd81f43eDBCAcb4c29a9bA38a13Ee5d79278270cC"]]
+      values.$pastUpgrades.5:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0xAB9d6cB7A427c0765163A7f45BB91cAfe5f2D375"]]
+      values.$pastUpgrades.6:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0x760C48C62A85045A6B69f07F4a9f22868659CbCc"]]
+      values.$pastUpgrades.7:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0x340f923E5c7cbB2171146f64169EC9d5a9FfE647"]]
+      values.$upgradeCount:
+-        1
++        8
+      values.version:
+-        "1.3.1"
++        "2.5.0"
+      values.basefeeScalar:
++        10000000
+      values.BATCH_INBOX_SLOT:
++        "0x71ac12829d66ee73d8d95bff50b3589745ce57edae70a3fb111a2342464dc597"
+      values.batchInbox:
++        "eth:0x3A75346f81302aAc0333FB5DCDD407e12A6CfA83"
+      values.blobbasefeeScalar:
++        611590
+      values.DISPUTE_GAME_FACTORY_SLOT:
++        "0x52322a25d9f59ea17656545543306b7aef62bc0cc53a0e65ccfa0c75b97aa906"
+      values.disputeGameFactory:
++        "eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079"
++++ description: volatility param: lower denominator -> quicker fee changes on L2
+      values.eip1559Denominator:
++        0
+      values.eip1559Elasticity:
++        0
+      values.getAddresses:
++        {"l1CrossDomainMessenger":"eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA","l1ERC721Bridge":"eth:0x5fF93263D5181b2A826f8c51d54BC0da2d20D50a","l1StandardBridge":"eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7","disputeGameFactory":"eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079","optimismPortal":"eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E","optimismMintableERC20Factory":"eth:0x5557408ab14013ce9Dbb300dE0D87D386BB09cb6"}
+      values.L1_CROSS_DOMAIN_MESSENGER_SLOT:
++        "0x383f291819e6d54073bc9a648251d97421076bdd101933c0c022219ce9580636"
+      values.L1_ERC_721_BRIDGE_SLOT:
++        "0x46adcbebc6be8ce551740c29c47c8798210f23f7f4086c41752944352568d5a7"
+      values.L1_STANDARD_BRIDGE_SLOT:
++        "0x9904ba90dde5696cda05c9e0dab5cbaa0fea005ace4d11218a02ac668dad6376"
+      values.l1CrossDomainMessenger:
++        "eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+      values.l1ERC721Bridge:
++        "eth:0x5fF93263D5181b2A826f8c51d54BC0da2d20D50a"
+      values.l1StandardBridge:
++        "eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      values.maximumGasLimit:
++        200000000
+      values.operatorFeeConstant:
++        0
+      values.operatorFeeScalar:
++        0
+      values.OPTIMISM_MINTABLE_ERC20_FACTORY_SLOT:
++        "0xa04c5bb938ca6fc46d95553abf0a76345ce3e722a30bf4f74928b8e7d852320c"
+      values.OPTIMISM_PORTAL_SLOT:
++        "0x4b6c74f9e688cb39801f2112c14a8c57232a3fc5202e1444126d4bce86eb19ac"
+      values.optimismMintableERC20Factory:
++        "eth:0x5557408ab14013ce9Dbb300dE0D87D386BB09cb6"
+      values.optimismPortal:
++        "eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      values.START_BLOCK_SLOT:
++        "0xa11ee3ab75b40e88a0105e935d17cd36c8faee0138320d776c411291bdbbb19f"
+      values.startBlock:
++        19634330
+      implementationNames.eth:0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590:
+-        "SystemConfig"
+      implementationNames.eth:0x340f923E5c7cbB2171146f64169EC9d5a9FfE647:
++        "SystemConfig"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.0.role:
+-        ".CHALLENGER"
++        ".guardian"
+      receivedPermissions.0.from:
+-        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46"
+      receivedPermissions.0.permission:
+-        "challenge"
++        "guard"
+      receivedPermissions.1.description:
++        "can pull funds from the contract in case of emergency."
+      receivedPermissions.1.role:
+-        ".GUARDIAN"
++        ".owner"
+      receivedPermissions.1.from:
+-        "eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "eth:0x3a1D54496cf461fFc96d3b1a8A0B43B091ea3c13"
+      receivedPermissions.1.permission:
+-        "guard"
++        "interact"
+      receivedPermissions.4:
++        {"permission":"upgrade","from":"eth:0x3a1D54496cf461fFc96d3b1a8A0B43B091ea3c13","role":"admin","via":[{"address":"eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.6:
++        {"permission":"upgrade","from":"eth:0x5557408ab14013ce9Dbb300dE0D87D386BB09cb6","role":"admin","via":[{"address":"eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.7:
++        {"permission":"upgrade","from":"eth:0x5fF93263D5181b2A826f8c51d54BC0da2d20D50a","role":"admin","via":[{"address":"eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.9:
++        {"permission":"upgrade","from":"eth:0x96123dbFC3253185B594c6a7472EE5A21E9B1079","role":"admin","via":[{"address":"eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.7:
+-        {"permission":"upgrade","from":"eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1","role":"admin","via":[{"address":"eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.12:
++        {"permission":"upgrade","from":"eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46","role":"admin","via":[{"address":"eth:0xa70ddfb3e00fCFD083E64B200FE867104f703E1c"}]}
+      receivedPermissions.13:
++        {"permission":"upgrade","from":"eth:0xeBA14d52F1b19cA65455E5ECaB72D2FfD9e43fEF","role":"admin","via":[{"address":"eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      directlyReceivedPermissions.1:
++        {"permission":"act","from":"eth:0xa70ddfb3e00fCFD083E64B200FE867104f703E1c","role":".owner"}
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1)
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      sourceHashes.1:
+-        "0xebfb36a18bcaa176678925149b43fdc5f9f943d98a6405ae1cbc26f4c168ff88"
++        "0x03bcdc719cb7bd0a1377c01bb50b30a6122b308f673b7d7b15a3bb8628e6bd8c"
+      values.$implementation:
+-        "eth:0x237853621998a33Fa5B9B820592F4c6f4c158c12"
++        "eth:0x5D5a095665886119693F0B41d8DFeE78da033e8B"
+      values.$pastUpgrades.2:
++        ["2025-07-17T13:28:47.000Z","0x1d93c182527e3c738f03ffb7baf66bbddfb29e1e60bbd9f5457c7de1a90eaaf1",["eth:0x6322C2f2D6a4305Fc033754d486A5A067Ee5F9b1"]]
+      values.$pastUpgrades.3:
++        ["2025-07-17T13:28:47.000Z","0x1d93c182527e3c738f03ffb7baf66bbddfb29e1e60bbd9f5457c7de1a90eaaf1",["eth:0xD3494713A5cfaD3F5359379DfA074E2Ac8C6Fd65"]]
+      values.$pastUpgrades.4:
++        ["2025-07-17T13:38:47.000Z","0xfdd53dea057419dee4a1f773029c57925865a0db916df2eddf1dbc988e6f3d56",["eth:0xd81f43eDBCAcb4c29a9bA38a13Ee5d79278270cC"]]
+      values.$pastUpgrades.5:
++        ["2025-07-17T13:38:47.000Z","0xfdd53dea057419dee4a1f773029c57925865a0db916df2eddf1dbc988e6f3d56",["eth:0xD3494713A5cfaD3F5359379DfA074E2Ac8C6Fd65"]]
+      values.$pastUpgrades.6:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0x3eA6084748ED1b2A9B5D4426181F1ad8C93F6231"]]
+      values.$pastUpgrades.7:
++        ["2025-07-17T14:18:35.000Z","0x5fc7da71db9e1541e3eeeedbc3dd3058bf01b5d03b10eee95eaa5668e9efd74e",["eth:0x5D5a095665886119693F0B41d8DFeE78da033e8B"]]
+      values.$upgradeCount:
+-        2
++        8
+      values.version:
+-        "1.4.1"
++        "2.6.0"
+      values.ENCODING_OVERHEAD:
++        260
+      values.FLOOR_CALLDATA_OVERHEAD:
++        40
+      values.otherMessenger:
++        "eth:0x4200000000000000000000000000000000000007"
+      values.paused:
++        false
+      values.portal:
++        "eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      values.superchainConfig:
++        "eth:0xE925205ad05D8d612Ac205C4941CCd61Fc965C46"
+      values.TX_BASE_GAS:
++        21000
+      implementationNames.eth:0x237853621998a33Fa5B9B820592F4c6f4c158c12:
+-        "L1CrossDomainMessenger"
+      implementationNames.eth:0x5D5a095665886119693F0B41d8DFeE78da033e8B:
++        "L1CrossDomainMessenger"
+    }
+```
+
+```diff
++   Status: CREATED
+    contract TimelockController (0x0b144E07A0826182B6b59788c34b32Bfa86Fb711)
+    +++ description: A timelock with access control. The current minimum delay is 3d.
+```
+
+```diff
++   Status: CREATED
+    contract KailuaTreasury (0x0fbC22B052f4745Bc9F80760D2D47E4993F36746)
+    +++ description: Entrypoint for state root proposals. Manages bonds and tournaments for the OP Kailua state validation system, wrapping the OP stack native DisputeGameFactory.
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroVerifierEmergencyStop (0x1efDd13f831ceeEa14940806705A53D3211CD698)
+    +++ description: A verifier wrapper for the eth:0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9 that allows pausing (emergency stop) the verifier by its owner.
+```
+
+```diff
++   Status: CREATED
+    contract PreimageOracle (0x1fb8cdFc6831fc866Ed9C51aF8817Da5c287aDD3)
+    +++ description: The PreimageOracle contract is used to load the required data from L1 for a dispute game.
+```
+
+```diff
++   Status: CREATED
+    contract DelayedWETH (0x3a1D54496cf461fFc96d3b1a8A0B43B091ea3c13)
+    +++ description: Contract designed to hold the bonded ETH for each game. It is designed as a wrapper around WETH to allow an owner to function as a backstop if a game would incorrectly distribute funds.
+```
+
+```diff
++   Status: CREATED
+    contract OptimismMintableERC20Factory (0x5557408ab14013ce9Dbb300dE0D87D386BB09cb6)
+    +++ description: A helper contract that generates OptimismMintableERC20 contracts on the network it's deployed to. OptimismMintableERC20 is a standard extension of the base ERC20 token contract designed to allow the L1StandardBridge contracts to mint and burn tokens. This makes it possible to use an OptimismMintableERC20 as this chain's representation of a token on the host chain, or vice-versa.
+```
+
+```diff
++   Status: CREATED
+    contract L1ERC721Bridge (0x5fF93263D5181b2A826f8c51d54BC0da2d20D50a)
+    +++ description: Used to bridge ERC-721 tokens from host chain to this chain.
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroVerifierRouter (0x8EaB2D97Dfce405A1692a21b3ff3A172d593D319)
+    +++ description: A router proxy that routes to verifiers based on selectors. The mapping can be changed by a permissioned owner (eth:0x0b144E07A0826182B6b59788c34b32Bfa86Fb711).
+```
+
+```diff
++   Status: CREATED
+    contract DisputeGameFactory (0x96123dbFC3253185B594c6a7472EE5A21E9B1079)
+    +++ description: The dispute game factory allows the creation of dispute games, used to propose state roots and eventually challenge them.
+```
+
+```diff
++   Status: CREATED
+    contract ProxyAdmin (0xa70ddfb3e00fCFD083E64B200FE867104f703E1c)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract RiscZeroGroth16Verifier (0xafB31f5b70623CDF4b20Ada3f7230916A5A79df9)
+    +++ description: Verifier contract for RISC Zero Groth16 proofs (version 2.2.0).
+```
+
+```diff
++   Status: CREATED
+    contract KailuaGame (0xCD1173B1B7A93E63070E1Ec37E8c8a9316f5AfDb)
+    +++ description: Implementation of the KailuaGame with type 1337. Based on this implementation, new KailuaGames are created with every new state root proposal.
+```
+
+```diff
++   Status: CREATED
+    contract PermissionedDisputeGame (0xe3BD00F57B44E7aa4A6C212878427c85D638702A)
+    +++ description: Same as FaultDisputeGame, but only two permissioned addresses are designated as proposer and challenger.
+```
+
+```diff
++   Status: CREATED
+    contract SuperchainConfig (0xE925205ad05D8d612Ac205C4941CCd61Fc965C46)
+    +++ description: This is NOT the shared SuperchainConfig contract of the OP stack Superchain but rather a local fork. It manages the `PAUSED_SLOT`, a boolean value indicating whether the local chain is paused, and `GUARDIAN_SLOT`, the address of the guardian which can pause and unpause the system.
+```
+
+```diff
++   Status: CREATED
+    contract AnchorStateRegistry (0xeBA14d52F1b19cA65455E5ECaB72D2FfD9e43fEF)
+    +++ description: Contains the latest confirmed state root that can be used as a starting point in a dispute game.
+```
+
+```diff
++   Status: CREATED
+    contract MIPS (0xF027F4A985560fb13324e943edf55ad6F1d15Dc1)
+    +++ description: The MIPS contract is used to execute the final step of the dispute game which objectively determines the winner of the dispute.
+```
+
+## Source code changes
+
+```diff
+.../AnchorStateRegistry/AnchorStateRegistry.sol    |  568 +++
+ .../ethereum/.flat/AnchorStateRegistry/Proxy.p.sol |  200 +
+ .../bob/ethereum/.flat/DelayedWETH/DelayedWETH.sol |  608 +++
+ .../bob/ethereum/.flat/DelayedWETH/Proxy.p.sol     |  200 +
+ .../DisputeGameFactory/DisputeGameFactory.sol      | 1482 +++++++
+ .../ethereum/.flat/DisputeGameFactory/Proxy.p.sol  |  200 +
+ .../src/projects/bob/ethereum/.flat/KailuaGame.sol | 1414 +++++++
+ .../projects/bob/ethereum/.flat/KailuaTreasury.sol | 1568 ++++++++
+ .../L1CrossDomainMessenger.sol                     | 2108 +++++-----
+ .../.flat/L1ERC721Bridge/L1ERC721Bridge.sol        |  791 ++++
+ .../L1ERC721Bridge}/Proxy.p.sol                    |    0
+ .../L1StandardBridge/L1StandardBridge.sol          | 1713 ++++----
+ .../L2OutputOracle/L2OutputOracle.sol => /dev/null |  833 ----
+ .../src/projects/bob/ethereum/.flat/MIPS.sol       | 2515 ++++++++++++
+ .../OptimismMintableERC20Factory.sol               |  441 +++
+ .../OptimismMintableERC20Factory}/Proxy.p.sol      |    0
+ .../OptimismPortal2/OptimismPortal2.sol}           | 1982 +++++-----
+ .../bob/ethereum/.flat/OptimismPortal2/Proxy.p.sol |  211 +
+ .../bob/ethereum/.flat/PermissionedDisputeGame.sol | 4121 ++++++++++++++++++++
+ .../projects/bob/ethereum/.flat/PreimageOracle.sol | 1311 +++++++
+ ...0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0.sol} |    0
+ ...:0xa70ddfb3e00fCFD083E64B200FE867104f703E1c.sol |  298 ++
+ .../bob/ethereum/.flat/RiscZeroGroth16Verifier.sol | 1699 ++++++++
+ .../.flat/RiscZeroVerifierEmergencyStop.sol        |  315 ++
+ .../bob/ethereum/.flat/RiscZeroVerifierRouter.sol  |  240 ++
+ .../ethereum/.flat/SuperchainConfig/Proxy.p.sol    |  200 +
+ .../.flat/SuperchainConfig/SuperchainConfig.sol    |  477 +++
+ .../SystemConfig/SystemConfig.sol                  |  715 ++--
+ .../bob/ethereum/.flat/TimelockController.sol      | 1000 +++++
+ 29 files changed, 23417 insertions(+), 3793 deletions(-)
+```
+
+Generated with discovered.json: 0x8b55c0d14f76f0f19015fe74f09c905cbdbc2c45
+
+# Diff at Mon, 14 Jul 2025 12:44:50 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@9f4300dad2f3d080cd56fa311d4a848556c74e72 block: 22665980
+- current block number: 22665980
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22665980 (main branch discovery), not current.
+
+```diff
+    EOA  (0x000000000000000000000000000000000000dEaD) {
+    +++ description: None
+      address:
+-        "0x000000000000000000000000000000000000dEaD"
++        "eth:0x000000000000000000000000000000000000dEaD"
+    }
+```
+
+```diff
+    EOA  (0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11) {
+    +++ description: None
+      address:
+-        "0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11"
++        "eth:0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11"
+    }
+```
+
+```diff
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      address:
+-        "0x091dF5E1284E49fA682407096aD34cfD42B95B72"
++        "eth:0x091dF5E1284E49fA682407096aD34cfD42B95B72"
+      values.$admin:
+-        "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
++        "eth:0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
+      values.$implementation:
+-        "0xB531445401926029B1647669cFAc8b4e5d8C7777"
++        "eth:0xB531445401926029B1647669cFAc8b4e5d8C7777"
+      values.$pastUpgrades.0.2.0:
+-        "0xB531445401926029B1647669cFAc8b4e5d8C7777"
++        "eth:0xB531445401926029B1647669cFAc8b4e5d8C7777"
+      values.l1Token:
+-        "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
++        "eth:0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+      values.l2Token:
+-        "0x85008aE6198BC91aC0735CB5497CF125ddAAc528"
++        "eth:0x85008aE6198BC91aC0735CB5497CF125ddAAc528"
+      values.l2TokenBridge:
+-        "0xd1559523374D93972E0F7fE1AA98642754f5c4d1"
++        "eth:0xd1559523374D93972E0F7fE1AA98642754f5c4d1"
+      values.messenger:
+-        "0xE3d981643b806FB8030CDB677D6E60892E547EdA"
++        "eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+      values.proxy__getAdmin:
+-        "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
++        "eth:0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
+      values.proxy__getImplementation:
+-        "0xB531445401926029B1647669cFAc8b4e5d8C7777"
++        "eth:0xB531445401926029B1647669cFAc8b4e5d8C7777"
+      implementationNames.0x091dF5E1284E49fA682407096aD34cfD42B95B72:
+-        "OssifiableProxy"
+      implementationNames.0xB531445401926029B1647669cFAc8b4e5d8C7777:
+-        "L1ERC20TokenBridge"
+      implementationNames.eth:0x091dF5E1284E49fA682407096aD34cfD42B95B72:
++        "OssifiableProxy"
+      implementationNames.eth:0xB531445401926029B1647669cFAc8b4e5d8C7777:
++        "L1ERC20TokenBridge"
+    }
+```
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      address:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.addressManager:
+-        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
++        "eth:0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      values.owner:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      implementationNames.0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0:
+-        "ProxyAdmin"
+      implementationNames.eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0:
++        "ProxyAdmin"
+    }
+```
+
+```diff
+    EOA  (0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7) {
+    +++ description: None
+      address:
+-        "0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"
++        "eth:0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"
+    }
+```
+
+```diff
+    EOA  (0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f) {
+    +++ description: None
+      address:
+-        "0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
++        "eth:0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
+    }
+```
+
+```diff
+    EOA  (0x3A75346f81302aAc0333FB5DCDD407e12A6CfA83) {
+    +++ description: None
+      address:
+-        "0x3A75346f81302aAc0333FB5DCDD407e12A6CfA83"
++        "eth:0x3A75346f81302aAc0333FB5DCDD407e12A6CfA83"
+    }
+```
+
+```diff
+    EOA  (0x3C30D693b23F77d55e14b8e0CFB6C00075ff93aB) {
+    +++ description: None
+      address:
+-        "0x3C30D693b23F77d55e14b8e0CFB6C00075ff93aB"
++        "eth:0x3C30D693b23F77d55e14b8e0CFB6C00075ff93aB"
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      address:
+-        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
++        "eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      values.$admin:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.$implementation:
+-        "0xEEAfA156A5dd3811Ee0D9F91db57A77eA53A8d31"
++        "eth:0xEEAfA156A5dd3811Ee0D9F91db57A77eA53A8d31"
+      values.l2TokenBridge:
+-        "0x4200000000000000000000000000000000000010"
++        "eth:0x4200000000000000000000000000000000000010"
+      values.messenger:
+-        "0xE3d981643b806FB8030CDB677D6E60892E547EdA"
++        "eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+      values.MESSENGER:
+-        "0xE3d981643b806FB8030CDB677D6E60892E547EdA"
++        "eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+      values.OTHER_BRIDGE:
+-        "0x4200000000000000000000000000000000000010"
++        "eth:0x4200000000000000000000000000000000000010"
+      implementationNames.0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7:
+-        "L1ChugSplashProxy"
+      implementationNames.0xEEAfA156A5dd3811Ee0D9F91db57A77eA53A8d31:
+-        "L1StandardBridge"
+      implementationNames.eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7:
++        "L1ChugSplashProxy"
+      implementationNames.eth:0xEEAfA156A5dd3811Ee0D9F91db57A77eA53A8d31:
++        "L1StandardBridge"
+    }
+```
+
+```diff
+    EOA  (0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      address:
+-        "0x7cB1022D30b9860C36b243E7B181A1d46f618C69"
++        "eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69"
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      address:
+-        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      values.$admin:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.$implementation:
+-        "0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc"
++        "eth:0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc"
+      values.$pastUpgrades.0.2.0:
+-        "0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc"
++        "eth:0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc"
+      values.GUARDIAN:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.L2_ORACLE:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      values.l2Sender:
+-        "0x000000000000000000000000000000000000dEaD"
++        "eth:0x000000000000000000000000000000000000dEaD"
+      values.SYSTEM_CONFIG:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      implementationNames.0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E:
+-        "Proxy"
+      implementationNames.0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc:
+-        "OptimismPortal"
+      implementationNames.eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E:
++        "Proxy"
+      implementationNames.eth:0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc:
++        "OptimismPortal"
+    }
+```
+
+```diff
+    EOA  (0xA0737fea60F0601A192E3d2c98865A883ab0bda2) {
+    +++ description: None
+      address:
+-        "0xA0737fea60F0601A192E3d2c98865A883ab0bda2"
++        "eth:0xA0737fea60F0601A192E3d2c98865A883ab0bda2"
+    }
+```
+
+```diff
+    EOA  (0xa4000bDD2bB92ce6750b31F1eeda47Bd1cB8e6e4) {
+    +++ description: None
+      address:
+-        "0xa4000bDD2bB92ce6750b31F1eeda47Bd1cB8e6e4"
++        "eth:0xa4000bDD2bB92ce6750b31F1eeda47Bd1cB8e6e4"
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      address:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      values.$admin:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.$implementation:
+-        "0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590"
++        "eth:0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590"
+      values.$pastUpgrades.0.2.0:
+-        "0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590"
++        "eth:0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590"
+      values.batcherHash:
+-        "0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11"
++        "eth:0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11"
+      values.owner:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.sequencerInbox:
+-        "0x3A75346f81302aAc0333FB5DCDD407e12A6CfA83"
++        "eth:0x3A75346f81302aAc0333FB5DCDD407e12A6CfA83"
+      values.unsafeBlockSigner:
+-        "0xB18AD28cB78fD2eAfAc6941c24c5135515B796f0"
++        "eth:0xB18AD28cB78fD2eAfAc6941c24c5135515B796f0"
+      implementationNames.0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393:
+-        "Proxy"
+      implementationNames.0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590:
+-        "SystemConfig"
+      implementationNames.eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393:
++        "Proxy"
+      implementationNames.eth:0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590:
++        "SystemConfig"
+    }
+```
+
+```diff
+    EOA  (0xB18AD28cB78fD2eAfAc6941c24c5135515B796f0) {
+    +++ description: None
+      address:
+-        "0xB18AD28cB78fD2eAfAc6941c24c5135515B796f0"
++        "eth:0xB18AD28cB78fD2eAfAc6941c24c5135515B796f0"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      address:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.$implementation:
+-        "0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552"
++        "eth:0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552"
+      values.$members.0:
+-        "0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"
++        "eth:0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"
+      values.$members.1:
+-        "0x3C30D693b23F77d55e14b8e0CFB6C00075ff93aB"
++        "eth:0x3C30D693b23F77d55e14b8e0CFB6C00075ff93aB"
+      values.$members.2:
+-        "0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6"
++        "eth:0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6"
+      values.$members.3:
+-        "0xa4000bDD2bB92ce6750b31F1eeda47Bd1cB8e6e4"
++        "eth:0xa4000bDD2bB92ce6750b31F1eeda47Bd1cB8e6e4"
+      values.$members.4:
+-        "0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
++        "eth:0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
+      values.$members.5:
+-        "0xA0737fea60F0601A192E3d2c98865A883ab0bda2"
++        "eth:0xA0737fea60F0601A192E3d2c98865A883ab0bda2"
+      implementationNames.0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E:
+-        "GnosisSafeProxy"
+      implementationNames.0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552:
+-        "GnosisSafe"
+      implementationNames.eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E:
++        "GnosisSafeProxy"
+      implementationNames.eth:0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552:
++        "GnosisSafe"
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      address:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      values.$admin:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.$implementation:
+-        "0x59191bD38EBA4a642C9FEc308dc188731b229822"
++        "eth:0x59191bD38EBA4a642C9FEc308dc188731b229822"
+      values.$pastUpgrades.0.2.0:
+-        "0x59191bD38EBA4a642C9FEc308dc188731b229822"
++        "eth:0x59191bD38EBA4a642C9FEc308dc188731b229822"
+      values.CHALLENGER:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
++        "eth:0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      values.PROPOSER:
+-        "0x7cB1022D30b9860C36b243E7B181A1d46f618C69"
++        "eth:0x7cB1022D30b9860C36b243E7B181A1d46f618C69"
+      implementationNames.0xdDa53E23f8a32640b04D7256e651C1db98dB11C1:
+-        "Proxy"
+      implementationNames.0x59191bD38EBA4a642C9FEc308dc188731b229822:
+-        "L2OutputOracle"
+      implementationNames.eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1:
++        "Proxy"
+      implementationNames.eth:0x59191bD38EBA4a642C9FEc308dc188731b229822:
++        "L2OutputOracle"
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      address:
+-        "0xE3d981643b806FB8030CDB677D6E60892E547EdA"
++        "eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+      values.$admin:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      values.$implementation:
+-        "0x237853621998a33Fa5B9B820592F4c6f4c158c12"
++        "eth:0x237853621998a33Fa5B9B820592F4c6f4c158c12"
+      values.$pastUpgrades.0.2.0:
+-        "0xE3d981643b806FB8030CDB677D6E60892E547EdA"
++        "eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+      values.$pastUpgrades.1.2.0:
+-        "0x237853621998a33Fa5B9B820592F4c6f4c158c12"
++        "eth:0x237853621998a33Fa5B9B820592F4c6f4c158c12"
+      values.OTHER_MESSENGER:
+-        "0x4200000000000000000000000000000000000007"
++        "eth:0x4200000000000000000000000000000000000007"
+      values.PORTAL:
+-        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      values.ResolvedDelegateProxy_addressManager:
+-        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
++        "eth:0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      implementationNames.0xE3d981643b806FB8030CDB677D6E60892E547EdA:
+-        "ResolvedDelegateProxy"
+      implementationNames.0x237853621998a33Fa5B9B820592F4c6f4c158c12:
+-        "L1CrossDomainMessenger"
+      implementationNames.eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA:
++        "ResolvedDelegateProxy"
+      implementationNames.eth:0x237853621998a33Fa5B9B820592F4c6f4c158c12:
++        "L1CrossDomainMessenger"
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      address:
+-        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
++        "eth:0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      values.owner:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      implementationNames.0xF2dc77c697e892542cC53336178a78Bb313DFDC7:
+-        "AddressManager"
+      implementationNames.eth:0xF2dc77c697e892542cC53336178a78Bb313DFDC7:
++        "AddressManager"
+    }
+```
+
+```diff
+    EOA  (0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6) {
+    +++ description: None
+      address:
+-        "0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6"
++        "eth:0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6"
+    }
+```
+
+```diff
++   Status: CREATED
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72)
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+```
+
+```diff
++   Status: CREATED
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7)
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+```
+
+```diff
++   Status: CREATED
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E)
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+```
+
+```diff
++   Status: CREATED
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393)
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+```
+
+```diff
++   Status: CREATED
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1)
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+```
+
+```diff
++   Status: CREATED
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA)
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+```
+
+```diff
++   Status: CREATED
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7)
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+```
+
+Generated with discovered.json: 0xc307025f083943c6b28fc8495fd374f487d1eeae
+
+# Diff at Fri, 04 Jul 2025 12:18:55 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@1f56dc47fe915564d4555300304da4d3bcbc087f block: 22665980
+- current block number: 22665980
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22665980 (main branch discovery), not current.
+
+```diff
+    EOA  (0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "ethereum:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+    }
+```
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.0.from:
+-        "ethereum:0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
++        "eth:0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      directlyReceivedPermissions.1.from:
+-        "ethereum:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
++        "eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      directlyReceivedPermissions.2.from:
+-        "ethereum:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      directlyReceivedPermissions.3.from:
+-        "ethereum:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      directlyReceivedPermissions.4.from:
+-        "ethereum:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      directlyReceivedPermissions.5.from:
+-        "ethereum:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
++        "eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+    }
+```
+
+```diff
+    EOA  (0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "ethereum:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "ethereum:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      receivedPermissions.1.from:
+-        "ethereum:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.2.from:
+-        "ethereum:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.3.via.0.address:
+-        "ethereum:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      receivedPermissions.3.from:
+-        "ethereum:0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
++        "eth:0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      receivedPermissions.4.via.0.address:
+-        "ethereum:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      receivedPermissions.4.from:
+-        "ethereum:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
++        "eth:0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      receivedPermissions.5.via.0.address:
+-        "ethereum:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      receivedPermissions.5.from:
+-        "ethereum:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "eth:0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.6.via.0.address:
+-        "ethereum:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      receivedPermissions.6.from:
+-        "ethereum:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "eth:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.7.via.0.address:
+-        "ethereum:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      receivedPermissions.7.from:
+-        "ethereum:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "eth:0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      receivedPermissions.8.via.0.address:
+-        "ethereum:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      receivedPermissions.8.from:
+-        "ethereum:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
++        "eth:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+      directlyReceivedPermissions.0.from:
+-        "ethereum:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "eth:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+    }
+```
+
+Generated with discovered.json: 0x748e22e92d846d8e18b456b1f42c8768e7e7a274
+
+# Diff at Mon, 16 Jun 2025 08:41:45 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@e1208475abce20cea1768d2e4878c03350c1b7c9 block: 22665980
+- current block number: 22665980
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22665980 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.5:
++        {"permission":"upgrade","from":"ethereum:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393","role":"admin"}
+      directlyReceivedPermissions.4.from:
+-        "ethereum:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "ethereum:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.8:
++        {"permission":"upgrade","from":"ethereum:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393","role":"admin","via":[{"address":"ethereum:0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.7.from:
+-        "ethereum:0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "ethereum:0xE3d981643b806FB8030CDB677D6E60892E547EdA"
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      values.$admin:
++        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+    }
+```
+
+Generated with discovered.json: 0xb1164140366538d6866d602ff8c1b662068cfdd2
+
+# Diff at Mon, 09 Jun 2025 09:45:50 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@7cc006dadcc55e6cce3be3eb03d491835943fb43 block: 22187675
+- current block number: 22665980
+
+## Description
+
+Old USDC bridge paused and upgraded to unverified implementation and 90% of tokens [sent to a Chainlink CCIP lockbox](https://etherscan.io/tx/0xb23323e6a9b3726e8d08b17b32c589f02840c7042d3731334b0e0c3e54107274).
+
+switching USDC counting from l1 escrow to l2 totalsupply.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22187675 (main branch discovery), not current.
+
+```diff
+-   Status: DELETED
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb)
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+```
+
+Generated with discovered.json: 0x683448c8764e153beceae99be54233ba40c87314
+
+# Diff at Fri, 30 May 2025 06:55:48 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@a4d8c436027d17df0f9b76843cd6deb1888fa381 block: 22187675
+- current block number: 22187675
+
+## Description
+
+config: change comment about eip1559 fee val
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22187675 (main branch discovery), not current.
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      fieldMeta.eip1559Denominator:
++        {"description":"volatility param: lower denominator -> quicker fee changes on L2"}
+    }
+```
+
+Generated with discovered.json: 0x3f6089a6fc7ea0bf7b48e808e107b69ff62724ab
+
+# Diff at Fri, 23 May 2025 09:40:54 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@69cd181abbc3c830a6caf2f4429b37cae72ffdb8 block: 22187675
+- current block number: 22187675
+
+## Description
+
+Introduced .role field on each permission, defaulting to field name on which it was defined (with '.' prefix)
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22187675 (main branch discovery), not current.
+
+```diff
+    EOA  (0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11) {
+    +++ description: None
+      receivedPermissions.0.role:
++        ".batcherHash"
+    }
+```
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.4.role:
++        "admin"
+      directlyReceivedPermissions.3.role:
++        "admin"
+      directlyReceivedPermissions.2.role:
++        "admin"
+      directlyReceivedPermissions.1.role:
++        ".$admin"
+      directlyReceivedPermissions.0.role:
++        ".owner"
+    }
+```
+
+```diff
+    EOA  (0x7cB1022D30b9860C36b243E7B181A1d46f618C69) {
+    +++ description: None
+      receivedPermissions.0.role:
++        ".PROPOSER"
+    }
+```
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.7.role:
++        "admin"
+      receivedPermissions.6.role:
++        "admin"
+      receivedPermissions.5.permission:
+-        "challenge"
++        "upgrade"
+      receivedPermissions.5.from:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.5.role:
++        "admin"
+      receivedPermissions.5.via:
++        [{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+      receivedPermissions.4.permission:
+-        "interact"
++        "challenge"
+      receivedPermissions.4.from:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      receivedPermissions.4.description:
+-        "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+      receivedPermissions.4.role:
++        ".CHALLENGER"
+      receivedPermissions.3.permission:
+-        "upgrade"
++        "guard"
+      receivedPermissions.3.via:
+-        [{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+      receivedPermissions.3.role:
++        ".GUARDIAN"
+      receivedPermissions.2.permission:
+-        "guard"
++        "interact"
+      receivedPermissions.2.from:
+-        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.2.description:
++        "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+      receivedPermissions.2.role:
++        ".owner"
+      receivedPermissions.1.role:
++        ".$admin"
+      receivedPermissions.0.role:
++        ".owner"
+      directlyReceivedPermissions.0.role:
++        ".owner"
+    }
+```
+
+Generated with discovered.json: 0x00d9d538f789ab508c2f5aba6dcdee85b76c8f25
+
+# Diff at Tue, 29 Apr 2025 08:19:00 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@ef7477af00fe0b57a2f7cacf7e958c12494af662 block: 22187675
+- current block number: 22187675
+
+## Description
+
+Field .issuedPermissions is removed from the output as no longer needed. Added 'permissionsConfigHash' due to refactoring of the modelling process (into a separate command).
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22187675 (main branch discovery), not current.
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      issuedPermissions:
+-        [{"permission":"upgrade","to":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","description":"upgrading the bridge implementation can give access to all funds escrowed therein.","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}]
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      issuedPermissions:
+-        [{"permission":"guard","to":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[]},{"permission":"upgrade","to":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}]
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      issuedPermissions:
+-        [{"permission":"interact","to":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","description":"it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system.","via":[]},{"permission":"sequence","to":"0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11","via":[]},{"permission":"upgrade","to":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}]
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      issuedPermissions:
+-        [{"permission":"challenge","to":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[]},{"permission":"propose","to":"0x7cB1022D30b9860C36b243E7B181A1d46f618C69","via":[]},{"permission":"upgrade","to":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}]
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      issuedPermissions:
+-        [{"permission":"interact","to":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","description":"set and change address mappings.","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}]
+    }
+```
+
+Generated with discovered.json: 0xb79bb486b2bc63fa5f58315a9fb2c16eec8b5a21
+
+# Diff at Thu, 03 Apr 2025 10:05:37 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@87156896058912c79002d4129b054942ff1352e9 block: 22094600
+- current block number: 22187675
+
+## Description
+
+ms signer change.
+
+## Watched changes
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      values.$members.3:
+-        "0xa0C600a6e85bf225958FFAcC70B5FDDF9A059038"
++        "0xA0737fea60F0601A192E3d2c98865A883ab0bda2"
+      values.$members.2:
+-        "0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C"
++        "0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
+      values.$members.1:
+-        "0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
++        "0xa4000bDD2bB92ce6750b31F1eeda47Bd1cB8e6e4"
+    }
+```
+
+Generated with discovered.json: 0x1642a14c35d3286823a799f09748ecd7d715865b
+
+# Diff at Thu, 27 Mar 2025 11:14:03 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@8cc2e36080df3a74dfd8475d41c64f46203f5218 block: 22094600
+- current block number: 22094600
+
+## Description
+
+Config related: add guardian description details, hide some noisy values, hide AddressManager as spam cat, add proposer / challenger to permissioned opfp chains.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22094600 (main branch discovery), not current.
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      category:
++        {"name":"Spam","priority":-1}
+    }
+```
+
+Generated with discovered.json: 0xd346fe10524e27467500acc81c1f217d38963ad1
+
+# Diff at Fri, 21 Mar 2025 10:19:20 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@a4eed3e556a58bb9ab448d141c0407f67ca3ce31 block: 22045237
+- current block number: 22094600
+
+## Description
+
+MS signer change.
+
+## Watched changes
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      values.$members.6:
+-        "0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6"
+      values.$members.5:
+-        "0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"
++        "0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6"
+      values.$members.4:
+-        "0xa0C600a6e85bf225958FFAcC70B5FDDF9A059038"
++        "0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"
+      values.$members.3:
+-        "0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C"
++        "0xa0C600a6e85bf225958FFAcC70B5FDDF9A059038"
+      values.$members.2:
+-        "0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
++        "0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C"
+      values.$members.1:
+-        "0x56b73FA51e09D0BBFA3A5346aaB7576Edc9d0436"
++        "0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
+      values.$members.0:
+-        "0xC9D2c719d6C8Ba2876FC9B443c7d2690072F04ad"
++        "0x3C30D693b23F77d55e14b8e0CFB6C00075ff93aB"
+      values.$threshold:
+-        5
++        4
+      values.multisigThreshold:
+-        "5 of 7 (71%)"
++        "4 of 6 (67%)"
+    }
+```
+
+Generated with discovered.json: 0x63c9a49658477c71d6d6915cf6c925a0881caac3
+
+# Diff at Tue, 18 Mar 2025 08:12:31 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@4ef7a8dbcec1cd9fec77aae2b73d81347a4ffb13 block: 22045237
+- current block number: 22045237
+
+## Description
+
+Config: change Multisig names.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 22045237 (main branch discovery), not current.
+
+```diff
+    contract Bob Multisig 1 (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      name:
+-        "BobMultisig"
++        "Bob Multisig 1"
+    }
+```
+
+Generated with discovered.json: 0xcccbdc6202f7b6a94aeffe532c469972031b64f7
+
+# Diff at Fri, 14 Mar 2025 12:52:53 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@a22da884d1a9470186e80799bc96392136af1fbe block: 20921492
+- current block number: 22045237
+
+## Description
+
+MS member change.
+
+## Watched changes
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      values.$members.6:
++        "0xa0C600a6e85bf225958FFAcC70B5FDDF9A059038"
+      values.$members.5:
+-        "0xa0C600a6e85bf225958FFAcC70B5FDDF9A059038"
++        "0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
+      values.$members.4:
+-        "0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f"
++        "0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C"
+      values.$members.3:
+-        "0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C"
++        "0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6"
+      values.$members.2:
+-        "0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6"
++        "0xC9D2c719d6C8Ba2876FC9B443c7d2690072F04ad"
+      values.$members.1:
+-        "0xC9D2c719d6C8Ba2876FC9B443c7d2690072F04ad"
++        "0x56b73FA51e09D0BBFA3A5346aaB7576Edc9d0436"
+      values.$members.0:
+-        "0x56b73FA51e09D0BBFA3A5346aaB7576Edc9d0436"
++        "0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"
+      values.$threshold:
+-        4
++        5
+      values.multisigThreshold:
+-        "4 of 6 (67%)"
++        "5 of 7 (71%)"
+    }
+```
+
+Generated with discovered.json: 0xf67bb30ea352197e59028c245d08509696eee4a3
+
+# Diff at Tue, 04 Mar 2025 11:25:30 GMT:
+
+- chain: ethereum
+- author: Michał Podsiadły (<michal.podsiadly@l2beat.com>)
+- comparing to: main@be38e12d3ff947ca8de40f3a23a9ba1875a54f5a block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      values.opStackDA.isSomeTxsLengthEqualToCelestiaDAExample:
+-        false
+      values.opStackDA.isUsingCelestia:
++        false
+    }
+```
+
+Generated with discovered.json: 0xa98505379ef58e60342de03c22b12d35a5bab766
+
+# Diff at Tue, 04 Mar 2025 10:39:00 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@98d260b45fe0d2195ce5e629bd7b200c8706e8ba block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      sinceBlock:
++        19710718
+    }
+```
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      sinceBlock:
++        19634325
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      sinceBlock:
++        19634331
+    }
+```
+
+```diff
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      sinceBlock:
++        19761785
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      sinceBlock:
++        19634327
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      sinceBlock:
++        19634330
+    }
+```
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      sinceBlock:
++        19627114
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      sinceBlock:
++        19634329
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      sinceBlock:
++        19634332
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      sinceBlock:
++        19634324
+    }
+```
+
+Generated with discovered.json: 0x3dabae8576a3af165c587da898f518b0e3599f57
+
+# Diff at Wed, 26 Feb 2025 10:32:32 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@18513668f913fbe57a197f43655b19111df0e627 block: 20921492
+- current block number: 20921492
+
+## Description
+
+config related: added categories for all opstack, op stack and polygoncdk stack templates.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      category:
++        {"name":"Canonical Bridges","priority":2}
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      category:
++        {"name":"Canonical Bridges","priority":2}
+    }
+```
+
+Generated with discovered.json: 0x1ce046344537ee76f6e3e98bbe253013454f12a6
+
+# Diff at Fri, 21 Feb 2025 14:05:34 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@d219f271711b2cf7a164e3443bead5e4957d13a8 block: 20921492
+- current block number: 20921492
+
+## Description
+
+Config related: Change some severities and add templates.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      fieldMeta.proposer:
++        {"severity":"HIGH"}
+      fieldMeta.challenger:
++        {"severity":"HIGH"}
+      fieldMeta.deletedOutputs:
++        {"severity":"HIGH"}
+    }
+```
+
+Generated with discovered.json: 0x1c698eeb142984725bd6bfb3375e4933dbc6c770
+
+# Diff at Fri, 21 Feb 2025 08:59:17 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@1cf9ec35847912163c4b663a633e258a434c0bca block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      categories:
+-        ["Core"]
+    }
+```
+
+Generated with discovered.json: 0x7f7cda471755ceeb90b2c6172acc444d81319b2c
+
+# Diff at Mon, 10 Feb 2025 19:03:45 GMT:
+
+- chain: ethereum
+- author: Michał Podsiadły (<michal.podsiadly@l2beat.com>)
+- comparing to: main@3756adff7c1ac86d8af3374a90a75c1999aae2b3 block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      values.opStackDA.isUsingEigenDA:
++        false
+    }
+```
+
+Generated with discovered.json: 0xdd6e416f138419f49a70042f53d1435e22ebe72b
+
+# Diff at Tue, 04 Feb 2025 12:30:51 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@145553eed7ba44636411ecb25e4099728acd02f9 block: 20921492
+- current block number: 20921492
+
+## Description
+
+Rename 'configure' permission to 'interact'
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.0.permission:
+-        "configure"
++        "interact"
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      issuedPermissions.0.permission:
+-        "configure"
++        "interact"
+    }
+```
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.3.permission:
+-        "guard"
++        "interact"
+      receivedPermissions.3.from:
+-        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      receivedPermissions.3.description:
++        "set and change address mappings."
+      receivedPermissions.3.via:
++        [{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+      receivedPermissions.2.permission:
+-        "configure"
++        "interact"
+      receivedPermissions.2.from:
+-        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.2.description:
+-        "set and change address mappings."
++        "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+      receivedPermissions.2.via:
+-        [{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+      receivedPermissions.1.permission:
+-        "configure"
++        "guard"
+      receivedPermissions.1.from:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.1.description:
+-        "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      issuedPermissions.0.permission:
+-        "configure"
++        "interact"
+    }
+```
+
+Generated with discovered.json: 0x1990d026460bcd86e6a26081da07ed8cac9e11b5
+
+# Diff at Mon, 20 Jan 2025 11:09:20 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@2c8b4f3d9910bb6371be9b4df87b70856e7d8c64 block: 20921492
+- current block number: 20921492
+
+## Description
+
+Rerun on the same block number. Applies fixes to permissions and via field. Renames permission's target to to/from.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.4.target:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      directlyReceivedPermissions.4.from:
++        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      directlyReceivedPermissions.3.target:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      directlyReceivedPermissions.3.from:
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      directlyReceivedPermissions.2.target:
+-        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      directlyReceivedPermissions.2.from:
++        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      directlyReceivedPermissions.1.target:
+-        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      directlyReceivedPermissions.1.from:
++        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      directlyReceivedPermissions.0.target:
+-        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      directlyReceivedPermissions.0.from:
++        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      issuedPermissions.0.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.via.0.delay:
+-        0
+      issuedPermissions.0.via.0.description:
+-        "upgrading the bridge implementation can give access to all funds escrowed therein."
+      issuedPermissions.0.to:
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.description:
++        "upgrading the bridge implementation can give access to all funds escrowed therein."
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      issuedPermissions.1.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.1.via.0.delay:
+-        0
+      issuedPermissions.1.to:
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.to:
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      issuedPermissions.2.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.2.via.0.delay:
+-        0
+      issuedPermissions.2.to:
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.1.target:
+-        "0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11"
+      issuedPermissions.1.to:
++        "0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11"
+      issuedPermissions.0.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.to:
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.description:
++        "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+    }
+```
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.7.target:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      receivedPermissions.7.from:
++        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      receivedPermissions.6.target:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.6.from:
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.5.target:
+-        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.5.from:
++        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.4.target:
+-        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      receivedPermissions.4.from:
++        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      receivedPermissions.3.target:
+-        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.3.from:
++        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.2.target:
+-        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      receivedPermissions.2.from:
++        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      receivedPermissions.1.target:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.1.from:
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.0.target:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      receivedPermissions.0.from:
++        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      directlyReceivedPermissions.0.target:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+      directlyReceivedPermissions.0.from:
++        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      issuedPermissions.2.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.2.via.0.delay:
+-        0
+      issuedPermissions.2.to:
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.1.target:
+-        "0x7cB1022D30b9860C36b243E7B181A1d46f618C69"
+      issuedPermissions.1.to:
++        "0x7cB1022D30b9860C36b243E7B181A1d46f618C69"
+      issuedPermissions.0.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.to:
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      issuedPermissions.0.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.via.0.delay:
+-        0
+      issuedPermissions.0.via.0.description:
+-        "set and change address mappings."
+      issuedPermissions.0.to:
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.description:
++        "set and change address mappings."
+    }
+```
+
+Generated with discovered.json: 0x651d0785385a03270e6fbe82c07847c6dafa1c9d
+
+# Diff at Wed, 08 Jan 2025 08:59:17 GMT:
+
+- chain: ethereum
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@deefa974378c2cd6b74f061e1f5a494bbbe1d63a block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain.
+      description:
+-        "The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token."
++        "The main entry point to deposit ERC20 tokens from host chain to this chain."
+    }
+```
+
+Generated with discovered.json: 0xc380a8874ccca23e151d4639b75470bbbca66967
+
+# Diff at Fri, 01 Nov 2024 12:09:11 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@cd1f0e71bb08ce16b2084a11b768538e8aa6ba8c block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.1.description:
+-        "upgrading bridge implementation allows to access all funds and change every system component."
++        "upgrading the bridge implementation can give access to all funds escrowed therein."
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token.
+      issuedPermissions.0.via.0.description:
+-        "upgrading bridge implementation allows to access all funds and change every system component."
++        "upgrading the bridge implementation can give access to all funds escrowed therein."
+    }
+```
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.4.description:
+-        "upgrading bridge implementation allows to access all funds and change every system component."
++        "upgrading the bridge implementation can give access to all funds escrowed therein."
+    }
+```
+
+Generated with discovered.json: 0x47a4da30cc49f68209dde4acf655d4bbae90ef31
+
+# Diff at Tue, 29 Oct 2024 13:05:30 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@7b3fc9dc9074e1d423b48522c3f0273c86aab54a block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      fieldMeta:
++        {"FINALIZATION_PERIOD_SECONDS":{"description":"Challenge period (Number of seconds until a state root is finalized)."}}
+    }
+```
+
+Generated with discovered.json: 0x6c6d5a2928f9bc0cfd67bbda9362da353d9ac689
+
+# Diff at Mon, 21 Oct 2024 12:43:13 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@e660599f23a07618fe949a07be1f516ce44f1914 block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      descriptions:
+-        ["Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally."]
+      description:
++        "Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally."
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token.
+      descriptions:
+-        ["The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token."]
+      description:
++        "The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token."
+    }
+```
+
+```diff
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      descriptions:
+-        ["Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally."]
+      description:
++        "Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally."
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      descriptions:
+-        ["The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals."]
+      description:
++        "The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals."
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      descriptions:
+-        ["Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address."]
+      description:
++        "Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address."
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      descriptions:
+-        ["Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots."]
+      description:
++        "Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots."
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      descriptions:
+-        ["Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function."]
+      description:
++        "Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function."
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      descriptions:
+-        ["Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts."]
+      description:
++        "Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts."
+    }
+```
+
+Generated with discovered.json: 0xd23a53a0b12b02bde5f13159e8006a4aa35425bb
+
+# Diff at Mon, 21 Oct 2024 11:04:50 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@8895d33866f5665c4c710f4ddaa32bfa63cc3c78 block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      values.$pastUpgrades.0.2:
++        ["0xB531445401926029B1647669cFAc8b4e5d8C7777"]
+      values.$pastUpgrades.0.1:
+-        ["0xB531445401926029B1647669cFAc8b4e5d8C7777"]
++        "0x5c9f70728478f27141b59caee9f7e5e113aa710ae69566331419b511d6e4638b"
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      values.$pastUpgrades.0.2:
++        ["0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc"]
+      values.$pastUpgrades.0.1:
+-        ["0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc"]
++        "0x86a85eda6fa19f4bcfe42bfe648335d93dde76ba0c31e0582608eefe04dd29b5"
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      values.$pastUpgrades.0.2:
++        ["0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590"]
+      values.$pastUpgrades.0.1:
+-        ["0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590"]
++        "0x0acb268e79a76416f50ff0418ab696ada4497fc8ff33747d5edc352ef1d5d1db"
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      values.$pastUpgrades.0.2:
++        ["0x59191bD38EBA4a642C9FEc308dc188731b229822"]
+      values.$pastUpgrades.0.1:
+-        ["0x59191bD38EBA4a642C9FEc308dc188731b229822"]
++        "0x0d9fa670dc1f6814ace115403cf3caa9b21829c5539dd518185940b8d21bb31c"
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      values.$pastUpgrades.1.2:
++        ["0x237853621998a33Fa5B9B820592F4c6f4c158c12"]
+      values.$pastUpgrades.1.1:
+-        ["0x237853621998a33Fa5B9B820592F4c6f4c158c12"]
++        "0x352fc46bb0f6c989aeb3dcb8490cd8d4a74bcfe919f9136b60dcfcbd9405a6a4"
+      values.$pastUpgrades.0.2:
++        ["0xE3d981643b806FB8030CDB677D6E60892E547EdA"]
+      values.$pastUpgrades.0.1:
+-        ["0xE3d981643b806FB8030CDB677D6E60892E547EdA"]
++        "0x49ca0455d3479f3dec361e05c5b47ac8634c14ca765ad8770401421a038eb39d"
+    }
+```
+
+Generated with discovered.json: 0x29cc03b6da18502ae37d20c3f089b020c6324daf
+
+# Diff at Wed, 16 Oct 2024 11:35:16 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@a3d139b799cc0b28e5e912febb17464d4e5aef5d block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      issuedPermissions.1:
++        {"permission":"upgrade","target":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}]}
+      issuedPermissions.0.permission:
+-        "upgrade"
++        "guard"
+      issuedPermissions.0.via.0:
+-        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      issuedPermissions.2:
++        {"permission":"upgrade","target":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}]}
+      issuedPermissions.1.permission:
+-        "upgrade"
++        "sequence"
+      issuedPermissions.1.target:
+-        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
++        "0x08F9F14fF43E112B18c96f0986F28Cb1878f1D11"
+      issuedPermissions.1.via.0:
+-        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+    }
+```
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      roles:
+-        ["Challenger","Guardian"]
+      receivedPermissions.7:
++        {"permission":"upgrade","target":"0xdDa53E23f8a32640b04D7256e651C1db98dB11C1","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.6:
++        {"permission":"upgrade","target":"0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.5.target:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.4.target:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      receivedPermissions.4.description:
++        "upgrading bridge implementation allows to access all funds and change every system component."
+      receivedPermissions.3.permission:
+-        "upgrade"
++        "guard"
+      receivedPermissions.3.via:
+-        [{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+      receivedPermissions.2.permission:
+-        "upgrade"
++        "configure"
+      receivedPermissions.2.target:
+-        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
++        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      receivedPermissions.2.description:
+-        "upgrading bridge implementation allows to access all funds and change every system component."
++        "set and change address mappings."
+      receivedPermissions.1.target:
+-        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.1.description:
+-        "set and change address mappings."
++        "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+      receivedPermissions.1.via:
+-        [{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+      receivedPermissions.0.permission:
+-        "configure"
++        "challenge"
+      receivedPermissions.0.target:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      receivedPermissions.0.description:
+-        "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      issuedPermissions.2:
++        {"permission":"upgrade","target":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}]}
+      issuedPermissions.1:
++        {"permission":"propose","target":"0x7cB1022D30b9860C36b243E7B181A1d46f618C69","via":[]}
+      issuedPermissions.0.permission:
+-        "upgrade"
++        "challenge"
+      issuedPermissions.0.via.0:
+-        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+    }
+```
+
+Generated with discovered.json: 0xcddaedf5ba27068d732a2d70b06a1de0a1229488
+
+# Diff at Mon, 14 Oct 2024 10:49:56 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@1afc77ff111ceb0970e7d09efcc7b2f376b0c281 block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      sourceHashes:
++        ["0x698ae88793265d087e07a445b69bf16b450cdcf636b9073b86221936e912a135","0xc4b0423b7d0fcada3862027e805c2fc79676feb6f4bc3978e5a86b390bfd7be3"]
+    }
+```
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      template:
+-        "opstack/ProxyAdmin"
++        "global/ProxyAdmin"
+      sourceHashes:
++        ["0x96d2f0fa1bd83ebd61ba6a2351c64c7fda7aa580b11ea67bb6bf4338e5c28512"]
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token.
+      sourceHashes:
++        ["0xbfb58685ff2f2f07eaa01a3c4e3c33c97686bfd3ae7c50c49f9da6ef5098cb31","0x79abdbd90460fe2ac0535b5cb7b4c45284322b49a0a090d1c509cdaf35dbc87e"]
+    }
+```
+
+```diff
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      sourceHashes:
++        ["0xbfb58685ff2f2f07eaa01a3c4e3c33c97686bfd3ae7c50c49f9da6ef5098cb31","0x8182c41b90d2731cf134f6ee88e35b295a33340568b1d9ccd50ce0c8caa11100"]
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      sourceHashes:
++        ["0x2cdcfef705094aaac53d507bad64d27b48ea5a9c11a7fadffacc192aab7a823f","0xd7fe53899c31d6d8e73b6724694736dc3c3c4ebc8f4ddbe989fe9d3dba26692d"]
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      sourceHashes:
++        ["0x2cdcfef705094aaac53d507bad64d27b48ea5a9c11a7fadffacc192aab7a823f","0x29908eb7685943ff431cd384af851ce36a30997bbad880f9b4385bfc3abb86a2"]
+    }
+```
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      sourceHashes:
++        ["0x81a7349eebb98ac33b0bc6842e3cb258034a8f2a4ba004570bb8e2e25947f9ff","0xd42bbf9f7dcd3720a7fc6bdc6edfdfae8800a37d6dd4decfa0ef6ca4a2e88940"]
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      sourceHashes:
++        ["0x2cdcfef705094aaac53d507bad64d27b48ea5a9c11a7fadffacc192aab7a823f","0xcca8986d0789aa489ba57cd234e886bd92cb5a0d477e1f5ae5e6e030e15fb183"]
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      sourceHashes:
++        ["0x20a2eb4d3677fc8a15e944f7b1843acd01b2e92acdc4c7a7f7a35b07b891149b","0xebfb36a18bcaa176678925149b43fdc5f9f943d98a6405ae1cbc26f4c168ff88"]
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      sourceHashes:
++        ["0xdc86a850f11dc2b5c0472a05d0e3c14f239baf2c3b1ab19631591b0827985380"]
+    }
+```
+
+Generated with discovered.json: 0x673145cd560255408ef3b618c668f347685f379d
+
+# Diff at Wed, 09 Oct 2024 13:09:03 GMT:
+
+- chain: ethereum
+- author: sekuba (<sekuba@users.noreply.github.com>)
+- comparing to: main@37683e2b3d0587372f886eef49e921277810c8bf block: 20921492
+- current block number: 20921492
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20921492 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.0.description:
++        "set and change address mappings."
+    }
+```
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.1.description:
++        "set and change address mappings."
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts.
+      issuedPermissions.0.via.0.description:
++        "set and change address mappings."
+      descriptions:
++        ["Legacy contract used to manage a mapping of string names to addresses. Modern OP stack uses a different standard proxy system instead, but this contract is still necessary for backwards compatibility with several older contracts."]
+    }
+```
+
+Generated with discovered.json: 0x5094b497a00fbdf8db369dfc3f5b590d682b3fc7
+
+# Diff at Tue, 08 Oct 2024 16:23:14 GMT:
+
+- chain: ethereum
+- author: sekuba (<sekuba@users.noreply.github.com>)
+- comparing to: main@bca55174129419533cd4173605c170ea99ac6f98 block: 20775890
+- current block number: 20921492
+
+## Description
+
+Move to discovery driven data.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20775890 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      template:
++        "lido/L1ERC20TokenBridge"
+      descriptions:
++        ["Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally."]
+    }
+```
+
+```diff
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb) {
+    +++ description: Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally.
+      issuedPermissions:
+-        [{"permission":"upgrade","target":"0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194","via":[]}]
+      template:
++        "circle/L1ERC20TokenBridge"
+      descriptions:
++        ["Escrow for custom external tokens that use the canonical bridge for messaging but are governed externally."]
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract GnosisSafe (0x778870B55576Bdb2B5368A3CB225fBcED2B8D0Ff)
+    +++ description: None
+```
+
+```diff
+-   Status: DELETED
+    contract UsdcBridgeOwnerMultisig (0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194)
+    +++ description: None
+```
+
+```diff
+    contract BobMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      name:
+-        "RollupOwnerMultisig"
++        "BobMultisig"
+    }
+```
+
+Generated with discovered.json: 0x068e890da52a4c9acb24e1e501496b9bb859703b
+
+# Diff at Tue, 01 Oct 2024 10:50:13 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@bd754dc73c66120164006054f8d25c5fae9cd910 block: 20775890
+- current block number: 20775890
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20775890 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: None
+      values.$pastUpgrades:
++        [["2024-04-22T11:43:59.000Z",["0xB531445401926029B1647669cFAc8b4e5d8C7777"]]]
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token.
+      values.$pastUpgrades:
++        []
+    }
+```
+
+```diff
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb) {
+    +++ description: None
+      values.$pastUpgrades:
++        []
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      values.$pastUpgrades:
++        [["2024-04-11T19:06:59.000Z",["0x994e3B01D130944a3E67BFd3B8Fc73069b959FEc"]]]
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      values.$pastUpgrades:
++        [["2024-04-11T19:04:47.000Z",["0xaa0A1EfD35d6578ea6B5704dbc2c40B36A55B590"]]]
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      values.$pastUpgrades:
++        [["2024-04-11T19:06:35.000Z",["0x59191bD38EBA4a642C9FEc308dc188731b229822"]]]
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      values.$pastUpgrades:
++        [["2024-04-11T19:02:11.000Z",["0xE3d981643b806FB8030CDB677D6E60892E547EdA"]],["2024-04-11T19:06:11.000Z",["0x237853621998a33Fa5B9B820592F4c6f4c158c12"]]]
+      values.$upgradeCount:
++        2
+    }
+```
+
+Generated with discovered.json: 0xbe7e3a68e822a2fdc7e3b8069c25a32e039e1892
+
+# Diff at Wed, 18 Sep 2024 11:32:13 GMT:
+
+- chain: ethereum
+- author: Luca Donno (<donnoh99@gmail.com>)
+- comparing to: main@eb09774f0f9d9322f2117dfdfda7d4bb095f6c52 block: 20016201
+- current block number: 20775890
+
+## Description
+
+Shape related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20016201 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      directlyReceivedPermissions.1.description:
++        "upgrading bridge implementation allows to access all funds and change every system component."
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token.
+      issuedPermissions.0.via.0.description:
++        "upgrading bridge implementation allows to access all funds and change every system component."
+      template:
++        "opstack/L1StandardBridge"
+      descriptions:
++        ["The main entry point to deposit ERC20 tokens from host chain to this chain. This contract can store any token."]
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.
+      template:
++        "opstack/OptimismPortal"
+      descriptions:
++        ["The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals."]
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.
+      issuedPermissions.1:
++        {"permission":"upgrade","target":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}]}
+      issuedPermissions.0.permission:
+-        "upgrade"
++        "configure"
+      issuedPermissions.0.via.0:
+-        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+      template:
++        "opstack/SystemConfig"
+      descriptions:
++        ["Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address."]
+      fieldMeta:
++        {"gasLimit":{"severity":"LOW","description":"Gas limit for blocks on L2."}}
+    }
+```
+
+```diff
+    contract RollupOwnerMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      receivedPermissions.5:
++        {"permission":"upgrade","target":"0xdDa53E23f8a32640b04D7256e651C1db98dB11C1","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.4.target:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.3.target:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
+      receivedPermissions.2.target:
+-        "0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"
++        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
+      receivedPermissions.2.description:
++        "upgrading bridge implementation allows to access all funds and change every system component."
+      receivedPermissions.1.permission:
+-        "upgrade"
++        "configure"
+      receivedPermissions.1.target:
+-        "0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"
++        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      receivedPermissions.0.target:
+-        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+      receivedPermissions.0.via:
+-        [{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+      receivedPermissions.0.description:
++        "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+      roles:
++        ["Challenger","Guardian"]
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.
+      values.deletedOutputs:
++        []
+      template:
++        "opstack/L2OutputOracle"
+      descriptions:
++        ["Contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots."]
+    }
+```
+
+```diff
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA) {
+    +++ description: Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function.
+      template:
++        "opstack/L1CrossDomainMessenger"
+      descriptions:
++        ["Sends messages from host chain to this chain, and relays messages back onto host chain. In the event that a message sent from host chain to this chain is rejected for exceeding this chain's epoch gas limit, it can be resubmitted via this contract's replay function."]
+      categories:
++        ["Core"]
+    }
+```
+
+Generated with discovered.json: 0x62dbeb5f9142c376f33fd031402e69d310835d5b
+
+# Diff at Sun, 08 Sep 2024 17:17:56 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@fd881462cca0d7ef4519f907f3c6cfd5fe1cde8f block: 20016201
+- current block number: 20016201
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20016201 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      issuedPermissions:
+-        [{"permission":"configure","target":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[]}]
+      receivedPermissions:
+-        [{"permission":"configure","target":"0xF2dc77c697e892542cC53336178a78Bb313DFDC7"},{"permission":"upgrade","target":"0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"},{"permission":"upgrade","target":"0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"},{"permission":"upgrade","target":"0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"},{"permission":"upgrade","target":"0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"}]
+      directlyReceivedPermissions:
++        [{"permission":"configure","target":"0xF2dc77c697e892542cC53336178a78Bb313DFDC7"},{"permission":"upgrade","target":"0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7"},{"permission":"upgrade","target":"0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E"},{"permission":"upgrade","target":"0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"},{"permission":"upgrade","target":"0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"}]
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: None
+      issuedPermissions.0.target:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.via.0:
++        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: None
+      issuedPermissions.0.target:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.via.0:
++        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: None
+      issuedPermissions.0.target:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.via.0:
++        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+    }
+```
+
+```diff
+    contract RollupOwnerMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      descriptions:
+-        ["It can act on behalf of 0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0, inheriting its permissions."]
+      receivedPermissions.4:
++        {"permission":"upgrade","target":"0xdDa53E23f8a32640b04D7256e651C1db98dB11C1","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.3:
++        {"permission":"upgrade","target":"0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.2:
++        {"permission":"upgrade","target":"0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.1:
++        {"permission":"upgrade","target":"0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7","via":[{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]}
+      receivedPermissions.0.target:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "0xF2dc77c697e892542cC53336178a78Bb313DFDC7"
+      receivedPermissions.0.via:
++        [{"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+      directlyReceivedPermissions:
++        [{"permission":"act","target":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"}]
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: None
+      issuedPermissions.0.target:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.via.0:
++        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: None
+      issuedPermissions.0.target:
+-        "0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"
++        "0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E"
+      issuedPermissions.0.via.0:
++        {"address":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","delay":0}
+    }
+```
+
+Generated with discovered.json: 0x92c87a09266d54273fb1171ca12fc5cd3796579f
+
+# Diff at Fri, 30 Aug 2024 07:51:36 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@6c1bd1f41fadf5f2cb1c1805b5a2c6138a3ed35a block: 20016201
+- current block number: 20016201
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20016201 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      receivedPermissions.4.via:
+-        []
+      receivedPermissions.3.via:
+-        []
+      receivedPermissions.2.via:
+-        []
+      receivedPermissions.1.via:
+-        []
+      receivedPermissions.0.via:
+-        []
+    }
+```
+
+```diff
+    contract UsdcBridgeOwnerMultisig (0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194) {
+    +++ description: None
+      receivedPermissions.0.via:
+-        []
+    }
+```
+
+```diff
+    contract RollupOwnerMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: It can act on behalf of 0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0, inheriting its permissions.
+      receivedPermissions.0.via:
+-        []
+    }
+```
+
+Generated with discovered.json: 0x70a2b540baf6326f8456bf65284532664ea98925
+
+# Diff at Fri, 23 Aug 2024 09:51:32 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@67597c7d6c810bc726594446890178150240711e block: 20016201
+- current block number: 20016201
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20016201 (main branch discovery), not current.
+
+```diff
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72) {
+    +++ description: None
+      values.$upgradeCount:
++        1
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: None
+      values.$upgradeCount:
++        0
+    }
+```
+
+```diff
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb) {
+    +++ description: None
+      values.$upgradeCount:
++        0
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: None
+      values.$upgradeCount:
++        1
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: None
+      values.$upgradeCount:
++        1
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: None
+      values.$upgradeCount:
++        1
+    }
+```
+
+Generated with discovered.json: 0x1f078d7f75bb60f3a1a63817c855587a3d0af3ba
+
+# Diff at Wed, 21 Aug 2024 10:02:17 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@2f6dde3357bf5d79196b6e94f79d853a6c4ec72b block: 20016201
+- current block number: 20016201
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20016201 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      assignedPermissions:
+-        {"upgrade":["0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7","0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E","0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393","0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"],"configure":["0xF2dc77c697e892542cC53336178a78Bb313DFDC7"]}
+      issuedPermissions:
++        [{"permission":"configure","target":"0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E","via":[]}]
+      receivedPermissions:
++        [{"permission":"configure","target":"0xF2dc77c697e892542cC53336178a78Bb313DFDC7","via":[]},{"permission":"upgrade","target":"0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7","via":[]},{"permission":"upgrade","target":"0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E","via":[]},{"permission":"upgrade","target":"0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393","via":[]},{"permission":"upgrade","target":"0xdDa53E23f8a32640b04D7256e651C1db98dB11C1","via":[]}]
+    }
+```
+
+```diff
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"upgrade","target":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","via":[]}]
+    }
+```
+
+```diff
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"upgrade","target":"0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194","via":[]}]
+    }
+```
+
+```diff
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"upgrade","target":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","via":[]}]
+    }
+```
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"upgrade","target":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","via":[]}]
+    }
+```
+
+```diff
+    contract UsdcBridgeOwnerMultisig (0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194) {
+    +++ description: None
+      assignedPermissions:
+-        {"upgrade":["0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb"]}
+      receivedPermissions:
++        [{"permission":"upgrade","target":"0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb","via":[]}]
+    }
+```
+
+```diff
+    contract RollupOwnerMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: It can act on behalf of 0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0, inheriting its permissions.
+      assignedPermissions:
+-        {"configure":["0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"]}
+      receivedPermissions:
++        [{"permission":"configure","target":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","via":[]}]
+    }
+```
+
+```diff
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"upgrade","target":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","via":[]}]
+    }
+```
+
+```diff
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7) {
+    +++ description: None
+      issuedPermissions:
++        [{"permission":"configure","target":"0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0","via":[]}]
+    }
+```
+
+Generated with discovered.json: 0x8e0d0817f40d0d6a38239d1a617fd478b33111c9
+
+# Diff at Fri, 09 Aug 2024 11:58:49 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@bf40aa32f030fd312056ca0ef198c8550467d1d7 block: 20016201
+- current block number: 20016201
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20016201 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      assignedPermissions.upgrade.3:
+-        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
++        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
+      assignedPermissions.upgrade.2:
+-        "0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"
++        "0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"
+    }
+```
+
+Generated with discovered.json: 0xc3b46a32a85e8df6b8fe449fb0867b49e637d65e
+
+# Diff at Fri, 09 Aug 2024 10:08:55 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@1f0da1d0aab7bc6b3b5e54e7e93480bd98e57035 block: 20016201
+- current block number: 20016201
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20016201 (main branch discovery), not current.
+
+```diff
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0) {
+    +++ description: None
+      assignedPermissions.admin:
+-        ["0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7","0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E","0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393","0xdDa53E23f8a32640b04D7256e651C1db98dB11C1"]
+      assignedPermissions.owner:
+-        ["0xF2dc77c697e892542cC53336178a78Bb313DFDC7"]
+      assignedPermissions.upgrade:
++        ["0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7","0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E","0xdDa53E23f8a32640b04D7256e651C1db98dB11C1","0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393"]
+      assignedPermissions.configure:
++        ["0xF2dc77c697e892542cC53336178a78Bb313DFDC7"]
+    }
+```
+
+```diff
+    contract GnosisSafe (0x778870B55576Bdb2B5368A3CB225fBcED2B8D0Ff) {
+    +++ description: None
+      values.$multisigThreshold:
+-        "1 of 1 (100%)"
+      values.getOwners:
+-        ["0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"]
+      values.getThreshold:
+-        1
+      values.$members:
++        ["0x32B8325b7f12ADB06763D6D04c951AC94e36C3D7"]
+      values.$threshold:
++        1
+      values.multisigThreshold:
++        "1 of 1 (100%)"
+    }
+```
+
+```diff
+    contract UsdcBridgeOwnerMultisig (0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194) {
+    +++ description: None
+      assignedPermissions.admin:
+-        ["0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb"]
+      assignedPermissions.upgrade:
++        ["0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb"]
+      values.$multisigThreshold:
+-        "3 of 6 (50%)"
+      values.getOwners:
+-        ["0xfB7Cf35d123BcE8bc91DC7bEccDC8ab81853007c","0x45894CeBad0a1298D44aF2B528490693E58B322E","0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C","0xCa1B0866CCcfcFf6dbb7B8a0eD57EA663070c50c","0x778870B55576Bdb2B5368A3CB225fBcED2B8D0Ff","0xa23366C4bDD05d6Ac5ae66503fb5AC2827eD5051"]
+      values.getThreshold:
+-        3
+      values.$members:
++        ["0xfB7Cf35d123BcE8bc91DC7bEccDC8ab81853007c","0x45894CeBad0a1298D44aF2B528490693E58B322E","0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C","0xCa1B0866CCcfcFf6dbb7B8a0eD57EA663070c50c","0x778870B55576Bdb2B5368A3CB225fBcED2B8D0Ff","0xa23366C4bDD05d6Ac5ae66503fb5AC2827eD5051"]
+      values.$threshold:
++        3
+      values.multisigThreshold:
++        "3 of 6 (50%)"
+    }
+```
+
+```diff
+    contract RollupOwnerMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: It can act on behalf of 0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0, inheriting its permissions.
+      assignedPermissions.owner:
+-        ["0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"]
+      assignedPermissions.configure:
++        ["0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0"]
+      values.$multisigThreshold:
+-        "4 of 6 (67%)"
+      values.getOwners:
+-        ["0x56b73FA51e09D0BBFA3A5346aaB7576Edc9d0436","0xC9D2c719d6C8Ba2876FC9B443c7d2690072F04ad","0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6","0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C","0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f","0xa0C600a6e85bf225958FFAcC70B5FDDF9A059038"]
+      values.getThreshold:
+-        4
+      values.$members:
++        ["0x56b73FA51e09D0BBFA3A5346aaB7576Edc9d0436","0xC9D2c719d6C8Ba2876FC9B443c7d2690072F04ad","0xFB771f2640Dfd37B18332a84817B2a6e994f5BF6","0xefCf0c8faFB425997870f845e26fC6cA6EE6dD5C","0x3840f487A17A41100DD1Bf0946c34f132a57Fd5f","0xa0C600a6e85bf225958FFAcC70B5FDDF9A059038"]
+      values.$threshold:
++        4
+      values.multisigThreshold:
++        "4 of 6 (67%)"
+    }
+```
+
+Generated with discovered.json: 0x9dd3533431ed12255a2204f7e920a5f2b32640dd
+
+# Diff at Thu, 18 Jul 2024 10:30:09 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@d89fe52cb65d643cef712d1d7910564a7acf2dce block: 20016201
+- current block number: 20016201
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 20016201 (main branch discovery), not current.
+
+```diff
+    contract RollupOwnerMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      descriptions:
++        ["It can act on behalf of 0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0, inheriting its permissions."]
+    }
+```
+
+Generated with discovered.json: 0x8966bc0f2b786fa51b15aa2d9982fd1d05f792ec
+
+# Diff at Wed, 22 May 2024 16:40:05 GMT:
+
+- chain: ethereum
+- author: sekuba (<sekuba@users.noreply.github.com>)
+- comparing to: main@7eae7b47a410c2b8cc7e6a7d7a0bc841a31c6e83 block: 19825954
+- current block number: 19926669
+
+## Description
+
+Fee change for the L2 fee calculation. The new scalar value is [encoded](https://specs.optimism.io/protocol/exec-engine.html#ecotone-l1-cost-fee-changes-eip-4844-da).
+
+## Watched changes
+
+```diff
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393) {
+    +++ description: None
+      values.overhead:
+-        188
++        0
+      values.scalar:
+-        684000
++        "452312848583266388373324160190187140051835877600158453279131273430256651056"
+    }
+```
+
+```diff
+    contract RollupOwnerMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E) {
+    +++ description: None
+      values.nonce:
+-        2
++        3
+    }
+```
+
+Generated with discovered.json: 0x5cc273f3a6946a11fc5da2bff31e3aedf40a9af9
+
+# Diff at Wed, 08 May 2024 14:32:16 GMT:
+
+- chain: ethereum
+- author: sekuba (<sekuba@users.noreply.github.com>)
+- current block number: 19825954
+
+## Description
+
+Initial discovery: BOB (build on bitcoin) is a general-purpose OP stack rollup (.97 similarity with base excluding USDC bridge).
+They are early in their roadmap but aim to offer BTC defi options, a Bitcoin light client and security inheritance from Bitcoin PoW.
+
+## Initial discovery
+
+```diff
++   Status: CREATED
+    contract L1ERC20TokenBridge (0x091dF5E1284E49fA682407096aD34cfD42B95B72)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract ProxyAdmin (0x0d9f416260598313Be6FDf6B010f2FbC34957Cd0)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract L1StandardBridge (0x3F6cE1b36e5120BBc59D0cFe8A5aC8b6464ac1f7)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract L1UsdcBridge (0x450D55a4B4136805B0e5A6BB59377c71FC4FaCBb)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract GnosisSafe (0x778870B55576Bdb2B5368A3CB225fBcED2B8D0Ff)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract OptimismPortal (0x8AdeE124447435fE03e3CD24dF3f4cAE32E65a3E)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract SystemConfig (0xACB886b75D76d1c8d9248cFdDfA09b70C71c5393)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract UsdcBridgeOwnerMultisig (0xC73b6E6ec346f9f1A07D2e7A4380858D7BEa0194)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract RollupOwnerMultisig (0xC91482A96e9c2A104d9298D1980eCCf8C4dc764E)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract L2OutputOracle (0xdDa53E23f8a32640b04D7256e651C1db98dB11C1)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract L1CrossDomainMessenger (0xE3d981643b806FB8030CDB677D6E60892E547EdA)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract AddressManager (0xF2dc77c697e892542cC53336178a78Bb313DFDC7)
+    +++ description: None
+```
+

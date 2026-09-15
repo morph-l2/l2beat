@@ -1,0 +1,48 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "lens",
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": [
+    "eth:0xc29d04A93F893700015138E3E334eB828dAC3cef",
+    "eth:0xf553E6D903AA43420ED7e3bc2313bE9286A8F987"
+  ],
+  "names": {
+    "eth:0xc29d04A93F893700015138E3E334eB828dAC3cef": "Diamond",
+    "eth:0x6bd8d33551077Ed281Cb047835a2aE4033eEc433": "LensZkEvmAdmin",
+    "eth:0x4968A0E4b025eD7d095753E54058377969b41abC": "Lens Multisig"
+  },
+  "overrides": {
+    "eth:0x5C03468829A26981c410a7930bD4853622F0B2E5": {
+      // wrongly discovered VTL
+      "ignoreDiscovery": true
+    },
+    "eth:0x7CBba07e31Dc7b12bB69a1209C5B11A8aC50acf5": {
+      "ignoreMethods": ["getSeq", "nonceSequenceNumber"]
+    },
+    "eth:0x2e5110cF18678Ec99818bFAa849B8C881744b776": {
+      "fields": {
+        "validatorsVTLFullAC": {
+          // giving the permission to the entire AC, because in practice the actor(s) have all roles
+          "handler": {
+            "type": "crossChainAccessControl",
+            "pickChainAddress": "eth:0xc29d04A93F893700015138E3E334eB828dAC3cef"
+          },
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Permissioned to call the functions to commit, prove, execute and revert L2 batches through the ValidatorTimelock in the main Diamond contract."
+            }
+          ]
+        },
+        "validatorsVTL": {
+          // for backwards compatibility with the zkstack template
+          "handler": {
+            "type": "crossChainAccessControl",
+            "pickChainAddress": "eth:0xc29d04A93F893700015138E3E334eB828dAC3cef"
+          },
+          "edit": ["get", "EXECUTOR_ROLE", "members"]
+        }
+      }
+    }
+  }
+}

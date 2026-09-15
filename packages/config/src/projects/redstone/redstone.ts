@@ -1,0 +1,138 @@
+import { formatSeconds, ProjectId, UnixTime } from '@l2beat/shared-pure'
+import {
+  DA_LAYERS,
+  DaCommitteeSecurityRisk,
+  DaEconomicSecurityRisk,
+  DaFraudDetectionRisk,
+  DaRelayerFailureRisk,
+  DaUpgradeabilityRisk,
+  REASON_FOR_BEING_OTHER,
+} from '../../common'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import type { ScalingProject } from '../../internalTypes'
+import { DACHALLENGES_DA_PROVIDER, opStackL2 } from '../../templates/opStack'
+import { readProjectMarkdown } from '../../utils/readMarkdown'
+
+const discovery = new ProjectDiscovery('redstone')
+
+const daChallengeWindow = formatSeconds(
+  discovery.getContractValue<number>(
+    'DataAvailabilityChallenge',
+    'challengeWindow',
+  ) * 12, // in blocks, to seconds
+)
+
+const daResolveWindow = formatSeconds(
+  discovery.getContractValue<number>(
+    'DataAvailabilityChallenge',
+    'resolveWindow',
+  ) * 12, // in blocks, to seconds
+)
+
+export const redstone: ScalingProject = opStackL2({
+  ecosystemInfo: {
+    id: ProjectId('superchain'),
+    isPartOfSuperchain: false,
+  },
+  addedAt: UnixTime(1714996778), // 2024-05-06T11:59:38Z
+  archivedAt: UnixTime(1779388559), // 2026-05-21T18:35:59Z, last batch submission
+  discovery,
+  additionalPurposes: ['Gaming'],
+  reasonsForBeingOther: [
+    REASON_FOR_BEING_OTHER.NO_PROOFS,
+    REASON_FOR_BEING_OTHER.NO_DA_ORACLE,
+  ],
+  display: {
+    redWarning: {
+      text: 'Redstone will shut down on May 15, 2026 (23:59 UTC). Users must withdraw their funds before that date, especially assets held in contracts like Uniswap pools, which will not be recoverable after shutdown. See [announcement](https://x.com/latticexyz/status/2044103611072835744) for details.',
+    },
+    name: 'Redstone',
+    slug: 'redstone',
+    architectureImage: 'opstack-dachallenge',
+    description:
+      "Redstone is a chain built for onchain games and autonomous worlds running MUD. It's an implementation of OP Plasma with DA challenges.",
+    links: {
+      websites: ['https://redstone.xyz/'],
+      bridges: ['https://redstone.xyz/deposit'],
+      documentation: ['https://redstone.xyz/docs'],
+      explorers: ['https://explorer.redstone.xyz/'],
+      repositories: ['https://github.com/latticexyz/redstone'],
+      socialMedia: [
+        'https://twitter.com/redstonexyz',
+        'https://discord.com/invite/latticexyz',
+      ],
+      other: ['https://growthepie.com/chains/redstone'],
+    },
+  },
+  daProvider: DACHALLENGES_DA_PROVIDER(
+    daChallengeWindow,
+    daResolveWindow,
+    'https://github.com/latticexyz/redstone',
+    DA_LAYERS.OP_ALT_DA,
+    DA_LAYERS.ETH_CALLDATA,
+  ),
+  genesisTimestamp: UnixTime(1712192291),
+  isNodeAvailable: 'UnderReview',
+  milestones: [
+    {
+      title: 'Redstone shutdown announcement',
+      url: 'https://x.com/latticexyz/status/2044103611072835744',
+      date: '2026-04-15T00:00:00Z',
+      description:
+        'Lattice announces Redstone shutdown on May 15, 2026. Users must withdraw before that date.',
+      type: 'incident',
+    },
+  ],
+  chainConfig: {
+    name: 'redstone',
+    chainId: 690,
+    apis: [
+      {
+        type: 'rpc',
+        url: 'https://rpc.redstonechain.com',
+        callsPerMinute: 300,
+      },
+    ],
+  },
+  customDa: {
+    type: 'DA Challenges',
+    name: 'RedstoneDA',
+    description:
+      'RedstoneDA is a data availability solution using data availability challenges (DA Challenges).',
+    fallback: DA_LAYERS.ETH_CALLDATA,
+    challengeMechanism: 'DA Challenges',
+    technology: {
+      description: readProjectMarkdown('redstone', 'customDaTechnology', {
+        daChallengeWindow,
+        daResolveWindow,
+      }),
+      references: [
+        {
+          title: 'Alt-DA Specification',
+          url: 'https://github.com/ethereum-optimism/specs/blob/main/specs/experimental/alt-da.md',
+        },
+        {
+          title: 'Security Considerations - Ethresear.ch ',
+          url: 'https://ethresear.ch/t/universal-plasma-and-da-challenges/18629',
+        },
+      ],
+      risks: [
+        {
+          category: 'Funds can be lost if',
+          text: 'the sequencer posts an invalid data availability commitment and there are no challengers.',
+        },
+        {
+          category: 'Funds can be lost if',
+          text: 'the sequencer posts an invalid data availability commitment, and he is able to outspend the challengers.',
+        },
+      ],
+    },
+    risks: {
+      economicSecurity: DaEconomicSecurityRisk.DAChallengesNoFunds,
+      fraudDetection: DaFraudDetectionRisk.NoFraudDetection,
+      committeeSecurity: DaCommitteeSecurityRisk.NoCommitteeSecurity(),
+      upgradeability: DaUpgradeabilityRisk.LowOrNoDelay(), // no delay
+      relayerFailure: DaRelayerFailureRisk.NoMechanism,
+    },
+  },
+})

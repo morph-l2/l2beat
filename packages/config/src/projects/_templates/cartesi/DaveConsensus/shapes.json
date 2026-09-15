@@ -1,0 +1,12 @@
+{
+  "DaveConsensus": {
+    "hash": "0x61e1cbf2df6a6e5c861a98346873366decf804ab70ab53499a9cae9cfda9f6d5",
+    "address": "eth:0x6CE590b9F0697327f18c601DF6f0baE4a0801B68",
+    "blockNumber": 22709685
+  },
+  "DaveConsensus_v2.sol": {
+    "hash": "0x0591357e19f3506f31b61770ad435f01d87a06f47a06414041976c7f4e95a9a6",
+    "address": "eth:0xF0D8374F8446E87e013Ec1435C7245E05f439259",
+    "blockNumber": 23796277
+  }
+}

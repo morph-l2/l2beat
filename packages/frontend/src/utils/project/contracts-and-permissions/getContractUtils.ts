@@ -1,0 +1,142 @@
+import { ChainSpecificAddress, type EthereumAddress } from '@l2beat/shared-pure'
+import type { UsedInProject } from '~/components/projects/sections/permissions/UsedInProject'
+import { ps } from '~/server/projects'
+import { manifest } from '~/utils/Manifest'
+import { getProjectUrl } from '~/utils/project/getProjectUrl'
+
+export interface ContractUtils {
+  getChainName(chain: string): string
+
+  getUsedIn(chain: string, address: EthereumAddress | string): UsedInProject[]
+}
+
+let contractUtils: ContractUtils | undefined
+
+export async function getContractUtils(): Promise<ContractUtils> {
+  if (contractUtils) {
+    return contractUtils
+  }
+
+  const [chainNameMap, usageMap] = await Promise.all([
+    getChainNameMap(),
+    getContractUsageMap(),
+  ])
+
+  contractUtils = createContractUtils(chainNameMap, usageMap)
+  return contractUtils
+}
+
+async function getChainNameMap() {
+  const chains = await ps.getProjects({ select: ['chainConfig'] })
+  const chainNameMap = new Map<string, string>()
+  for (const p of chains) {
+    chainNameMap.set(p.chainConfig.name, p.name)
+  }
+  return chainNameMap
+}
+
+async function getContractUsageMap() {
+  const usageMap = new Map<string, Map<EthereumAddress, UsedInProject[]>>()
+  function addUsage(
+    chain: string,
+    address: EthereumAddress,
+    usage: UsedInProject,
+  ) {
+    let byAddress = usageMap.get(chain)
+    if (!byAddress) {
+      byAddress = new Map()
+      usageMap.set(chain, byAddress)
+    }
+    let uses = byAddress.get(address)
+    if (!uses) {
+      uses = []
+      byAddress.set(address, uses)
+    }
+    if (!uses.some((x) => x.id === usage.id)) {
+      uses.push(usage)
+    }
+  }
+
+  const [daLayers, projects] = await Promise.all([
+    ps.getProjects({ where: ['daLayer'] }),
+    ps.getProjects({
+      select: ['contracts'],
+      optional: [
+        'permissions',
+        'scalingInfo',
+        'daBridge',
+        'privacyInfo',
+        'defiInfo',
+      ],
+      whereNot: ['archivedAt'],
+    }),
+  ])
+
+  for (const project of projects) {
+    const url = getProjectUrl(project, daLayers)
+
+    const basic = {
+      id: project.id,
+      name: project.name,
+      slug: project.slug,
+      icon: manifest.getUrl(`/icons/${project.slug}.png`),
+      url,
+    }
+
+    for (const chain in project.contracts.addresses) {
+      for (const contract of project.contracts.addresses[chain] ?? []) {
+        const isMutable =
+          contract.upgradeability && !contract.upgradeability.immutable
+
+        addUsage(chain, ChainSpecificAddress.address(contract.address), {
+          ...basic,
+          targetName: contract.name,
+          type: isMutable ? 'proxy' : 'implementation',
+        })
+        for (const impl of contract.upgradeability?.implementations ?? []) {
+          addUsage(chain, ChainSpecificAddress.address(impl), {
+            ...basic,
+            targetName: contract.name,
+            type: 'implementation',
+          })
+        }
+      }
+    }
+
+    for (const chain in project.permissions) {
+      const permissions = [
+        ...(project.permissions[chain]?.actors ?? []),
+        ...(project.permissions[chain]?.roles ?? []),
+      ]
+      for (const permission of permissions) {
+        for (const account of permission.accounts) {
+          addUsage(chain, ChainSpecificAddress.address(account.address), {
+            ...basic,
+            targetName: permission.name,
+            type: 'permission',
+          })
+        }
+      }
+    }
+  }
+
+  return usageMap
+}
+
+function createContractUtils(
+  chainNameMap: Map<string, string>,
+  usageMap: Map<string, Map<EthereumAddress | string, UsedInProject[]>>,
+): ContractUtils {
+  return {
+    getChainName(chain) {
+      const name = chainNameMap.get(chain)
+      if (!name) {
+        throw new Error(`Unknown chain: ${chain}`)
+      }
+      return name
+    },
+    getUsedIn(chain, address) {
+      return usageMap.get(chain)?.get(address) ?? []
+    },
+  }
+}

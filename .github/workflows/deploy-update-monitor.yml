@@ -1,40 +1,77 @@
 name: Deploy update monitor
 
 concurrency:
-  group: static
-permissions: {}
+  group: update-monitor-deployment
+permissions:
+  contents: read
+  packages: write
 
 on:
+  workflow_dispatch:
+    inputs:
+      skip-time-check:
+        description: "Skip time check and always deploy"
+        required: true
+        type: boolean
+        default: true
+      um-prod-enabled:
+        description: "Deploy update-monitor prod"
+        required: true
+        default: true
+        type: boolean
+      um-staging-enabled:
+        description: "Deploy update-monitor staging"
+        required: true
+        default: true
+        type: boolean
   schedule:
-    - cron: "45 * * * *"
+    - cron: "30 * * * *"
 
 jobs:
-  deploy-update-monitor:
-    name: Deploy update monitor
+  check-time:
+    name: Wait for proper time to deploy changes to update monitor
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
-      - name: Install heroku CLI
-        run: curl https://cli-assets.heroku.com/install-ubuntu.sh | sh
-      - name: Login to heroku container registry
-        uses: docker/login-action@v3
-        with:
-          username: "_"
-          password: ${{ secrets.HEROKU_TOKEN }}
-          registry: registry.heroku.com
-      - name: Build and publish containers
-        uses: docker/build-push-action@v5
-        with:
-          push: true
-          file: Dockerfile.backend
-          tags: |
-            registry.heroku.com/${{ secrets.HEROKU_UPDATE_MONITOR_DEV }}/web
-            registry.heroku.com/${{ secrets.HEROKU_UPDATE_MONITOR_PROD }}/web
-      - name: Release published containers
+      - name: Wait until we're in last quarter of hour
         run: |
-          heroku container:release -a ${{ secrets.HEROKU_UPDATE_MONITOR_DEV }} -v web
-          heroku container:release -a ${{ secrets.HEROKU_UPDATE_MONITOR_PROD }} -v web
-        env:
-          HEROKU_ORGANIZATION: ${{ vars.HEROKU_ORG }}
-          HEROKU_API_KEY: ${{ secrets.HEROKU_TOKEN }}
+          check_minutes() {
+            local minutes=$(date +%M)
+            if [ $minutes -ge $1 ] && [ $minutes -le $2 ]; then
+              return 0
+            else
+              return 1
+            fi
+          }
+
+          if ${{ github.event.inputs.skip-time-check || 'false' }}; then
+            echo "Forced run, skipping checks"
+            exit 0
+          fi
+
+          if check_minutes 55 60 || check_minutes 0 30; then
+            echo "It's too late, failing!"
+            exit 1
+          fi
+          until check_minutes 45 55; do
+            echo "It's too early, sleeping for 30s"
+            sleep 30
+          done
+
+  deploy-update-monitor-staging:
+    needs: check-time
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs['um-staging-enabled'] == 'true') || (github.event_name != 'workflow_dispatch' && vars.DEPLOY_UM_STAGING_ENABLED != 'false')
+    uses: ./.github/workflows/deploy-to-coolify.yml
+    secrets:
+      COOLIFY_SERVER: ${{ secrets.COOLIFY_SERVER }}
+      COOLIFY_DEPLOY_API_KEY: ${{ secrets.COOLIFY_DEPLOY_API_KEY }}
+      COOLIFY_UUID: ${{ secrets.COOLIFY_UM_STAGING_ID }}
+
+  deploy-update-monitor-production:
+    needs: check-time
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs['um-prod-enabled'] == 'true') || (github.event_name != 'workflow_dispatch' && vars.DEPLOY_UM_STAGING_ENABLED != 'false')
+    uses: ./.github/workflows/deploy-to-coolify.yml
+    secrets:
+      COOLIFY_SERVER: ${{ secrets.COOLIFY_SERVER }}
+      COOLIFY_DEPLOY_API_KEY: ${{ secrets.COOLIFY_DEPLOY_API_KEY }}
+      COOLIFY_UUID: ${{ secrets.COOLIFY_UM_PRODUCTION_ID }}

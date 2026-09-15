@@ -1,14 +1,14 @@
-import { assert } from '@l2beat/backend-tools'
-import { ContractValue } from '@l2beat/discovery-types'
+import { assert } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
 import { BigNumber } from 'bignumber.js'
-import { z } from 'zod'
 import { toContractValue } from '../handlers/utils/toContractValue'
-import { ArgType, BaseTypeCaster } from './BaseTypeCaster'
+import type { ContractValue } from '../output/types'
+import type { ArgType, BaseTypeCaster } from './BaseTypeCaster'
 
-const Validator = z.object({
-  value: z.number(),
-  trueResult: z.union([z.number(), z.string()]).optional(),
-  falseResult: z.union([z.number(), z.string()]).optional(),
+const Validator = v.object({
+  value: v.union([v.number(), v.string()]),
+  trueResult: v.union([v.number(), v.string()]).optional(),
+  falseResult: v.union([v.number(), v.string()]).optional(),
 })
 
 export const GreaterThan: BaseTypeCaster = {
@@ -23,8 +23,7 @@ export const GreaterThan: BaseTypeCaster = {
 
     if (asBigInt.gt(compareValue)) {
       return toContractValue(validated.trueResult ?? true)
-    } else {
-      return toContractValue(validated.falseResult ?? false)
     }
+    return toContractValue(validated.falseResult ?? false)
   },
 }

@@ -1,9 +1,8 @@
-import { EthereumAddress, Hash256 } from '@l2beat/shared-pure'
+import { ChainSpecificAddress, Hash256 } from '@l2beat/shared-pure'
 import { expect, mockFn, mockObject } from 'earl'
-import { BigNumber, ethers, providers } from 'ethers'
+import { BigNumber, ethers, type providers } from 'ethers'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 import {
   ConstructorArgsHandler,
   decodeConstructorArgs,
@@ -23,10 +22,9 @@ describe(ConstructorArgsHandler.name, () => {
         'constructorArgs',
         { type: 'constructorArgs' },
         sampleAbi,
-        DiscoveryLogger.SILENT,
       )
 
-      const contractAddress = EthereumAddress.random()
+      const contractAddress = ChainSpecificAddress.random()
       const txHash = Hash256.random()
       const transaction = fakeEthersTransaction({ data: sampleTxData })
 
@@ -56,10 +54,9 @@ describe(ConstructorArgsHandler.name, () => {
         'constructorArgs',
         { type: 'constructorArgs', nameArgs: true },
         sampleAbi,
-        DiscoveryLogger.SILENT,
       )
 
-      const contractAddress = EthereumAddress.random()
+      const contractAddress = ChainSpecificAddress.random()
       const txHash = Hash256.random()
       const transaction = fakeEthersTransaction({ data: sampleTxData })
 
@@ -87,7 +84,7 @@ describe(ConstructorArgsHandler.name, () => {
 
     it('falls back to extraction with block explorer if heuristic fails', async () => {
       /**
-       * You can achive the same result using:
+       * You can achieve the same result using:
        * @example
        * ```ts
        * const [ctorFragment] = new ethers.utils.Interface(sampleAbi).fragments
@@ -111,10 +108,9 @@ describe(ConstructorArgsHandler.name, () => {
         'constructorArgs',
         { type: 'constructorArgs' },
         sampleAbi,
-        DiscoveryLogger.SILENT,
       )
 
-      const contractAddress = EthereumAddress.random()
+      const contractAddress = ChainSpecificAddress.random()
 
       const provider = mockObject<IProvider>({
         getDeployment: mockFn().rejectsWith('error'), // We could cover the error during decode but any exception within the block will skip the heruistic approach
@@ -220,7 +216,7 @@ function fakeEthersTransaction(
     chainId: 1,
     confirmations: 1,
     data: '0x',
-    from: EthereumAddress.random().toString(),
+    from: ChainSpecificAddress.random().toString(),
     gasLimit: BigNumber.from(100000),
     hash: Hash256.random().toString(),
     nonce: 1,

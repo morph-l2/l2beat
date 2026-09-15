@@ -1,72 +1,96 @@
-import { EthereumAddress, UnixTime } from '@l2beat/shared-pure'
-
-import { BigQueryClientQuery } from '../../../../peripherals/bigquery/BigQueryClient'
+import { type EthereumAddress, UnixTime, unique } from '@l2beat/shared-pure'
+import partition from 'lodash/partition'
 
 export function getTransferQuery(
-  transfersConfig: { from: EthereumAddress; to: EthereumAddress }[],
+  transfersConfig: { from?: EthereumAddress; to: EthereumAddress }[],
   from: UnixTime,
   to: UnixTime,
-): BigQueryClientQuery {
-  const params = [
-    from.toDate().toISOString(),
-    to.toDate().toISOString(),
-    ...transfersConfig.flatMap((c) => [
-      c.from.toLowerCase(),
-      c.to.toLowerCase(),
-    ]),
-    from.toDate().toISOString(),
-    to.toDate().toISOString(),
-  ]
+): string {
+  const uniqueTransfersConfigs = unique(
+    transfersConfig,
+    (tc) => `${tc.from}-${tc.to}`,
+  )
+
+  const [uniqueWithFrom, uniqueWithoutFrom] = partition(
+    uniqueTransfersConfigs,
+    (tc) => tc.from,
+  )
 
   const query = `
-    CREATE TEMP FUNCTION CalculateCalldataGasUsed(hexString STRING)
-    RETURNS INT64
-    LANGUAGE js AS """
-      var nonZeroBytes = 0;
-      var zeroBytes = 0;
-
-      for (var i = 2; i < hexString.length; i += 2) {
-        if(hexString.substr(i, 2)==='00') {
-          zeroBytes++;
-        } else {
-          nonZeroBytes++;
-        }
-      }
-
-      return 16 * nonZeroBytes + 4 * zeroBytes;
-    """;
-
-    SELECT
-      txs.hash,
-      traces.from_address,
-      traces.to_address,
-      txs.block_number,
-      txs.block_timestamp,
-      txs.receipt_gas_used,
-      txs.gas_price,
-      txs.receipt_blob_gas_used,
-      txs.receipt_blob_gas_price,
-      CalculateCalldataGasUsed(txs.input) AS calldata_gas_used,
-      (LENGTH(SUBSTR(txs.input, 3)) / 2) AS data_length,
-    FROM
-      bigquery-public-data.crypto_ethereum.transactions AS txs
-    JOIN
-      bigquery-public-data.crypto_ethereum.traces AS traces
-    ON
-      traces.status = 1
-      AND txs.hash = traces.transaction_hash
-      AND traces.call_type = 'call'
-      AND traces.block_timestamp >= TIMESTAMP(?)
-      AND traces.block_timestamp <= TIMESTAMP(?)
-      AND (
-        ${transfersConfig
-          .map(() => `(traces.from_address = ? AND traces.to_address = ?)`)
-          .join(' OR ')}
+    WITH
+      params AS (
+        SELECT
+          from_iso8601_timestamp('${UnixTime.toDate(from).toISOString()}') AS t_start,
+          from_iso8601_timestamp('${UnixTime.toDate(to).toISOString()}') AS t_end
+      ),
+      allowed_pairs(from_addr, to_addr) AS (
+        VALUES
+          ${
+            uniqueWithFrom.length > 0
+              ? uniqueWithFrom
+                  .map(
+                    (tc) =>
+                      `(${tc.from?.toLowerCase()}, ${tc.to.toLowerCase()})`,
+                  )
+                  .join(',')
+              : '(NULL, NULL)'
+          }
+      ),
+      allowed_to_only(to_addr) AS (
+        VALUES
+          ${
+            uniqueWithoutFrom.length > 0
+              ? uniqueWithoutFrom
+                  .map((tc) => `(${tc.to.toLowerCase()})`)
+                  .join(',')
+              : '(NULL)'
+          }
+      ),
+      traces_filtered AS (
+        SELECT
+          tr.tx_hash,
+          tr."from",
+          tr.to
+        FROM ethereum.traces tr
+        CROSS JOIN params p
+        WHERE tr.success = true
+          AND tr.call_type = 'call'
+          AND tr.block_time >= p.t_start
+          AND tr.block_time <=  p.t_end
+          AND (
+            ROW(tr."from", tr.to) IN (SELECT from_addr, to_addr FROM allowed_pairs)
+            OR tr.to IN (SELECT to_addr FROM allowed_to_only)
+          )
+      ),
+      txs_filtered AS (
+        SELECT
+          tx.hash,
+          tx.block_number,
+          tx.block_time,
+          tx.gas_used,
+          tx.gas_price,
+          tx.blob_versioned_hashes,
+          tx.data
+        FROM ethereum.transactions tx
+        CROSS JOIN params p
+        WHERE tx.block_time >= p.t_start
+          AND tx.block_time <=  p.t_end
       )
-    WHERE
-      txs.block_timestamp >= TIMESTAMP(?)
-      AND txs.block_timestamp <= TIMESTAMP(?)
+    SELECT DISTINCT
+      tx.hash,
+      tr."from",
+      tr.to,
+      tx.block_number,
+      tx.block_time,
+      tx.gas_used,
+      tx.gas_price,
+      tx.blob_versioned_hashes,
+      length(tx.data) AS data_length,
+      length(replace(regexp_replace(to_hex(tx.data), '([0-9A-Fa-f]{2})', '$1x'), '00x', '')) / 3 AS non_zero_bytes
+    FROM txs_filtered tx
+    JOIN traces_filtered tr
+      ON tx.hash = tr.tx_hash;
   `
 
-  return { query, params, limitInGb: 10 }
+  return query
 }

@@ -1,27 +1,40 @@
-import { createHash } from 'crypto'
-import { BlobsInBlock } from '@l2beat/shared'
+import type { Logger } from '@l2beat/backend-tools'
+import { type BlobsInBlock, getBlockNumberAtOrBefore } from '@l2beat/shared'
 import {
   assert,
   Bytes,
-  EthereumAddress,
-  Hash256,
+  type EthereumAddress,
+  type Hash256,
   UnixTime,
 } from '@l2beat/shared-pure'
-import { BigNumber, providers } from 'ethers'
-import { ContractSource } from '../../utils/IEtherscanClient'
+import { createHash } from 'crypto'
+import { BigNumber, type providers } from 'ethers'
+import type { ContractSource } from '../../utils/IEtherscanClient'
 import { isRevert } from '../utils/isRevert'
 import { DebugTransactionCallResponse } from './DebugTransactionTrace'
-import { ContractDeployment, RawProviders } from './IProvider'
-import { LowLevelProvider } from './LowLevelProvider'
-import { CacheEntry, ReorgAwareCache } from './ReorgAwareCache'
-import { ProviderStats, getZeroStats } from './Stats'
-import { MulticallClient } from './multicall/MulticallClient'
+import type { CacheEntry } from './DiscoveryCache'
+import type { RawProviders } from './IProvider'
+import type {
+  LowLevelProvider,
+  RawContractDeployment,
+} from './LowLevelProvider'
+import type { MulticallClient } from './multicall/MulticallClient'
+import type { ReorgAwareCache } from './ReorgAwareCache'
+import { ProviderMeasurement, ProviderStats } from './Stats'
 
 interface ScheduledCall {
   resolve: (value: Bytes) => void
   reject: (reason: unknown) => void
   address: EthereumAddress
   data: Bytes
+  blockNumber: number
+}
+
+interface ScheduledStorageRead {
+  resolve: (value: Bytes) => void
+  reject: (reason: unknown) => void
+  address: EthereumAddress
+  slot: number | bigint | Bytes
   blockNumber: number
 }
 
@@ -49,36 +62,45 @@ const REVERT_MARKER_VALUE = '{execution reverted}'
 const UNDEFINED_MARKER_VALUE = '{undefined value}'
 
 export class BatchingAndCachingProvider {
-  public stats: ProviderStats = getZeroStats()
+  public stats: ProviderStats = new ProviderStats()
   private calls: ScheduledCall[] = []
   private callsTimeout: ReturnType<typeof setTimeout> | undefined
 
   private logRequests: ScheduledLogRequest[] = []
   private logRequestsTimeout: ReturnType<typeof setTimeout> | undefined
 
+  private storageReads: ScheduledStorageRead[] = []
+  private storageReadsTimeout: ReturnType<typeof setTimeout> | undefined
+
+  // Flips to true the first time a state-override eth_call fails, so
+  // subsequent storage-read flushes skip the override path and go
+  // straight to per-slot fetches.
+  private stateOverrideUnsupported = false
+
   constructor(
     private cache: ReorgAwareCache,
     private provider: LowLevelProvider,
     private multicallClient: MulticallClient,
+    private logger: Logger,
   ) {}
 
   async raw<T>(
     cacheKey: string,
-    fn: (providers: RawProviders) => Promise<T>,
+    fn: (providers: RawProviders, logger: Logger) => Promise<T>,
   ): Promise<T> {
     const entry = await this.cache.entry(cacheKey, [], undefined)
     const cached = entry.read()
     if (cached !== undefined) {
       return parseCacheEntry(cached)
     }
-    const result = await fn(this.provider.getRawProviders())
+    const result = await fn(this.provider.getRawProviders(), this.logger)
     if (result !== undefined) {
       entry.write(JSON.stringify(result))
     }
     return result
   }
 
-  async call(
+  call(
     address: EthereumAddress,
     data: Bytes,
     blockNumber: number,
@@ -99,6 +121,7 @@ export class BatchingAndCachingProvider {
     data: Bytes,
     blockNumber: number,
   ): Promise<Bytes> {
+    let duration = -performance.now()
     const entry = await this.cache.entry(
       'call',
       [blockNumber, address, data],
@@ -106,12 +129,12 @@ export class BatchingAndCachingProvider {
     )
     const cached = entry.read()
     if (cached !== undefined) {
-      this.stats.callCount++
+      duration += performance.now()
+      this.stats.mark(ProviderMeasurement.CALL, duration)
       if (cached === REVERT_MARKER_VALUE) {
         throw new Error('Execution reverted')
-      } else {
-        return Bytes.fromHex(cached)
       }
+      return Bytes.fromHex(cached)
     }
 
     try {
@@ -127,6 +150,7 @@ export class BatchingAndCachingProvider {
   }
 
   private async flushCalls() {
+    const start = performance.now()
     const calls = [...this.calls]
     this.calls = []
 
@@ -152,7 +176,8 @@ export class BatchingAndCachingProvider {
         calls.push(checked)
         toExecute.set(checked.call.blockNumber, calls)
       } else {
-        this.stats.callCount++
+        const duration = performance.now() - start
+        this.stats.mark(ProviderMeasurement.CALL, duration)
         if (cached === REVERT_MARKER_VALUE) {
           checked.call.reject(new Error('Execution reverted'))
         } else {
@@ -198,24 +223,116 @@ export class BatchingAndCachingProvider {
     }
   }
 
-  async getStorage(
+  getStorage(
     address: EthereumAddress,
     slot: number | bigint | Bytes,
     blockNumber: number,
   ): Promise<Bytes> {
-    const entry = await this.cache.entry(
-      'getStorage',
-      [blockNumber, address, slot],
-      blockNumber,
+    return new Promise((resolve, reject) => {
+      this.storageReads.push({ resolve, reject, address, slot, blockNumber })
+      if (!this.storageReadsTimeout) {
+        this.storageReadsTimeout = setTimeout(() => {
+          this.storageReadsTimeout = undefined
+          this.flushStorageReads()
+        }, 0)
+      }
+    })
+  }
+
+  private async flushStorageReads() {
+    const start = performance.now()
+    const reads = [...this.storageReads]
+    this.storageReads = []
+
+    const checkedInCache = await Promise.all(
+      reads.map(async (read) => ({
+        read,
+        entry: await this.cache.entry(
+          'getStorage',
+          [read.blockNumber, read.address, read.slot],
+          read.blockNumber,
+        ),
+      })),
     )
-    const cached = entry.read()
-    if (cached !== undefined) {
-      this.stats.getStorageCount++
-      return Bytes.fromHex(cached)
+
+    // Group misses by (address, blockNumber) — one eth_call with state
+    // override can only target a single address, so each group becomes one
+    // batched RPC.
+    const toExecute = new Map<
+      string,
+      { read: ScheduledStorageRead; entry: CacheEntry }[]
+    >()
+    for (const checked of checkedInCache) {
+      const cached = checked.entry.read()
+      if (cached === undefined) {
+        const key = `${checked.read.blockNumber}.${checked.read.address.toString()}`
+        const group = toExecute.get(key) ?? []
+        group.push(checked)
+        toExecute.set(key, group)
+      } else {
+        const duration = performance.now() - start
+        this.stats.mark(ProviderMeasurement.GET_STORAGE, duration)
+        checked.read.resolve(Bytes.fromHex(cached))
+      }
     }
-    const storage = await this.provider.getStorage(address, slot, blockNumber)
-    entry.write(storage.toString())
-    return storage
+
+    await Promise.all(
+      [...toExecute.values()].map((group) => this.batchReadStorage(group)),
+    )
+  }
+
+  private async batchReadStorage(
+    group: { read: ScheduledStorageRead; entry: CacheEntry }[],
+  ) {
+    const first = group[0]
+    assert(first !== undefined, 'empty storage group')
+    const { address, blockNumber } = first.read
+    const slots = group.map((g) => g.read.slot)
+
+    try {
+      let values: Bytes[]
+      if (this.stateOverrideUnsupported || slots.length === 1) {
+        values = await Promise.all(
+          slots.map((slot) =>
+            this.provider.getStorage(address, slot, blockNumber),
+          ),
+        )
+      } else {
+        try {
+          values = await this.provider.batchReadStorage(
+            address,
+            slots,
+            blockNumber,
+          )
+        } catch (e) {
+          this.logger.warn(
+            'State override batch storage read failed, falling back to per-slot fetch',
+            { error: e },
+          )
+          this.stateOverrideUnsupported = true
+          values = await Promise.all(
+            slots.map((slot) =>
+              this.provider.getStorage(address, slot, blockNumber),
+            ),
+          )
+        }
+      }
+
+      assert(values.length === group.length)
+      for (let i = 0; i < group.length; i++) {
+        const item = group[i] as {
+          read: ScheduledStorageRead
+          entry: CacheEntry
+        }
+        const value = values[i] as Bytes
+        item.read.resolve(value)
+        item.entry.write(value.toString())
+      }
+    } catch (e) {
+      for (const item of group) {
+        item.read.reject(e)
+      }
+    }
   }
 
   async getLogs(
@@ -224,6 +341,7 @@ export class BatchingAndCachingProvider {
     fromBlock: number,
     toBlock: number,
   ): Promise<providers.Log[]> {
+    let duration = -performance.now()
     const topic0 = typeof topics[0] === 'string' ? [topics[0]] : topics[0]
     // Complex case, we can't batch this
     if (fromBlock !== 0 || topics.length !== 1 || !topic0) {
@@ -237,10 +355,12 @@ export class BatchingAndCachingProvider {
       )
       const cached = entry.read()
       if (cached !== undefined) {
-        this.stats.getLogsCount++
+        duration += performance.now()
+        this.stats.mark(ProviderMeasurement.GET_LOGS, duration)
         return parseCacheEntry(cached)
       }
-      const logs = await this.provider.getLogs(
+      const logs = await getAllLogs(
+        this.provider,
         address,
         topics,
         fromBlock,
@@ -268,6 +388,7 @@ export class BatchingAndCachingProvider {
   }
 
   private async flushLogRequests() {
+    const start = performance.now()
     const logRequests = [...this.logRequests]
     this.logRequests = []
 
@@ -297,7 +418,8 @@ export class BatchingAndCachingProvider {
           missingTopics.push(checked.logRequest.topic0[i]!)
           return []
         }
-        this.stats.getLogsCount++
+        const duration = performance.now() - start
+        this.stats.mark(ProviderMeasurement.GET_LOGS, duration)
         return parseCacheEntry(cached) as providers.Log[]
       })
 
@@ -348,7 +470,8 @@ export class BatchingAndCachingProvider {
 
     let logs: providers.Log[] = []
     try {
-      logs = await this.provider.getLogs(
+      logs = await getAllLogs(
+        this.provider,
         first.address,
         [topics],
         0,
@@ -389,7 +512,9 @@ export class BatchingAndCachingProvider {
     for (const item of items) {
       for (const nested of item.items) {
         const topicLogs = byTopic.get(item.topic) ?? []
-        nested.logs.push(...topicLogs)
+        for (const topic of topicLogs) {
+          nested.logs.push(topic)
+        }
       }
     }
 
@@ -399,9 +524,71 @@ export class BatchingAndCachingProvider {
     }
   }
 
+  async getBlock(blockNumber: number): Promise<providers.Block | undefined> {
+    let duration = -performance.now()
+    const entry = await this.cache.entry('getBlock', [blockNumber], undefined)
+    const cached = entry.read()
+    if (cached !== undefined) {
+      // This recovers BigNumber instances from the cache
+      // BigNumbers are saved in JSON as { type: 'BigNumber', hex: '0x123' }
+      const parsed = parseCacheEntry(cached) as providers.Block | null
+      if (parsed !== null && parsed !== undefined) {
+        duration += performance.now()
+        this.stats.mark(ProviderMeasurement.GET_BLOCK, duration)
+        return parsed
+      }
+    }
+
+    const block = await this.provider.getBlock(blockNumber)
+    if (block === undefined || block === null) {
+      return undefined
+    }
+
+    entry.write(JSON.stringify(block))
+    return block
+  }
+
+  async getBlockNumberAtOrBefore(timestamp: UnixTime): Promise<number> {
+    let duration = -performance.now()
+    const entry = await this.cache.entry(
+      'getBlockNumberAtOrBefore',
+      [timestamp],
+      undefined,
+    )
+    const cached = entry.read()
+    if (cached !== undefined) {
+      duration += performance.now()
+      this.stats.mark(
+        ProviderMeasurement.GET_BLOCK_NUMBER_AT_OR_BEFORE,
+        duration,
+      )
+      return parseCacheEntry(cached)
+    }
+    let blockNumber: number
+    try {
+      blockNumber =
+        await this.provider.getBlockNumberAtOrBeforeExplorer(timestamp)
+    } catch {
+      blockNumber = await getBlockNumberAtOrBefore(
+        timestamp,
+        1, // NOTE(radomski): We don't support discovery on block 0, but assuming it's fine
+        await this.provider.getBlockNumber(),
+        async (blockNumber: number) => {
+          const block = await this.getBlock(blockNumber)
+          assert(block !== undefined, `Could not find block ${blockNumber}`)
+          return block
+        },
+      )
+    }
+
+    entry.write(blockNumber.toString())
+    return blockNumber
+  }
+
   async getTransaction(
     transactionHash: Hash256,
   ): Promise<providers.TransactionResponse | undefined> {
+    let duration = -performance.now()
     const entry = await this.cache.entry(
       'getTransaction',
       [transactionHash],
@@ -409,7 +596,8 @@ export class BatchingAndCachingProvider {
     )
     const cached = entry.read()
     if (cached !== undefined) {
-      this.stats.getTransactionCount++
+      duration += performance.now()
+      this.stats.mark(ProviderMeasurement.GET_TRANSACTION, duration)
       // This recovers BigNumber instances from the cache
       // BigNumbers are saved in JSON as { type: 'BigNumber', hex: '0x123' }
       return parseCacheEntry(cached)
@@ -429,6 +617,7 @@ export class BatchingAndCachingProvider {
   async getDebugTrace(
     transactionHash: Hash256,
   ): Promise<DebugTransactionCallResponse> {
+    let duration = -performance.now()
     const entry = await this.cache.entry(
       'getDebugTrace',
       [transactionHash],
@@ -436,11 +625,14 @@ export class BatchingAndCachingProvider {
     )
     const cached = entry.read()
     if (cached !== undefined) {
-      this.stats.getDebugTraceCount++
+      duration += performance.now()
+      this.stats.mark(ProviderMeasurement.GET_DEBUG_TRACE, duration)
       return DebugTransactionCallResponse.parse(parseCacheEntry(cached))
     }
     const trace = await this.provider.getDebugTrace(transactionHash)
-    entry.write(JSON.stringify(trace))
+    if (trace.calls) {
+      entry.write(JSON.stringify(trace))
+    }
     return trace
   }
 
@@ -448,6 +640,7 @@ export class BatchingAndCachingProvider {
     address: EthereumAddress,
     blockNumber: number,
   ): Promise<Bytes> {
+    let duration = -performance.now()
     const entry = await this.cache.entry(
       'getBytecode',
       [address, blockNumber],
@@ -455,7 +648,8 @@ export class BatchingAndCachingProvider {
     )
     const cached = entry.read()
     if (cached !== undefined) {
-      this.stats.getBytecodeCount++
+      duration += performance.now()
+      this.stats.mark(ProviderMeasurement.GET_BYTECODE, duration)
       return Bytes.fromHex(cached)
     }
     const bytecode = await this.provider.getBytecode(address, blockNumber)
@@ -464,10 +658,12 @@ export class BatchingAndCachingProvider {
   }
 
   async getSource(address: EthereumAddress): Promise<ContractSource> {
-    const entry = await this.cache.entry('getSource', [address], undefined)
+    let duration = -performance.now()
+    const entry = await this.cache.entry('getSource-v3', [address], undefined)
     const cached = entry.read()
     if (cached !== undefined) {
-      this.stats.getSourceCount++
+      duration += performance.now()
+      this.stats.mark(ProviderMeasurement.GET_SOURCE, duration)
       return parseCacheEntry(cached)
     }
     const source = await this.provider.getSource(address)
@@ -479,24 +675,24 @@ export class BatchingAndCachingProvider {
 
   async getDeployment(
     address: EthereumAddress,
-  ): Promise<ContractDeployment | undefined> {
+  ): Promise<RawContractDeployment | undefined> {
+    let duration = -performance.now()
     const entry = await this.cache.entry('getDeployment', [address], undefined)
     const cached = entry.read()
     if (cached !== undefined) {
-      this.stats.getDeploymentCount++
+      duration += performance.now()
+      this.stats.mark(ProviderMeasurement.GET_DEPLOYMENT, duration)
+      // legacy, markers no longer inserted
       if (cached === UNDEFINED_MARKER_VALUE) {
         return undefined
-      } else {
-        const parsed = parseCacheEntry(cached)
-        parsed.timestamp = new UnixTime(parsed.timestamp)
-        return parsed
       }
+      const parsed = parseCacheEntry(cached)
+      parsed.timestamp = UnixTime(parsed.timestamp)
+      return parsed
     }
     const deployment = await this.provider.getDeployment(address)
     if (deployment !== undefined) {
       entry.write(JSON.stringify(deployment))
-    } else {
-      entry.write(UNDEFINED_MARKER_VALUE)
     }
     return deployment
   }
@@ -511,9 +707,50 @@ export class BatchingAndCachingProvider {
     entry.write(JSON.stringify(blobs))
     return blobs
   }
+
+  async celestiaBlobExists(
+    height: number,
+    namespace: string,
+    commitment: string,
+  ) {
+    const entry = await this.cache.entry(
+      'celestiaBlobExists',
+      [height, namespace, commitment],
+      undefined,
+    )
+    const cached = entry.read()
+    if (cached !== undefined) {
+      return parseCacheEntry(cached)
+    }
+
+    const blobExists = await this.provider.celestiaBlobExists(
+      height,
+      namespace,
+      commitment,
+    )
+
+    entry.write(JSON.stringify(blobExists))
+
+    return blobExists
+  }
+
+  async getCelestiaBlockResultEvents(height: number) {
+    const entry = await this.cache.entry(
+      'getCelestiaBlockResultEvents',
+      [height],
+      undefined,
+    )
+    const cached = entry.read()
+    if (cached !== undefined) {
+      return parseCacheEntry(cached)
+    }
+    const events = await this.provider.getCelestiaBlockResultEvents(height)
+    entry.write(JSON.stringify(events))
+    return events
+  }
 }
 
-function orderLogs(a: providers.Log, b: providers.Log) {
+export function orderLogs(a: providers.Log, b: providers.Log) {
   const blocks = a.blockNumber - b.blockNumber
   if (blocks !== 0) {
     return blocks
@@ -532,4 +769,32 @@ function parseCacheEntry(entry: string) {
     }
     return value
   })
+}
+
+async function getAllLogs(
+  provider: LowLevelProvider,
+  address: EthereumAddress,
+  topics: (string | string[] | null)[],
+  fromBlock: number,
+  toBlock: number,
+): Promise<providers.Log[]> {
+  if (fromBlock === toBlock) {
+    return await provider.getLogs(address, topics, fromBlock, toBlock)
+  }
+  try {
+    return await provider.getLogs(address, topics, fromBlock, toBlock)
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      e.message.includes('Log response size exceeded')
+    ) {
+      const midPoint = fromBlock + Math.floor((toBlock - fromBlock) / 2)
+      const [a, b] = await Promise.all([
+        getAllLogs(provider, address, topics, fromBlock, midPoint),
+        getAllLogs(provider, address, topics, midPoint + 1, toBlock),
+      ])
+      return a.concat(b)
+    }
+    throw e
+  }
 }

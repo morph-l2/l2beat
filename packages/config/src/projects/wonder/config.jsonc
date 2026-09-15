@@ -1,0 +1,61 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "wonder",
+  "archived": true,
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": ["eth:0xC8C4cB5AF7c723c7EfD360898B47920679f92C92"],
+  "names": {
+    "eth:0xC8C4cB5AF7c723c7EfD360898B47920679f92C92": "Diamond",
+    "eth:0x5D8ba173Dc6C3c90C8f7C04C9288BeF5FDbAd06E": "ValidatorTimelock2"
+  },
+  "overrides": {
+    "eth:0x5D8ba173Dc6C3c90C8f7C04C9288BeF5FDbAd06E": {
+      "fields": {
+        "validatorsVTL": {
+          "handler": {
+            "type": "event",
+            "select": ["validator"],
+            "add": {
+              "event": "event ValidatorAdded(uint256 indexed chainId, address validator)",
+              "where": ["=", "#chainId", 9637]
+            },
+            "remove": {
+              "event": "event ValidatorRemoved(uint256 indexed chainId, address validator)",
+              "where": ["=", "#chainId", 9637]
+            }
+          },
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Permissioned to call the functions to commit, prove, execute and revert L2 batches through the ValidatorTimelock in the main Diamond contract."
+            }
+          ]
+        }
+      }
+    },
+    "eth:0x8c0Bfc04AdA21fd496c55B8C50331f904306F564": {
+      "fields": {
+        "validatorsVTL": {
+          "handler": {
+            "type": "event",
+            "select": ["validator"],
+            "add": {
+              "event": "event ValidatorAdded(uint256 indexed chainId, address validator)",
+              "where": ["=", "#chainId", 9637]
+            },
+            "remove": {
+              "event": "event ValidatorRemoved(uint256 indexed chainId, address validator)",
+              "where": ["=", "#chainId", 9637]
+            }
+          },
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Permissioned to call the functions to commit, prove, execute and revert L2 batches through the ValidatorTimelock in the main Diamond contract."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,206 +1,598 @@
-import { createHash } from 'crypto'
-import { existsSync, readFileSync, readdirSync } from 'fs'
+import {
+  assert,
+  assertUnreachable,
+  ChainSpecificAddress,
+  type EthereumAddress,
+  formatJson,
+  Hash256,
+} from '@l2beat/shared-pure'
+import type { Parser } from '@l2beat/validate'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'fs'
 import path, { join } from 'path'
-import chalk from 'chalk'
-
-import { hashJson } from '@l2beat/shared'
-import { Hash256, json, stripAnsiEscapeCodes } from '@l2beat/shared-pure'
 import {
-  HashedFileContent,
-  buildSimilarityHashmap,
-  estimateSimilarity,
-  flattenFirstSource,
-  removeComments,
+  combineImplementationHashes,
+  contractFlatteningHash,
+  getHashForMatchingFromSources,
 } from '../../flatten/utils'
-import { ContractOverrides } from '../config/DiscoveryOverrides'
-import {
-  DiscoveryContract,
-  RawDiscoveryConfig,
-} from '../config/RawDiscoveryConfig'
-import { ContractSources } from '../source/SourceCodeService'
+import { fileExistsCaseSensitive } from '../../utils/fsLayer'
+import type { ContractSource } from '../../utils/IEtherscanClient'
+import { ColorContract } from '../config/ColorConfig'
+import type { ConfigRegistry } from '../config/ConfigRegistry'
+import { hashJsonStable } from '../config/hashJsonStable'
+import { ContractPermission } from '../config/PermissionConfig'
+import type { ShapeSchema } from '../config/ShapeSchema'
+import { type Entrypoint, StructureContract } from '../config/StructureConfig'
+import { generateStructureHash } from '../output/structureOutput'
+import type { DiscoveryOutput } from '../output/types'
+import type { ContractSources } from '../source/SourceCodeService'
 import { readJsonc } from '../utils/readJsonc'
 
-const TEMPLATES_PATH = path.join('discovery', '_templates')
-const TEMPLATE_SHAPE_FOLDER = 'shape'
-const TEMPLATE_SIMILARITY_THRESHOLD = 0.999 // TODO: why two identical files are not 1.0?
+export const TEMPLATES_PATH = path.join('_templates')
 
-export interface MatchResult {
-  similarity: number
-  templateId: string
+export type RefreshReason =
+  | {
+      type: 'TEMPLATE_NO_LONGER_MATCHES'
+      contract: string
+      template: string
+    }
+  | {
+      type: 'TEMPLATE_MATCH_CHANGED'
+      contract: string
+      oldTemplate: string
+      newTemplates: string[]
+    }
+  | {
+      type: 'NEW_TEMPLATE_MATCH'
+      contract: string
+      newTemplates: string[]
+    }
+  | {
+      type: 'CONFIG_CHANGED'
+    }
+  | {
+      type: 'TEMPLATE_CONFIG_CHANGED'
+      templates: string[]
+    }
+  | {
+      type: 'ENTRYPOINTS_CHANGED'
+      contract: string
+      detail: string
+    }
+
+export interface ShapeCriteria {
+  validAddresses?: string[]
 }
 
-export type ExecutedMatches = Record<string, MatchResult[]>
+export interface Shape {
+  criteria?: ShapeCriteria
+  hashes: Hash256[]
+}
+
+interface Template {
+  criteria?: ShapeCriteria
+  shapePath: string | undefined
+}
 
 export class TemplateService {
-  private readonly loadedTemplates: Record<string, DiscoveryContract> = {}
-  readonly executedMatches: ExecutedMatches = {}
+  private loadedTemplates: Record<string, unknown> = {}
+  private shapeHashes: Record<string, Shape> | undefined
+  private allTemplateHashes: Record<string, Hash256> | undefined
+  private hashIndex:
+    | Map<string, { templateId: string; criteria?: ShapeCriteria }[]>
+    | undefined
 
-  constructor(
-    private readonly rootPath: string = '',
-    private readonly similarityThreshold: number = TEMPLATE_SIMILARITY_THRESHOLD,
-  ) {}
+  constructor(private readonly rootPath: string) {}
 
-  /**
-   * @returns A record where the keys are template IDs (relative paths from the templates
-   *          root directory) and the values are arrays of paths to the Solidity shape
-   *          files for each template.
-   */
-  listAllTemplates(): Record<string, string[]> {
-    const result: Record<string, string[]> = {}
+  getTemplatePath(template: string): string {
+    return path.join(this.rootPath, TEMPLATES_PATH, template)
+  }
+
+  exists(template: string): boolean {
     const resolvedRootPath = path.join(this.rootPath, TEMPLATES_PATH)
+    return existsSync(join(resolvedRootPath, template, 'template.jsonc'))
+  }
+
+  private loadTemplateFromPath(path: string): Template | undefined {
+    if (!existsSync(join(path, 'template.jsonc'))) return undefined
+    const shapePath = join(path, 'shapes.json')
+
+    const hasShape = existsSync(shapePath)
+    const criteriaPath = join(path, 'criteria.json')
+    const criteria = existsSync(criteriaPath)
+      ? JSON.parse(readFileSync(criteriaPath, 'utf8'))
+      : undefined
+
+    return { criteria, shapePath: hasShape ? shapePath : undefined }
+  }
+
+  listAllTemplates(): Record<string, Template> {
+    const result: Record<string, Template> = {}
+    const resolvedRootPath = path.join(this.rootPath, TEMPLATES_PATH)
+    if (!fileExistsCaseSensitive(resolvedRootPath)) {
+      return {}
+    }
     const templatePaths = listAllPaths(resolvedRootPath)
     for (const path of templatePaths) {
-      if (!existsSync(join(path, 'template.jsonc'))) {
-        continue
+      const template = this.loadTemplateFromPath(path)
+      if (template !== undefined) {
+        const templateId = path.substring(resolvedRootPath.length + 1)
+        result[templateId] = template
       }
-      const shapePath = join(path, TEMPLATE_SHAPE_FOLDER)
-
-      const solidityShapeFiles = !existsSync(shapePath)
-        ? []
-        : readdirSync(shapePath, {
-            withFileTypes: true,
-          })
-            .filter((x) => x.isFile() && x.name.endsWith('.sol'))
-            .map((x) => join(shapePath, x.name))
-
-      const templateId = path.substring(resolvedRootPath.length + 1)
-      result[templateId] = solidityShapeFiles
     }
     return result
+  }
+
+  getTemplateById(templateId: string): Template | undefined {
+    const templatePath = path.join(this.rootPath, TEMPLATES_PATH, templateId)
+    if (!fileExistsCaseSensitive(templatePath)) return undefined
+
+    return this.loadTemplateFromPath(templatePath)
   }
 
   findMatchingTemplates(
-    name: string,
     sources: ContractSources,
-  ): Record<string, number> {
-    const result: Record<string, number> = {}
-    if (!sources.isVerified) {
-      return result
+    address: ChainSpecificAddress,
+  ): string[] {
+    const sourceHash = getHashForMatchingFromSources(sources.sources)
+
+    if (sourceHash === undefined) {
+      return []
     }
 
-    const flatSource = flattenFirstSource(sources)
-    if (flatSource === undefined) {
-      return result
-    }
-
-    const processedSource = removeComments(flatSource)
-    const sourceHashed: HashedFileContent = {
-      path: '',
-      hashChunks: buildSimilarityHashmap(processedSource),
-      content: processedSource,
-    }
-
-    const allTemplates = this.listAllTemplates()
-    for (const [templateId, shapeFilePaths] of Object.entries(allTemplates)) {
-      const similarities: number[] = []
-      for (const shapeFilePath of shapeFilePaths) {
-        const shapeFileContent = removeComments(
-          readFileSync(shapeFilePath, 'utf8'),
-        )
-        const shapeFileHashed: HashedFileContent = {
-          path: shapeFilePath,
-          hashChunks: buildSimilarityHashmap(shapeFileContent),
-          content: shapeFileContent,
-        }
-        const similarity = estimateSimilarity(sourceHashed, shapeFileHashed)
-        similarities.push(similarity)
-      }
-      const maxSimilarity = Math.max(...similarities)
-      this.executedMatches[name] ??= []
-      this.executedMatches[name]?.push({
-        templateId,
-        similarity: maxSimilarity,
-      })
-      if (maxSimilarity >= this.similarityThreshold) {
-        result[templateId] = maxSimilarity
-      }
-    }
-    return result
+    return this.findMatchingTemplatesByHash(sourceHash, address)
   }
 
-  loadContractTemplate(template: string): DiscoveryContract {
-    const loadedTemplate = this.loadedTemplates[template]
-    if (loadedTemplate !== undefined) {
-      return loadedTemplate
+  findMatchingTemplatesByHash(
+    sourcesHash: Hash256,
+    address: ChainSpecificAddress,
+  ): string[] {
+    const candidates = this.getHashIndex().get(sourcesHash.toString()) ?? []
+
+    let max = 0
+    const scored: [string, number][] = []
+
+    for (const { templateId, criteria } of candidates) {
+      let score = 1 // implementation hash always matched
+      if ((criteria?.validAddresses ?? []).includes(address)) {
+        score++ // valid-address criterion matched
+      } else if (criteria?.validAddresses?.length ?? 0 > 0) {
+        continue // valid-address criterion not matched
+      }
+
+      max = Math.max(max, score)
+      scored.push([templateId, score])
     }
+
+    return [
+      ...new Set(
+        scored
+          .filter(([, s]) => s === max)
+          .map(([id]) => id)
+          .sort(),
+      ),
+    ]
+  }
+
+  loadContractTemplateBase<T>(
+    template: string,
+    keySuffix: string,
+    parser: Parser<T>,
+  ): T {
+    const key = `${template}.${keySuffix}`
+    const loadedTemplate = this.loadedTemplates[key]
+    if (loadedTemplate !== undefined) {
+      return loadedTemplate as T
+    }
+
     const templateJsonc = readJsonc(
       path.join(this.rootPath, TEMPLATES_PATH, template, 'template.jsonc'),
     )
-    const parsed = DiscoveryContract.parse(templateJsonc)
-    this.loadedTemplates[template] = parsed
+
+    const parsed = parser.parse(templateJsonc)
+    this.loadedTemplates[key] = parsed
     return parsed
+  }
+
+  loadClingoModelTemplate(template: string): string | undefined {
+    const modelPath = path.join(
+      this.rootPath,
+      TEMPLATES_PATH,
+      template,
+      'model.lp',
+    )
+    return existsSync(modelPath) ? readFileSync(modelPath, 'utf8') : undefined
+  }
+
+  loadContractTemplate(template: string): StructureContract {
+    return this.loadContractTemplateBase(
+      template,
+      'contract',
+      StructureContract,
+    )
+  }
+
+  loadContractTemplateColor(template: string | undefined): ColorContract {
+    if (template === undefined) {
+      return ColorContract.parse({})
+    }
+
+    return this.loadContractTemplateBase(template, 'color', ColorContract)
+  }
+
+  loadContractPermissionTemplate(template: string): ContractPermission {
+    return this.loadContractTemplateBase(
+      template,
+      'permission',
+      ContractPermission,
+    )
   }
 
   getTemplateHash(template: string): Hash256 {
     const templateJson = this.loadContractTemplate(template)
-    return hashJson(templateJson as json)
+    return hashJsonStable(templateJson)
+  }
+
+  getAllShapes(): Record<string, Shape> {
+    if (this.shapeHashes !== undefined) {
+      return this.shapeHashes
+    }
+
+    const result: Record<string, Shape> = {}
+    const allTemplates = this.listAllTemplates()
+    for (const [templateId, { criteria, shapePath }] of Object.entries(
+      allTemplates,
+    )) {
+      const hashes = Object.values(this.readShapeSchema(shapePath)).map(
+        (shape) => shape.hash,
+      )
+      result[templateId] = { criteria, hashes }
+    }
+
+    this.shapeHashes = result
+    return result
   }
 
   getAllTemplateHashes(): Record<string, Hash256> {
+    if (this.allTemplateHashes !== undefined) {
+      return this.allTemplateHashes
+    }
     const result: Record<string, Hash256> = {}
     const allTemplates = this.listAllTemplates()
     for (const templateId of Object.keys(allTemplates)) {
       result[templateId] = this.getTemplateHash(templateId)
     }
+    this.allTemplateHashes = result
     return result
   }
 
-  getShapeFilesHash(): Hash256 {
-    const hash = createHash('sha256')
-    const allTemplates = this.listAllTemplates()
+  formatReason(reason: RefreshReason): string {
+    switch (reason.type) {
+      case 'TEMPLATE_NO_LONGER_MATCHES':
+        return `A contract "${reason.contract}" with template "${reason.template}", no longer matches any template`
+      case 'TEMPLATE_MATCH_CHANGED':
+        return `A contract "${reason.contract}" matches a different template: "${reason.oldTemplate} -> ${reason.newTemplates.join(', ')}"`
+      case 'NEW_TEMPLATE_MATCH':
+        return `A contract "${reason.contract}" without template now matches: "${reason.newTemplates.join(', ')}"`
+      case 'CONFIG_CHANGED':
+        return 'project config or used template has changed'
+      case 'TEMPLATE_CONFIG_CHANGED':
+        return `template configs has changed: ${reason.templates.join(', ')}`
+      case 'ENTRYPOINTS_CHANGED':
+        return `entrypoints changed: "${reason.contract}" ${reason.detail}`
+      default:
+        assertUnreachable(reason)
+    }
+  }
 
-    const sortedTemplateIds = Object.keys(allTemplates)
-    sortedTemplateIds.sort()
+  discoveryNeedsRefresh(
+    discovery: DiscoveryOutput,
+    config: ConfigRegistry,
+  ): RefreshReason[] {
+    const reasons: RefreshReason[] = []
+    const allTemplateHashes = this.getAllTemplateHashes()
+    const allShapes = this.getAllShapes()
 
-    for (const templateId of sortedTemplateIds) {
-      const sortedShapeFilePaths = allTemplates[templateId] ?? []
-      sortedShapeFilePaths.sort()
-      for (const shapeFilePath of sortedShapeFilePaths) {
-        const shapeFileContent = readFileSync(shapeFilePath, 'utf8')
-        hash.update(templateId)
-        hash.update('\0') // null byte separator
-        hash.update(shapeFileContent)
-        hash.update('\0') // null byte separator
+    for (const contract of discovery.entries) {
+      if (contract.sourceHashes === undefined) {
+        continue
+      }
+      const hashes =
+        contract.sourceHashes.length === 1
+          ? contract.sourceHashes
+          : contract.sourceHashes.slice(1)
+
+      if (hashes.length > 1) {
+        // NOTE(radomski): Diamonds don't really work well with templates right now
+        continue
+      }
+
+      const hash = hashes[0]
+      assert(
+        hash !== undefined,
+        `Source hash is undefined for contract "${contract.name}" at address "${contract.address}". This indicates an issue with the discovery process or contract deployment.`,
+      )
+      const sourcesHash = Hash256(hash)
+      const matchingTemplates = this.findMatchingTemplatesByHash(
+        sourcesHash,
+        contract.address,
+      )
+
+      if (
+        contract.template !== undefined &&
+        (allShapes[contract.template]?.hashes.length ?? 0) > 0
+      ) {
+        if (matchingTemplates.length === 0) {
+          reasons.push({
+            type: 'TEMPLATE_NO_LONGER_MATCHES',
+            contract: contract.name ?? contract.address,
+            template: contract.template,
+          })
+        }
+
+        if (contract.template !== matchingTemplates[0]) {
+          reasons.push({
+            type: 'TEMPLATE_MATCH_CHANGED',
+            contract: contract.name ?? contract.address,
+            oldTemplate: contract.template,
+            newTemplates: matchingTemplates,
+          })
+        }
+      } else if (matchingTemplates.length > 0) {
+        reasons.push({
+          type: 'NEW_TEMPLATE_MATCH',
+          contract: contract.name ?? contract.address,
+          newTemplates: matchingTemplates,
+        })
       }
     }
-    return Hash256('0x' + hash.digest('hex'))
-  }
 
-  applyTemplateOnContractOverrides(
-    contractOverrides: ContractOverrides,
-    template: string,
-  ): ContractOverrides {
-    return {
-      name: contractOverrides.name,
-      address: contractOverrides.address,
-      ...this.applyTemplate(contractOverrides, template),
+    const structureHash = generateStructureHash(config.structure)
+    if (discovery.configHash !== structureHash) {
+      reasons.push({
+        type: 'CONFIG_CHANGED',
+      })
     }
-  }
 
-  applyTemplate(
-    contract: DiscoveryContract,
-    template: string,
-  ): DiscoveryContract {
-    const templateJson = this.loadContractTemplate(template)
-    return DiscoveryContract.parse({
-      ...templateJson,
-      ...contract,
-    })
-  }
-
-  inlineTemplates(rawConfig: RawDiscoveryConfig): void {
-    if (rawConfig.overrides === undefined) {
-      return
+    const outdatedTemplates = []
+    for (const [templateId, templateHash] of Object.entries(
+      discovery.usedTemplates,
+    )) {
+      if (templateHash !== allTemplateHashes[templateId]) {
+        outdatedTemplates.push(templateId)
+      }
     }
-    for (const [name, contract] of Object.entries(rawConfig.overrides)) {
-      if (contract.extends !== undefined) {
-        rawConfig.overrides[name] = this.applyTemplate(
+
+    if (outdatedTemplates.length > 0) {
+      reasons.push({
+        type: 'TEMPLATE_CONFIG_CHANGED',
+        templates: outdatedTemplates,
+      })
+    }
+
+    reasons.push(...this.entrypointsNeedRefresh(discovery, config))
+
+    return reasons
+  }
+
+  // Entrypoints are global and deliberately excluded from the config hash, so
+  // promoting an address to an entrypoint does not change any consumer's hash.
+  // Without this, a consumer keeps a stale full copy of something it should now
+  // only reference, and the drift only ever surfaces as a CI failure.
+  private entrypointsNeedRefresh(
+    discovery: DiscoveryOutput,
+    config: ConfigRegistry,
+  ): RefreshReason[] {
+    const reasons: RefreshReason[] = []
+    const entrypoints = config.structure.entrypoints ?? {}
+
+    for (const entry of discovery.entries) {
+      const entrypoint = entrypoints[entry.address]
+      const contract = entry.name ?? entry.address.toString()
+
+      if (entry.type === 'Reference') {
+        const detail = referenceRefreshDetail(entry.targetProject, entrypoint)
+        if (detail !== undefined) {
+          reasons.push({ type: 'ENTRYPOINTS_CHANGED', contract, detail })
+        }
+        continue
+      }
+
+      if (
+        entrypoint !== undefined &&
+        !entrypoint.isLegacy &&
+        entrypoint.project !== config.structure.name
+      ) {
+        reasons.push({
+          type: 'ENTRYPOINTS_CHANGED',
           contract,
-          contract.extends,
-        )
+          detail: `is discovered but is now an entrypoint of ${entrypoint.project}`,
+        })
       }
     }
+
+    return reasons
   }
+
+  ensureTemplateExists(templateId: string) {
+    const templateDirPath = join(this.rootPath, TEMPLATES_PATH, templateId)
+    const templatePath = join(templateDirPath, 'template.jsonc')
+
+    if (!existsSync(templatePath)) {
+      mkdirSync(templateDirPath, { recursive: true })
+
+      const numOfBackwardsSlashes = templateId.split('/').length - 1
+      const schemaProperty = `../../../../../${'../'.repeat(numOfBackwardsSlashes)}discovery/schemas/contract.v2.schema.json`
+      const json = {
+        $schema: schemaProperty,
+      }
+
+      writeFileSync(templatePath, formatJson(json))
+
+      return true
+    }
+
+    return false
+  }
+
+  private getHashIndex() {
+    if (this.hashIndex) return this.hashIndex
+
+    this.hashIndex = new Map()
+    for (const [templateId, shape] of Object.entries(this.getAllShapes())) {
+      for (const h of shape.hashes) {
+        const key = h.toString()
+        const bucket = this.hashIndex.get(key)
+        const entry = { templateId, criteria: shape.criteria }
+        bucket ? bucket.push(entry) : this.hashIndex.set(key, [entry])
+      }
+    }
+    return this.hashIndex
+  }
+
+  reload() {
+    this.shapeHashes = undefined
+    this.allTemplateHashes = undefined
+    this.loadedTemplates = {}
+    this.hashIndex = undefined
+  }
+
+  addToShape(
+    templateId: string,
+    chain: string,
+    addresses: EthereumAddress[],
+    fileName: string,
+    blockNumber: number,
+    sources: ContractSource[],
+  ): void {
+    assert(this.exists(templateId), 'Template does not exist')
+    const allTemplates = this.listAllTemplates()
+    const entry = allTemplates[templateId]
+    assert(entry !== undefined, 'Could not find template')
+
+    const shapes =
+      entry.shapePath === undefined ? {} : this.readShapeSchema(entry.shapePath)
+
+    const hashes = sources
+      .map(contractFlatteningHash)
+      .filter((h) => h !== undefined)
+      .sort()
+
+    assert(hashes.length > 0, 'Could not find hash')
+
+    const masterHash =
+      hashes.length > 1
+        ? combineImplementationHashes(hashes)
+        : // biome-ignore lint/style/noNonNullAssertion: just checked
+          Hash256(hashes[0]!)
+
+    const hashAlreadyExists = Object.values(shapes).some(
+      (s) => s.hash === masterHash,
+    )
+
+    assert(
+      !hashAlreadyExists,
+      `Shape for '${fileName}' with hash '${masterHash.toString().slice(0, 10)}...${masterHash.toString().slice(-10)}' already exists in '${templateId}'`,
+    )
+
+    assert(
+      !shapes[fileName],
+      `Shape with file name '${fileName}' already exists in '${templateId}'. Select a different file name.`,
+    )
+
+    const address =
+      addresses.length > 1
+        ? addresses.map((a) => ChainSpecificAddress.fromLong(chain, a))
+        : // biome-ignore lint/style/noNonNullAssertion: just checked
+          ChainSpecificAddress.fromLong(chain, addresses[0]!)
+
+    const newShapes = {
+      ...shapes,
+      [fileName]: {
+        hash: masterHash,
+        address,
+        chain,
+        blockNumber,
+      },
+    }
+
+    const resolvedRootPath = path.join(this.rootPath, TEMPLATES_PATH)
+    const templatePath = join(resolvedRootPath, templateId)
+    const shapePath = join(templatePath, 'shapes.json')
+    writeFileSync(shapePath, formatJson(newShapes))
+  }
+
+  readShapeSchema(shapePath: string | undefined): ShapeSchema {
+    if (shapePath === undefined) {
+      return {}
+    }
+
+    return JSON.parse(readFileSync(shapePath, 'utf8')) as ShapeSchema
+  }
+
+  findShapeByTemplateAndHash(templateId: string, hash: Hash256) {
+    const entry = this.getTemplateById(templateId)
+    if (!entry || !entry.shapePath) {
+      return undefined
+    }
+
+    const shapes = this.readShapeSchema(entry.shapePath)
+
+    const shapeFound = Object.entries(shapes).find(([_, s]) => s.hash === hash)
+
+    if (!shapeFound) {
+      return undefined
+    }
+
+    const [shapeKey, shape] = shapeFound
+
+    return { name: shapeKey, shape, criteria: entry.criteria }
+  }
+
+  readTemplateFile(templateId: string) {
+    const templatePath = join(this.rootPath, TEMPLATES_PATH, templateId)
+    const filePath = join(templatePath, 'template.jsonc')
+    return existsSync(filePath) ? readFileSync(filePath, 'utf8') : undefined
+  }
+
+  writeTemplateFile(templateId: string, template: string) {
+    const templatePath = join(this.rootPath, TEMPLATES_PATH, templateId)
+    const filePath = join(templatePath, 'template.jsonc')
+    writeFileSync(filePath, template)
+  }
+
+  readShapeFile(templateId: string) {
+    const templatePath = join(this.rootPath, TEMPLATES_PATH, templateId)
+    const filePath = join(templatePath, 'shapes.json')
+    return existsSync(filePath) ? readFileSync(filePath, 'utf8') : undefined
+  }
+
+  readCriteriaFile(templateId: string) {
+    const templatePath = join(this.rootPath, TEMPLATES_PATH, templateId)
+    const filePath = join(templatePath, 'criteria.json')
+    return existsSync(filePath) ? readFileSync(filePath, 'utf8') : undefined
+  }
+}
+
+function referenceRefreshDetail(
+  targetProject: string | undefined,
+  entrypoint: Entrypoint | undefined,
+): string | undefined {
+  if (entrypoint === undefined) {
+    return 'is a reference to an entrypoint that no longer exists'
+  }
+  if (entrypoint.isLegacy) {
+    return 'is a reference to an entrypoint that became legacy'
+  }
+  if (entrypoint.project !== targetProject) {
+    return `references ${targetProject} but the entrypoint is owned by ${entrypoint.project}`
+  }
+  return undefined
 }
 
 function listAllPaths(path: string): string[] {
@@ -212,69 +604,4 @@ function listAllPaths(path: string): string[] {
     result = result.concat(listAllPaths(subPath))
   }
   return result
-}
-
-function formatRow(entry: MatchResult, longestTemplateId: number): string {
-  return `${entry.templateId.padStart(longestTemplateId)} : ${colorMap(
-    entry.similarity,
-  )}`
-}
-
-export function printExecutedMatches(
-  executedMatches: ExecutedMatches,
-  similarityCutoff: number,
-) {
-  let longestTemplateId = Number.MIN_SAFE_INTEGER
-  for (const entries of Object.values(executedMatches)) {
-    const filtered = entries.filter((e) => e.similarity >= similarityCutoff)
-    longestTemplateId = Math.max(
-      longestTemplateId,
-      ...filtered.map((e) => e.templateId.length),
-    )
-  }
-
-  const phantomRow = formatRow(
-    { similarity: 1, templateId: 'a' },
-    longestTemplateId,
-  )
-  const rowLength = stripAnsiEscapeCodes(phantomRow).length
-
-  for (const [key, entries] of Object.entries(executedMatches)) {
-    const filtered = entries
-      .filter((e) => e.similarity >= similarityCutoff)
-      .sort((a, b) => b.similarity - a.similarity)
-
-    console.log(`${`=== ${key} ===`.padEnd(rowLength, '=')}\n`)
-    if (filtered.length === 0) {
-      console.log(chalk.yellow('No entries\n'))
-      continue
-    }
-
-    for (const entry of filtered) {
-      console.log(formatRow(entry, longestTemplateId))
-    }
-    console.log('')
-  }
-}
-
-export function colorMap(value: number): string {
-  const valueString = value.toFixed(2)
-
-  if (value < 0.125) {
-    return chalk.grey(valueString)
-  } else if (value < 0.25) {
-    return chalk.red(valueString)
-  } else if (value < 0.375) {
-    return chalk.redBright(valueString)
-  } else if (value < 0.5) {
-    return chalk.magenta(valueString)
-  } else if (value < 0.625) {
-    return chalk.magentaBright(valueString)
-  } else if (value < 0.75) {
-    return chalk.yellow(valueString)
-  } else if (value < 0.875) {
-    return chalk.yellowBright(valueString)
-  } else {
-    return chalk.greenBright(valueString)
-  }
 }

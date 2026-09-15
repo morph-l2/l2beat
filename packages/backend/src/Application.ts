@@ -1,96 +1,110 @@
-import { Logger } from '@l2beat/backend-tools'
-import { HttpClient } from '@l2beat/shared'
-
+import type { Logger } from '@l2beat/backend-tools'
 import { createDatabase } from '@l2beat/database'
-import { LegacyDatabase } from '@l2beat/database-legacy'
 import { ApiServer } from './api/ApiServer'
-import { Config } from './config'
-import { ApplicationModule } from './modules/ApplicationModule'
-import { createActivityModule } from './modules/activity/ActivityModule'
-import { createActivity2Module } from './modules/activity2/Activity2Module'
+import type { Config } from './config'
+import { initActivityModule } from './modules/activity/ActivityModule'
+import { createAnomaliesModule } from './modules/anomalies/AnomaliesModule'
+import { createAppStateModule } from './modules/app-state/AppStateModule'
+import { createBackofficeModule } from './modules/backoffice/BackofficeModule'
+import { createBlockSyncModule } from './modules/block-sync/BlockSyncModule'
 import { createDaBeatModule } from './modules/da-beat/DaBeatModule'
-import { createFeaturesModule } from './modules/features/FeaturesModule'
-import { createFinalityModule } from './modules/finality/FinalityModule'
-import { createHealthModule } from './modules/health/HealthModule'
-import { createImplementationChangeModule } from './modules/implementation-change-report/createImplementationChangeModule'
-import { createLzOAppsModule } from './modules/lz-oapps/createLzOAppsModule'
-import { createMetricsModule } from './modules/metrics/MetricsModule'
-import { createStatusModule } from './modules/status/StatusModule'
+import { initDataAvailabilityModule } from './modules/data-availability/DataAvailabilityModule'
+import { createEcosystemsModule } from './modules/ecosystems/EcosystemsModule'
+import { createFlatSourcesModule } from './modules/flat-sources/createFlatSourcesModule'
+import { createInteropModule } from './modules/interop/engine/InteropModule'
+import { createPrivacyModule } from './modules/privacy/PrivacyModule'
 import { createTrackedTxsModule } from './modules/tracked-txs/TrackedTxsModule'
-import { createTvlModule } from './modules/tvl/modules/TvlModule'
+import { initTvsModule } from './modules/tvs/TvsModule'
+import type { ApplicationModule, ModuleDependencies } from './modules/types'
 import { createUpdateMonitorModule } from './modules/update-monitor/UpdateMonitorModule'
-import { createVerifiersModule } from './modules/verifiers/VerifiersModule'
-import { Peripherals } from './peripherals/Peripherals'
+import { Providers } from './providers/Providers'
 import { Clock } from './tools/Clock'
-import { getErrorReportingMiddleware } from './tools/ErrorReporter'
 
 export class Application {
   start: () => Promise<void>
 
   constructor(config: Config, logger: Logger) {
-    const database = new LegacyDatabase(config.database, logger, config.name)
+    const appLogger = logger.for(this)
+    appLogger.info('Initializing App')
+    appLogger.info('Initializing DB', {
+      poolSize: config.database.connectionPoolSize,
+      appName: config.database.connection.application_name,
+    })
 
-    const kyselyDatabase = createDatabase({
+    const db = createDatabase({
       ...config.database.connection,
       ...config.database.connectionPoolSize,
     })
-
     const clock = new Clock(
       config.clock.minBlockTimestamp,
       config.clock.safeTimeOffsetSeconds,
-      config.clock.hourlyCutoffDays,
-      config.clock.sixHourlyCutoffDays,
     )
-
-    const http = new HttpClient()
-    const peripherals = new Peripherals(database, kyselyDatabase, http, logger)
-
-    const trackedTxsModule = createTrackedTxsModule(
+    const providers = new Providers(config, logger)
+    const deps: ModuleDependencies = {
       config,
       logger,
-      peripherals,
       clock,
-    )
+      providers,
+      db,
+      blockProcessors: [],
+    }
 
-    const modules: (ApplicationModule | undefined)[] = [
-      createHealthModule(config),
-      createMetricsModule(config),
-      createActivityModule(config, logger, peripherals, clock),
-      createActivity2Module(config, logger, peripherals, kyselyDatabase, clock),
-      createUpdateMonitorModule(config, logger, peripherals, clock),
-      createImplementationChangeModule(config, logger, peripherals),
-      createStatusModule(config, logger, peripherals),
+    // Modules with TRPC
+    const interopModule = createInteropModule(deps)
+    const trackedTxsModule = createTrackedTxsModule(deps)
+    const dataAvailabilityModule = initDataAvailabilityModule(deps)
+    const appStateModule = createAppStateModule()
+
+    const modulesWithTrpc = [
+      appStateModule,
+      interopModule,
       trackedTxsModule,
-      createFinalityModule(
-        config,
-        logger,
-        peripherals,
-        trackedTxsModule?.indexer,
-      ),
-      createLzOAppsModule(config, logger),
-      createTvlModule(config, logger, peripherals, clock),
-      createVerifiersModule(config, logger, peripherals, clock),
-      createFeaturesModule(config),
-      createDaBeatModule(config, logger, peripherals, clock),
+      dataAvailabilityModule,
+    ]
+
+    const trpcContributions = modulesWithTrpc.flatMap((module) =>
+      module?.trpc ? [module.trpc] : [],
+    )
+    const backofficeModule = createBackofficeModule({
+      ...deps,
+      trpcContributions,
+    })
+
+    // All-modules entrypoint
+    const modules: (ApplicationModule | undefined)[] = [
+      initActivityModule(deps),
+      dataAvailabilityModule,
+      createUpdateMonitorModule(deps),
+      createFlatSourcesModule(deps),
+      trackedTxsModule,
+      initTvsModule(deps),
+      createPrivacyModule(deps),
+      createDaBeatModule(deps),
+      createEcosystemsModule(deps),
+      createAnomaliesModule(deps),
+      createBlockSyncModule(deps),
+
+      interopModule,
+      appStateModule,
+      backofficeModule,
     ]
 
     const apiServer = new ApiServer(
       config.api.port,
       logger,
       modules.flatMap((x) => x?.routers ?? []),
-      getErrorReportingMiddleware(),
     )
 
     if (config.isReadonly) {
       this.start = async () => {
-        logger.for(this).info('Starting in readonly mode')
+        appLogger.info('Starting in readonly mode')
         await apiServer.start()
       }
       return
     }
 
     this.start = async () => {
-      logger.for(this).info('Starting', { features: config.flags })
+      appLogger.info('Starting', { features: config.flags })
       const unusedFlags = Object.values(config.flags)
         .filter((x) => !x.used)
         .map((x) => x.feature)
@@ -101,7 +115,6 @@ export class Application {
       }
 
       await apiServer.start()
-      await database.start()
       for (const module of modules) {
         await module?.start?.()
       }

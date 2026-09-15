@@ -1,342 +1,274 @@
-import { expect, formatCompact, mockFn } from 'earl'
-
-import { LogFormatterJson } from './LogFormatterJson'
-import { LogFormatterPretty } from './LogFormatterPretty'
+import { expect, mockFn } from 'earl'
 import { Logger } from './Logger'
-import { LogEntry } from './types'
+import type { LoggerTransport } from './types'
+
+class TestTransport implements LoggerTransport {
+  log = mockFn<LoggerTransport['log']>().returns()
+  flush = mockFn<LoggerTransport['flush']>().returns()
+}
 
 describe(Logger.name, () => {
-  it('calls correct transport', () => {
-    const transport = createTestTransport()
+  it('calls all transports', () => {
+    const transport1 = new TestTransport()
+    const transport2 = new TestTransport()
     const logger = new Logger({
-      transports: [
-        {
-          transport: transport,
-          formatter: new LogFormatterJson(),
-        },
-      ],
-      logLevel: 'TRACE',
+      transports: [transport1, transport2],
     })
-
-    logger.trace('foo')
-    logger.debug('foo')
-    expect(transport.debug).toHaveBeenCalledTimes(2)
-
-    logger.info('foo')
-    expect(transport.log).toHaveBeenCalledTimes(1)
-
-    logger.warn('foo')
-    expect(transport.warn).toHaveBeenCalledTimes(1)
-
-    logger.error('foo')
-    logger.critical('foo')
-    expect(transport.error).toHaveBeenCalledTimes(2)
+    logger.info('Hello')
+    expect(transport1.log).toHaveBeenCalled()
+    expect(transport2.log).toHaveBeenCalled()
   })
 
-  it('supports bigint values in json output', () => {
-    const transport = createTestTransport()
-    const logger = new Logger({
-      transports: [
-        {
-          transport: transport,
-          formatter: new LogFormatterJson(),
-        },
-      ],
-      logLevel: 'TRACE',
-      getTime: () => new Date(0),
-      utc: true,
+  describe('configuration', () => {
+    it('can be reconfigured', () => {
+      let logger = new Logger({ level: 'INFO' })
+      expect(logger.options.level).toEqual('INFO')
+      logger = logger.configure({ level: 'ERROR' })
+      expect(logger.options.level).toEqual('ERROR')
     })
 
-    logger.info({ foo: 123n, bar: [4n, 56n] })
-    expect(transport.log).toHaveBeenOnlyCalledWith(
-      JSON.stringify({
-        time: '1970-01-01T00:00:00.000Z',
+    it('supports tags', () => {
+      const getTime = () => new Date(0)
+      const transport = new TestTransport()
+      const logger = new Logger(
+        { getTime, transports: [transport] },
+        { foo: 'bar' },
+      )
+      logger.info('Hello', { baz: false })
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
         level: 'INFO',
+        message: 'Hello',
         parameters: {
-          foo: '123',
-          bar: ['4', '56'],
+          foo: 'bar',
+          baz: false,
         },
-      }),
-    )
-  })
-
-  it('supports bigint values in pretty output', () => {
-    const transport = createTestTransport()
-    const logger = new Logger({
-      transports: [
-        {
-          transport: transport,
-          formatter: new LogFormatterPretty({ colors: false, utc: true }),
-        },
-      ],
-      logLevel: 'TRACE',
-      getTime: () => new Date(0),
-      utc: true,
-    })
-
-    logger.info({ foo: 123n, bar: [4n, 56n] })
-    const lines = [
-      '00:00:00.000Z INFO\n',
-      "    { foo: '123', bar: [ '4', '56' ] }",
-      '',
-    ]
-    expect(transport.log).toHaveBeenOnlyCalledWith(lines.join(''))
-  })
-
-  describe('for', () => {
-    function setup() {
-      const transport = createTestTransport()
-      const baseLogger = new Logger({
-        transports: [
-          {
-            transport: transport,
-            formatter: new LogFormatterPretty({ colors: false, utc: true }),
-          },
-        ],
-        logLevel: 'TRACE',
-        getTime: () => new Date(0),
-        utc: true,
       })
-      return { transport, baseLogger }
-    }
+    })
 
-    it('single service (string)', () => {
-      const { transport, baseLogger } = setup()
-
-      const logger = baseLogger.for('FooService')
-      logger.info('hello')
-
-      expect(transport.log).toHaveBeenOnlyCalledWith(
-        '00:00:00.000Z INFO [ FooService ] hello',
+    it('can reconfigure tags', () => {
+      const getTime = () => new Date(0)
+      const transport = new TestTransport()
+      let logger = new Logger(
+        { getTime, transports: [transport] },
+        { foo: 'bar' },
       )
+      logger = logger.tag({ foo: 'oof', baz: false })
+      logger.info('Hello', { x: 1 })
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: 'Hello',
+        parameters: {
+          foo: 'oof',
+          baz: false,
+          x: 1,
+        },
+      })
     })
 
-    it('single service (object)', () => {
-      const { transport, baseLogger } = setup()
-
-      class FooService {}
-      const instance = new FooService()
-      const logger = baseLogger.for(instance)
-      logger.info('hello')
-
-      expect(transport.log).toHaveBeenOnlyCalledWith(
-        '00:00:00.000Z INFO [ FooService ] hello',
-      )
+    it('for string', () => {
+      const logger = Logger.INFO.for('FooService')
+      expect(logger.tags).toEqual({ service: 'FooService' })
     })
 
-    it('service with member', () => {
-      const { transport, baseLogger } = setup()
-
-      const logger = baseLogger.for('FooService').for('queue')
-      logger.info('hello')
-
-      expect(transport.log).toHaveBeenOnlyCalledWith(
-        '00:00:00.000Z INFO [ FooService.queue ] hello',
-      )
+    it('for class instance', () => {
+      const fooService = new (class FooService {})()
+      const logger = Logger.INFO.for(fooService)
+      expect(logger.tags).toEqual({ service: 'FooService' })
     })
 
-    it('service with tag', () => {
-      const { transport, baseLogger } = setup()
-
-      const logger = baseLogger.tag('Red').for('FooService')
-      logger.info('hello')
-
-      expect(transport.log).toHaveBeenOnlyCalledWith(
-        '00:00:00.000Z INFO [ FooService:Red ] hello',
-      )
+    it('for member', () => {
+      const logger = Logger.INFO.for('FooService').for('queue')
+      expect(logger.tags).toEqual({ service: 'FooService.queue' })
     })
 
-    it('service with tag and member', () => {
-      const { transport, baseLogger } = setup()
-
-      const logger = baseLogger.tag('Red').for('FooService').for('queue')
-      logger.info('hello')
-
-      expect(transport.log).toHaveBeenOnlyCalledWith(
-        '00:00:00.000Z INFO [ FooService.queue:Red ] hello',
-      )
-    })
-
-    it('lone tag', () => {
-      const { transport, baseLogger } = setup()
-
-      const logger = baseLogger.tag('Red')
-      logger.info('hello')
-
-      expect(transport.log).toHaveBeenOnlyCalledWith(
-        '00:00:00.000Z INFO [ :Red ] hello',
-      )
-    })
-  })
-
-  describe('error reporting', () => {
-    const oldConsoleError = console.error
-    beforeEach(() => {
-      console.error = () => {}
-    })
-    afterEach(() => {
-      console.error = oldConsoleError
-    })
-
-    it('reports error and critical error', () => {
-      const mockReportError = mockFn((_: unknown) => {})
+    it('filter', () => {
+      const transport = new TestTransport()
       const logger = new Logger({
-        reportError: mockReportError,
+        transports: [transport],
+        filter: (e) => e.message.startsWith('f'),
       })
+      logger.info('bar')
+      expect(transport.log).toHaveBeenCalledTimes(0)
+      logger.info('foo')
+      expect(transport.log).toHaveBeenCalledTimes(1)
+    })
+  })
 
-      logger.error('foo')
-      logger.critical('bar')
+  describe('parameters', () => {
+    const getTime = () => new Date(0)
 
-      expect(mockReportError).toHaveBeenNthCalledWith(1, {
-        level: 'ERROR',
-        time: expect.a(Date),
-        service: undefined,
-        message: 'foo',
-        parameters: undefined,
-        error: undefined,
-        resolvedError: undefined,
-      })
-      expect(mockReportError).toHaveBeenNthCalledWith(2, {
-        level: 'CRITICAL',
-        time: expect.a(Date),
-        service: undefined,
-        message: 'bar',
-        parameters: undefined,
-        error: undefined,
-        resolvedError: undefined,
+    it('just message', () => {
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info('Hello')
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: 'Hello',
+        parameters: {},
       })
     })
 
-    describe('usage patterns', () => {
-      const patterns: [unknown[], LogEntry][] = [
-        [
-          ['message'],
-          {
-            level: 'ERROR',
-            time: expect.a(Date),
-            service: undefined,
-            message: 'message',
-            parameters: undefined,
-            error: undefined,
-            resolvedError: undefined,
-          },
-        ],
-        [
-          [new Error('message')],
-          {
-            level: 'ERROR',
-            time: expect.a(Date),
-            service: undefined,
-            message: undefined,
-            parameters: undefined,
-            error: new Error('message'),
-            resolvedError: {
-              name: 'Error',
-              error: 'message',
-              stack: expect.a(Array),
-            },
-          },
-        ],
-        [
-          ['foo', new Error('bar')],
-          {
-            level: 'ERROR',
-            time: expect.a(Date),
-            service: undefined,
-            message: 'foo',
-            parameters: undefined,
-            error: new Error('bar'),
-            resolvedError: {
-              name: 'Error',
-              error: 'bar',
-              stack: expect.a(Array),
-            },
-          },
-        ],
-        [
-          [{ x: 1, y: 2 }],
-          {
-            level: 'ERROR',
-            time: expect.a(Date),
-            service: undefined,
-            message: undefined,
-            parameters: { x: 1, y: 2 },
-            error: undefined,
-            resolvedError: undefined,
-          },
-        ],
-        [
-          ['message', { x: 1, y: 2 }],
-          {
-            level: 'ERROR',
-            time: expect.a(Date),
-            service: undefined,
-            message: 'message',
-            parameters: { x: 1, y: 2 },
-            error: undefined,
-            resolvedError: undefined,
-          },
-        ],
-        [
-          [{ x: 1, y: 2, message: 'message' }],
-          {
-            level: 'ERROR',
-            time: expect.a(Date),
-            service: undefined,
-            message: 'message',
-            parameters: { x: 1, y: 2 },
-            error: undefined,
-            resolvedError: undefined,
-          },
-        ],
-        [
-          [{ x: 1, y: 2, message: true }],
-          {
-            level: 'ERROR',
-            time: expect.a(Date),
-            service: undefined,
-            message: undefined,
-            parameters: { x: 1, y: 2, message: true },
-            error: undefined,
-            resolvedError: undefined,
-          },
-        ],
-        [
-          [new Error('foo'), 'bar', { x: 1, y: 2 }],
-          {
-            level: 'ERROR',
-            time: expect.a(Date),
-            service: undefined,
-            message: 'bar',
-            parameters: { x: 1, y: 2 },
-            error: new Error('foo'),
-            resolvedError: {
-              name: 'Error',
-              error: 'foo',
-              stack: expect.a(Array),
-            },
-          },
-        ],
-      ]
+    it('message and parameters', () => {
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info('Hello', { foo: 'bar' })
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: 'Hello',
+        parameters: {
+          foo: 'bar',
+        },
+      })
+    })
 
-      for (const [args, expected] of patterns) {
-        it(`supports ${formatCompact(args, 60)}`, () => {
-          const mockReportError = mockFn((_: unknown) => {})
-          const logger = new Logger({ reportError: mockReportError })
+    it('message in parameters', () => {
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info({ message: 'Hello', foo: 'bar' })
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: 'Hello',
+        parameters: {
+          foo: 'bar',
+        },
+      })
+    })
 
-          logger.error(...args)
-          expect(mockReportError).toHaveBeenOnlyCalledWith(expected)
-        })
-      }
+    it('only parameters', () => {
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info({ foo: 'bar' })
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: '',
+        parameters: {
+          foo: 'bar',
+        },
+      })
+    })
+
+    it('multiple parameters', () => {
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info({ foo: 'bar' }, { baz: false })
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: '',
+        parameters: {
+          foo: 'bar',
+          baz: false,
+        },
+      })
+    })
+
+    it('value', () => {
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info(123)
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: '',
+        parameters: {
+          value: 123,
+        },
+      })
+    })
+
+    it('values', () => {
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info(123, false)
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: '',
+        parameters: {
+          values: [123, false],
+        },
+      })
+    })
+
+    it('values and message', () => {
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info(123, false, 'foo', 'bar')
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: 'foo',
+        parameters: {
+          values: [123, false, 'bar'],
+        },
+      })
+    })
+
+    it('standalone error', () => {
+      const error = new Error('Oops')
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info(error)
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: '',
+        parameters: {
+          error: {
+            name: 'Error',
+            error: 'Oops',
+            cause: undefined,
+            stack: expect.a(Array),
+          },
+        },
+      })
+    })
+
+    it('error in parameters', () => {
+      const error = new Error('Oops')
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info({ error })
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: '',
+        parameters: {
+          error: {
+            name: 'Error',
+            error: 'Oops',
+            cause: undefined,
+            stack: expect.a(Array),
+          },
+        },
+      })
+    })
+
+    it('error with cause', () => {
+      const inner = new Error('Inner')
+      const error = new Error('Oops', { cause: inner })
+      const transport = new TestTransport()
+      const logger = new Logger({ getTime, transports: [transport] })
+      logger.info(error)
+      expect(transport.log).toHaveBeenCalledWith({
+        time: new Date(0),
+        level: 'INFO',
+        message: '',
+        parameters: {
+          error: {
+            name: 'Error',
+            error: 'Oops',
+            cause: inner,
+            stack: expect.a(Array),
+          },
+        },
+      })
     })
   })
 })
-
-function createTestTransport() {
-  return {
-    debug: mockFn((_: string): void => {}),
-    log: mockFn((_: string): void => {}),
-    warn: mockFn((_: string): void => {}),
-    error: mockFn((_: string): void => {}),
-  }
-}

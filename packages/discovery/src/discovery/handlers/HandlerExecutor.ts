@@ -1,35 +1,38 @@
-import { ContractValue } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
-
-import { DiscoveryLogger } from '../DiscoveryLogger'
-import { ContractOverrides } from '../config/DiscoveryOverrides'
-import { DiscoveryCustomType } from '../config/RawDiscoveryConfig'
-import { IProvider } from '../provider/IProvider'
-import { HandlerResult } from './Handler'
+import type { ChainSpecificAddress } from '@l2beat/shared-pure'
+import type { DiscoveryCustomType } from '../config/StructureConfig'
+import type { StructureContractConfig } from '../config/structureUtils'
+import type { ContractValue } from '../output/types'
+import type { IProvider } from '../provider/IProvider'
+import { decodeHandlerResults } from './decodeHandlerResults'
 import { executeHandlers } from './executeHandlers'
 import { getHandlers } from './getHandlers'
-import { getValuesAndErrors } from './getValuesAndErrors'
+import type { HandlerResult } from './Handler'
 
 export class HandlerExecutor {
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
     abi: string[],
-    overrides: ContractOverrides | undefined,
-    types: Record<string, DiscoveryCustomType> | undefined,
-    logger: DiscoveryLogger,
+    config: StructureContractConfig,
   ): Promise<{
     results: HandlerResult[]
     values: Record<string, ContractValue | undefined> | undefined
-    errors: Record<string, string> | undefined
+    errors: Record<string, string>
     usedTypes: DiscoveryCustomType[]
   }> {
-    const handlers = getHandlers(abi, overrides, logger)
-    const results = await executeHandlers(provider, handlers, address, logger)
-    const { values, errors, usedTypes } = getValuesAndErrors(
+    const handlers = getHandlers(abi, config)
+    const results = await executeHandlers(provider, handlers, address)
+    const { values, errors, usedTypes } = decodeHandlerResults(
+      provider.chain,
       results,
-      overrides?.fields,
-      types,
+      config.fields,
+      config.types,
+      {
+        blockNumber: provider.blockNumber,
+        timestamp: provider.timestamp,
+        chainName: provider.chain,
+        address: address.toString(),
+      },
     )
     return { results, values, errors, usedTypes }
   }

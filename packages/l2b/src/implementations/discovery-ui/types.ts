@@ -1,0 +1,239 @@
+// This file is duplicated in protocolbeat and l2b!
+
+import type { ChainSpecificAddress } from '@l2beat/shared-pure'
+
+export type ApiProjectsResponse = ApiProjectEntry[]
+
+export interface ApiProjectEntry {
+  name: string
+  addresses: string[]
+  contractNames: string[]
+}
+
+export interface ApiProjectResponse {
+  entries: ApiProjectChain[]
+}
+
+export type ApiTvlResponse = ApiTvlEntry[]
+
+export interface ApiTvlEntry {
+  tvl: number
+  ticker: string
+  address: string
+  iconURL: string | undefined
+  balance: number
+  price: number | undefined
+}
+
+export interface ApiPreviewResponse {
+  permissionsPerChain: { chain: string; permissions: ApiPreviewPermissions }[]
+  contractsPerChain: { chain: string; contracts: ApiPreviewContract[] }[]
+}
+
+export interface ApiPreviewPermissions {
+  roles: ApiPreviewPermission[]
+  actors: ApiPreviewPermission[]
+}
+
+export interface ApiPreviewPermission {
+  addresses: AddressFieldValue[]
+  name: string
+  description: string
+  multisigParticipants: AddressFieldValue[] | undefined
+}
+
+export interface ApiPreviewContract {
+  addresses: AddressFieldValue[]
+  name: string
+  description: string
+  upgradableBy: UpgradeabilityActor[] | undefined
+}
+
+export interface ApiProjectChain {
+  project: string
+  initialContracts: ApiProjectContract[]
+  discoveredContracts: ApiProjectContract[]
+  eoas: ApiAddressEntry[]
+  blockNumbers: Record<string, number>
+}
+
+export type ApiAddressType =
+  | 'EOA'
+  | 'EOAPermissioned'
+  | 'Unverified'
+  | 'Token'
+  | 'Multisig'
+  | 'Diamond'
+  | 'Timelock'
+  | 'Untemplatized'
+  | 'Contract'
+  | 'Group'
+  | 'Unknown'
+
+export interface ApiAddressEntry {
+  name?: string
+  description?: string
+  roles: string[]
+  type: ApiAddressType
+  referencedBy: ApiAddressReference[]
+  address: ChainSpecificAddress
+  chain: string
+  isReachable: boolean
+}
+
+export interface ApiAddressReference extends AddressFieldValue {
+  fieldNames: string[]
+}
+
+export interface Field {
+  name: string
+  value: FieldValue
+  handler?: { type: string } & Record<string, unknown>
+  description?: string
+}
+
+export type FieldValue =
+  | AddressFieldValue
+  | HexFieldValue
+  | StringFieldValue
+  | NumberFieldValue
+  | BooleanFieldValue
+  | ArrayFieldValue
+  | ObjectFieldValue
+  | UnknownFieldValue
+  | ErrorFieldValue
+
+export interface AddressFieldValue {
+  type: 'address'
+  name?: string
+  addressType: ApiAddressType
+  address: string
+}
+
+export interface HexFieldValue {
+  type: 'hex'
+  value: string
+}
+
+export interface StringFieldValue {
+  type: 'string'
+  value: string
+}
+
+export interface NumberFieldValue {
+  type: 'number'
+  value: string
+}
+
+export interface BooleanFieldValue {
+  type: 'boolean'
+  value: boolean
+}
+
+export interface ArrayFieldValue {
+  type: 'array'
+  values: FieldValue[]
+}
+
+export interface ObjectFieldValue {
+  type: 'object'
+  values: [FieldValue, FieldValue][]
+}
+
+export interface UnknownFieldValue {
+  type: 'unknown'
+  value: string
+}
+
+export interface ErrorFieldValue {
+  type: 'error'
+  error: string
+}
+
+export interface ApiProjectContract extends ApiAddressEntry {
+  template?: {
+    id: string
+    shape?: {
+      name: string
+      hasCriteria: boolean
+    }
+  }
+  proxyType?: string
+  fields: Field[]
+  abis: ApiAbi[]
+  implementationNames?: Record<string, string>
+}
+
+export interface ApiAbi {
+  address: string
+  entries: ApiAbiEntry[]
+}
+
+export interface ApiAbiEntry {
+  value: string
+  signature?: string
+  topic?: string
+}
+
+export interface ApiCodeResponse {
+  entryName: string | undefined
+  sources: { name: string; code: string }[]
+}
+
+export interface ApiCodeSegment {
+  name: string | null
+  content: string
+}
+
+export interface ApiCodeDeclarationsResponse {
+  entryName: string | undefined
+  sources: { name: string; declarations: ApiCodeSegment[] }[]
+}
+
+export interface ApiCodeSearchResponse {
+  matches: {
+    name: string | undefined
+    address: string
+    codeLocation: {
+      line: string
+      fileName: string
+      index: number
+      offset: number
+    }[]
+  }[]
+}
+
+export interface UpgradeabilityActor {
+  name: string
+  delay: string
+}
+
+// Config health report types
+export type ApiConfigHealthResponse = {
+  healthHints: ApiHealthHint[]
+  length: number
+}
+
+type ApiHealthHintBase = {
+  excess: {
+    ignoreInWatchMode?: string[]
+    ignoreMethods?: string[]
+    ignoreRelatives?: string[]
+  }
+}
+
+export type ApiHealthHint =
+  | (ApiHealthHintBase & {
+      source: 'config'
+      target: {
+        project: string
+        address: string
+        name?: string
+      }
+    })
+  | (ApiHealthHintBase & {
+      source: 'template'
+      target: {
+        templateId: string
+      }
+    })

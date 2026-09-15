@@ -1,75 +1,102 @@
-import { dirname, posix } from 'path'
-import { assert } from '@l2beat/backend-tools'
-import { EthereumAddress, Hash256 } from '@l2beat/shared-pure'
+import type { Logger } from '@l2beat/backend-tools'
+import {
+  assert,
+  ChainSpecificAddress,
+  type EthereumAddress,
+  formatJson,
+  type UnixTime,
+} from '@l2beat/shared-pure'
 import { writeFile } from 'fs/promises'
 import { mkdirp } from 'mkdirp'
+import { dirname, posix } from 'path'
 import { rimraf } from 'rimraf'
-
-import { FileContent } from '../../flatten/ParsedFilesManager'
-import { flattenStartingFrom } from '../../flatten/flatten'
-import { formatSI, getThroughput, timed } from '../../utils/timing'
-import { DiscoveryLogger } from '../DiscoveryLogger'
-import { Analysis } from '../analysis/AddressAnalyzer'
-import { DiscoveryConfig } from '../config/DiscoveryConfig'
-import { PerContractSource } from '../source/SourceCodeService'
+import type { Analysis } from '../analysis/AddressAnalyzer'
+import { TemplateService } from '../analysis/TemplateService'
+import type { ConfigRegistry } from '../config/ConfigRegistry'
+import type { DiscoveryPaths } from '../config/getDiscoveryPaths'
 import { removeSharedNesting } from '../source/removeSharedNesting'
+import { flattenDiscoveredSources } from './flattenDiscoveredSource'
+import { remapDiscoverySourceNames } from './remapDiscoverySourceNames'
 import { toDiscoveryOutput } from './toDiscoveryOutput'
-import { toPrettyJson } from './toPrettyJson'
+import type { DiscoveryOutput } from './types'
 
 export interface SaveDiscoveryResultOptions {
-  rootFolder?: string
+  paths: DiscoveryPaths
   sourcesFolder?: string
   flatSourcesFolder?: string
   discoveryFilename?: string
   metaFilename?: string
   saveSources?: boolean
+  templatesFolder: string
+  /**
+   * Explicit path where the project\'s discovery output should be written.
+   * When provided it overrides the default
+   *   `${paths.discovery}/${project}/${chain}`.
+   */
+  projectDiscoveryFolder?: string
 }
 
 export async function saveDiscoveryResult(
   results: Analysis[],
-  config: DiscoveryConfig,
-  blockNumber: number,
-  logger: DiscoveryLogger,
-  shapeFilesHash: Hash256,
+  config: ConfigRegistry,
+  timestamp: UnixTime,
+  usedBlockNumbers: Record<string, number>,
+  logger: Logger,
   options: SaveDiscoveryResultOptions,
 ): Promise<void> {
-  const root =
-    options.rootFolder ?? posix.join('discovery', config.name, config.chain)
-  await mkdirp(root)
+  const projectDiscoveryFolder =
+    options.projectDiscoveryFolder ??
+    posix.join(options.paths.discovery, config.structure.name)
+  await mkdirp(projectDiscoveryFolder)
+
+  const templateService = new TemplateService(options.paths.discovery)
+  const discoveryOutput = toDiscoveryOutput(
+    templateService,
+    config,
+    timestamp,
+    usedBlockNumbers,
+    results,
+  )
+
+  // TODO: Should not be here - drop it and use implementation name once it's ready
+  // if somebody changes the name and decides to re-colorize
+  // then .flat folder will be incorrect
+  const remappedResults = remapDiscoverySourceNames(results, discoveryOutput)
 
   await saveDiscoveredJson(
-    root,
-    results,
-    config,
-    blockNumber,
-    options,
-    shapeFilesHash,
+    discoveryOutput,
+    projectDiscoveryFolder,
+    options.discoveryFilename,
   )
-  await saveFlatSources(root, results, logger, options)
+  await saveFlatSources(
+    projectDiscoveryFolder,
+    remappedResults,
+    logger,
+    options,
+  )
   if (options.saveSources) {
-    await saveSources(root, results, options)
+    await saveSources(projectDiscoveryFolder, remappedResults, options)
   }
 }
 
-async function saveDiscoveredJson(
+export async function saveDiscoveredJson(
+  discoveryOutput: DiscoveryOutput,
   rootPath: string,
-  results: Analysis[],
-  config: DiscoveryConfig,
-  blockNumber: number,
-  options: SaveDiscoveryResultOptions,
-  shapeFilesHash: Hash256,
+  discoveryFilename: string | undefined = undefined,
 ): Promise<void> {
-  const project = toDiscoveryOutput(
-    config.name,
-    config.chain,
-    config.hash,
-    blockNumber,
-    results,
-    shapeFilesHash,
-  )
-  const json = await toPrettyJson(project)
-  const discoveryFilename = options.discoveryFilename ?? 'discovered.json'
-  await writeFile(posix.join(rootPath, discoveryFilename), json)
+  const { permissionsConfigHash, modelledAgainst, permissions, ...rest } =
+    discoveryOutput
+  const json = formatJson({
+    ...rest,
+    permissionsConfigHash,
+    modelledAgainst:
+      Object.keys(modelledAgainst ?? {}).length > 0
+        ? modelledAgainst
+        : undefined,
+    permissions,
+  })
+  const outputPath = discoveryFilename ?? 'discovered.json'
+  await writeFile(posix.join(rootPath, outputPath), json)
 }
 
 async function saveSources(
@@ -79,13 +106,13 @@ async function saveSources(
 ): Promise<void> {
   const sourcesFolder = options.sourcesFolder ?? '.code'
   const sourcesPath = posix.join(rootPath, sourcesFolder)
-  const allContractNames = results.map((c) =>
-    c.type !== 'EOA' ? c.name : 'EOA',
-  )
+  const allContractNames = results
+    .filter((c) => c.type !== 'Reference')
+    .map((c) => (c.type !== 'EOA' ? c.name : 'EOA'))
 
   await rimraf(sourcesPath)
   for (const contract of results) {
-    if (contract.type === 'EOA') {
+    if (contract.type === 'EOA' || contract.type === 'Reference') {
       continue
     }
 
@@ -99,7 +126,7 @@ async function saveSources(
           i,
           contract.sourceBundles.length,
           contract.name,
-          contract.address,
+          ChainSpecificAddress.address(contract.address), // TODO(radomski): The output path should prolly change
           sourcesPath,
           allContractNames,
         )
@@ -113,7 +140,7 @@ async function saveSources(
 async function saveFlatSources(
   rootPath: string,
   results: Analysis[],
-  logger: DiscoveryLogger,
+  logger: Logger,
   options: SaveDiscoveryResultOptions,
 ): Promise<void> {
   const flatSourcesFolder = options.flatSourcesFolder ?? '.flat'
@@ -122,144 +149,19 @@ async function saveFlatSources(
   await rimraf(flatSourcesPath)
   await mkdirp(flatSourcesPath)
 
-  logger.log(`Saving flattened sources`)
+  const flatten = flattenDiscoveredSources(results, logger)
+  for (const entryPath of Object.keys(flatten)) {
+    const outputPath = posix.join(flatSourcesPath, entryPath)
 
-  const nameCounts = new Map<string, number>()
-  for (const contract of results) {
-    if (contract.type === 'EOA') {
-      continue
+    if (posix.dirname(outputPath) !== flatSourcesPath) {
+      await mkdirp(posix.dirname(outputPath))
     }
 
-    const name = contract.name
-    const count = nameCounts.get(name) || 0
-    nameCounts.set(name, count + 1)
+    const content = flatten[entryPath]
+    assert(content !== undefined, 'Content should never be undefined')
+
+    await writeFile(outputPath, content)
   }
-
-  for (const analyzedContract of results) {
-    try {
-      if (analyzedContract.type === 'EOA') {
-        continue
-      }
-
-      let outName = analyzedContract.name
-      const count = nameCounts.get(outName) || 0
-      if (count > 1) {
-        outName = `${outName}-${analyzedContract.address}`
-      }
-
-      await writeFlattenedFiles(
-        flatSourcesPath,
-        outName,
-        analyzedContract.sourceBundles,
-        logger,
-      )
-    } catch (e) {
-      assert(analyzedContract.type !== 'EOA', 'This should never happen')
-      const contractName = analyzedContract.derivedName ?? analyzedContract.name
-
-      logger.log(`[FAIL]: ${contractName} - ${stringifyError(e)}`)
-    }
-  }
-}
-
-async function writeFlattenedFiles(
-  flatSourcesPath: string,
-  topLevelName: string,
-  bundles: PerContractSource[],
-  logger: DiscoveryLogger,
-) {
-  let containingDirectory = ''
-  if (bundles.length > 1) {
-    containingDirectory = topLevelName
-
-    const path = posix.join(flatSourcesPath, containingDirectory)
-    await mkdirp(path)
-  }
-
-  for (const [bundleIndex, bundle] of bundles.entries()) {
-    const input: FileContent[] = Object.entries(bundle.source.files)
-      .map(([fileName, content]) => ({
-        path: fileName,
-        content,
-      }))
-      .filter((e) => e.path.endsWith('.sol'))
-
-    if (input.length === 0) {
-      logger.log(`[SKIP]: ${topLevelName}-${bundle.name} no .sol files`)
-      continue
-    }
-
-    const result = timed(() => {
-      const output = flattenStartingFrom(
-        bundle.name,
-        input,
-        bundle.source.remappings,
-      )
-
-      return output
-    })
-
-    const throughput = formatThroughput(input, result.executionTime)
-
-    const flatContent = addSolidityVersionComment(
-      bundle.source.solidityVersion,
-      result.value,
-    )
-
-    const fileName = bundles.length > 1 ? bundle.name : topLevelName
-
-    const hasProxy = bundles.length > 1
-    const isProxy = hasProxy && bundleIndex === 0
-    const hasManyImplementations = bundles.length > 2
-
-    const implementationPostfix = hasManyImplementations
-      ? `.${bundleIndex}`
-      : ''
-    const proxyPostfix = isProxy ? '.p' : ''
-    const postfix = isProxy ? proxyPostfix : implementationPostfix
-
-    const path = posix.join(
-      flatSourcesPath,
-      containingDirectory,
-      `${fileName}${postfix}.sol`,
-    )
-    await writeFile(path, flatContent)
-
-    logger.log(`[ OK ]: ${topLevelName} @ ${throughput}`)
-  }
-}
-
-function addSolidityVersionComment(
-  solidityVersion: string,
-  flatSource: string,
-): string {
-  return `// Compiled with solc version: ${solidityVersion}\n\n${flatSource}`
-}
-
-function formatThroughput(
-  input: FileContent[],
-  executionTimeMilliseconds: number,
-): string {
-  const sourceLineCount = input.reduce(
-    (acc, { content }) => acc + content.split('\n').length,
-    0,
-  )
-  const throughput = formatSI(
-    getThroughput(sourceLineCount, executionTimeMilliseconds),
-    'lines/s',
-  )
-
-  return throughput
-}
-
-function stringifyError(e: unknown): string {
-  if (e instanceof Error) {
-    return e.message
-  } else if (typeof e === 'string') {
-    return e
-  }
-
-  return JSON.stringify(e)
 }
 
 export function getSourceOutputPath(
@@ -296,10 +198,7 @@ export function getSourceOutputPath(
  * If there are more it returns
  * '/proxy', '/implementation-1', '/implementation-2', etc.
  */
-export function getImplementationFolder(
-  i: number,
-  sourcesCount: number,
-): string {
+function getImplementationFolder(i: number, sourcesCount: number): string {
   let name = ''
   if (sourcesCount > 1) {
     name = i === 0 ? 'proxy' : 'implementation'

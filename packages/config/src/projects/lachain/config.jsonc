@@ -1,0 +1,44 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "lachain",
+  "archived": true,
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": ["eth:0x742A28e22277945BBAAa34810393bf6e8512576C"],
+  "names": { "eth:0x742A28e22277945BBAAa34810393bf6e8512576C": "Diamond" },
+  "overrides": {
+    "eth:0x742A28e22277945BBAAa34810393bf6e8512576C": {
+      "fields": {
+        "validators": {
+          "handler": {
+            "type": "hardcoded",
+            "value": ["eth:0x8c0Bfc04AdA21fd496c55B8C50331f904306F564"]
+          }
+        }
+      }
+    },
+    "eth:0x8c0Bfc04AdA21fd496c55B8C50331f904306F564": {
+      "fields": {
+        "validatorsVTL": {
+          "handler": {
+            "type": "event",
+            "select": ["validator"],
+            "add": {
+              "event": "event ValidatorAdded(uint256 indexed chainId, address validator)",
+              "where": ["=", "#chainId", 2904]
+            },
+            "remove": {
+              "event": "event ValidatorRemoved(uint256 indexed chainId, address validator)",
+              "where": ["=", "#chainId", 2904]
+            }
+          },
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Permissioned to call the functions to commit, prove, execute and revert L2 batches through the ValidatorTimelock in the main Diamond contract."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

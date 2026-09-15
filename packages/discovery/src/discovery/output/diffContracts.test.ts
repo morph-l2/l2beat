@@ -1,26 +1,27 @@
-import { ContractParameters } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { ChainSpecificAddress, EthereumAddress } from '@l2beat/shared-pure'
 import { expect } from 'earl'
 
 import { diffContracts } from './diffContracts'
+import type { EntryParameters } from './types'
 
 describe(diffContracts.name, () => {
-  const OLD_ADDRESS = EthereumAddress.random()
-  const NEW_ADDRESS = EthereumAddress.random()
+  const OLD_ADDRESS = ChainSpecificAddress.from('eth', EthereumAddress.random())
+  const NEW_ADDRESS = ChainSpecificAddress.from('eth', EthereumAddress.random())
 
-  const OLD_ADMIN = EthereumAddress.random()
-  const NEW_ADMIN = EthereumAddress.random()
+  const OLD_ADMIN = ChainSpecificAddress.from('eth', EthereumAddress.random())
+  const NEW_ADMIN = ChainSpecificAddress.from('eth', EthereumAddress.random())
 
   const IMPLEMENTATION = EthereumAddress.random()
 
   it('returns difference between two objects', () => {
-    const committed: ContractParameters = {
+    const committed: EntryParameters = {
+      type: 'Contract',
       name: 'A',
       address: OLD_ADDRESS,
       proxyType: 'EIP1967 proxy',
       values: {
-        $implementation: IMPLEMENTATION,
-        $admin: OLD_ADMIN,
+        $implementation: IMPLEMENTATION.toString(),
+        $admin: OLD_ADMIN.toString(),
         A: true,
         B: true,
         C: 1,
@@ -28,14 +29,15 @@ describe(diffContracts.name, () => {
         E: 'ignoreMe',
       },
     }
-    const discovered: ContractParameters = {
+    const discovered: EntryParameters = {
+      type: 'Contract',
       name: 'A',
       address: NEW_ADDRESS,
       proxyType: 'EIP1967 proxy',
       ignoreInWatchMode: ['E', 'F'],
       values: {
-        $admin: NEW_ADMIN,
-        $implementation: IMPLEMENTATION,
+        $admin: NEW_ADMIN.toString(),
+        $implementation: IMPLEMENTATION.toString(),
         A: false,
         C: 1,
         D: [1, 2, 3, 4],
@@ -57,6 +59,7 @@ describe(diffContracts.name, () => {
         after: JSON.stringify(NEW_ADDRESS),
         description: undefined,
         severity: undefined,
+        type: undefined,
       },
       {
         key: 'values.$admin',
@@ -64,6 +67,7 @@ describe(diffContracts.name, () => {
         after: JSON.stringify(NEW_ADMIN),
         description: undefined,
         severity: undefined,
+        type: undefined,
       },
       {
         key: 'values.A',
@@ -71,24 +75,28 @@ describe(diffContracts.name, () => {
         after: 'false',
         description: undefined,
         severity: undefined,
+        type: undefined,
       },
       {
         key: 'values.B',
         before: 'true',
         description: undefined,
         severity: undefined,
+        type: undefined,
       },
       {
         key: 'values.D.3',
         after: '4',
         description: undefined,
         severity: undefined,
+        type: undefined,
       },
       {
         key: 'values.A.F',
         after: '"dontIgnoreMe"',
         description: undefined,
         severity: undefined,
+        type: undefined,
       },
     ])
   })

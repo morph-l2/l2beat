@@ -1,0 +1,44 @@
+<!-- DOCTOC SKIP -->
+# Summary
+
+- [Intro](./chapter_1.md)
+
+# Code walkthroughs
+
+- [Arbitrum](./code_walkthroughs/arbitrum/README.md)
+    - [Sequencing](./code_walkthroughs/arbitrum/sequencing.md)
+    - [Proof system](./code_walkthroughs/arbitrum/proof_system.md)
+    - [Admin operations](./code_walkthroughs/arbitrum/admin_ops.md)
+
+- [Optimism](./code_walkthroughs/optimism/README.md)
+
+- [Scroll](./code_walkthroughs/scroll/README.md)
+    - [Sequencing](./code_walkthroughs/scroll/sequencing.md)
+    - [Proof system](./code_walkthroughs/scroll/proof_system.md)
+    - [Admin operations](./code_walkthroughs/scroll/admin_ops.md)
+
+- [Taiko Alethia](./code_walkthroughs/taiko_alethia/README.md)
+    - [Sequencing](./code_walkthroughs/taiko_alethia/sequencing.md)
+    - [Proof system](./code_walkthroughs/taiko_alethia/proof_system.md)
+    - [Admin operations](./code_walkthroughs/taiko_alethia/admin_ops.md)
+
+- [DA Layers](./code_walkthroughs/dalayers/README.md)
+    - [Celestia](./code_walkthroughs/dalayers/celestia/README.md)
+        - [Blob Lifecycle](./code_walkthroughs/dalayers/celestia/blob_lifecycle.md)
+    - [EigenDA](./code_walkthroughs/dalayers/eigenda/README.md)
+        - [Blob Lifecycle](./code_walkthroughs/dalayers/eigenda/blob_lifecycle.md)
+
+# L2BEAT specs
+
+- [Interop](./l2b_specs/interop.md)
+- [Interop plugin matching](./l2b_specs/interop_plugin_matching.md)
+- [Permissions section](./l2b_specs/permissions.md)
+- [Contracts section](./l2b_specs/contracts.md)
+- [Finality page](./l2b_specs/finality.md)
+- [Stages edge cases](./l2b_specs/stages_edgecases.md)
+- [Diffovery](./l2b_specs/diffovery.md)
+- [TokenDB](./l2b_specs/token_db/README.md)
+    - [Automatic token ingestion](./l2b_specs/token_db/automatic_token_ingestion.md)
+    - [Token relations](./l2b_specs/token_db/token_relations.md)
+    - [Intent / Plan / Execute](./l2b_specs/token_db/intent_plan_execute.md)
+    - [Abstract token merging](./l2b_specs/token_db/abstract_token_merging.md)

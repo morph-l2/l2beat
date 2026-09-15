@@ -1,0 +1,197 @@
+import type { ProjectsSummedDataAvailabilityRecord } from '@l2beat/database'
+import { assert, type ProjectId, UnixTime } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import { env } from '~/env'
+import { getDb } from '~/server/database'
+import { ps } from '~/server/projects'
+import {
+  ChartRange,
+  type ChartResolution,
+  rangeToResolution,
+} from '~/utils/range/range'
+import { rangeToDays } from '~/utils/range/rangeToDays'
+import { generateTimestamps } from '../../utils/generateTimestamps'
+import { getChartStartTimestamp } from '../../utils/getChartStartTimestamp'
+import { isThroughputSynced } from './isThroughputSynced'
+import { isInEigendaLayerDataGap } from './utils/eigendaDataGap'
+import { getThroughputExpectedTimestamp } from './utils/getThroughputExpectedTimestamp'
+
+type ProjectDaThroughputChart = {
+  chart: ProjectDaThroughputChartPoint[]
+  range: ChartRange
+  syncedUntil: UnixTime
+}
+export type ProjectDaThroughputChartPoint = [
+  timestamp: number,
+  value: number | null,
+]
+
+export const ProjectDaThroughputChartParams = v.object({
+  range: ChartRange,
+  includeL2Only: v.boolean(),
+  projectId: v.string(),
+})
+export type ProjectDaThroughputChartParams = v.infer<
+  typeof ProjectDaThroughputChartParams
+>
+
+export async function getProjectDaThroughputChart(
+  params: ProjectDaThroughputChartParams,
+): Promise<ProjectDaThroughputChart | undefined> {
+  if (env.MOCK) {
+    return getMockProjectDaThroughputChart(params)
+  }
+  const resolution = rangeToResolution(params.range)
+
+  const data = await getProjectDaThroughputChartData(params)
+  if (!data) {
+    return undefined
+  }
+  const { grouped, from, to, maxTimestamp, syncedUntil } = data
+
+  const timestamps = generateTimestamps([from, to], resolution)
+  const hasEigendaGap = params.projectId === 'eigenda' && !params.includeL2Only
+
+  return {
+    chart: timestamps.map((timestamp) => {
+      if (hasEigendaGap && isInEigendaLayerDataGap(timestamp, resolution)) {
+        return [timestamp, null]
+      }
+      const posted =
+        timestamp <= maxTimestamp ? (grouped[timestamp] ?? 0) : null
+      return [timestamp, posted]
+    }),
+    range: [from, maxTimestamp],
+    syncedUntil,
+  }
+}
+
+export async function getProjectDaThroughputChartData({
+  range,
+  projectId,
+  includeL2Only,
+}: ProjectDaThroughputChartParams) {
+  const db = getDb()
+  const resolution = rangeToResolution(range)
+
+  const daLayer = await ps.getProject({
+    id: projectId as ProjectId,
+    select: ['daLayer'],
+  })
+  const sovereignProjectsIds =
+    daLayer?.daLayer.sovereignProjectsTrackingConfig?.map((c) => c.projectId)
+
+  const [throughput, firstTimestamp] = await Promise.all([
+    includeL2Only
+      ? db.dataAvailability.getSummedProjectsByDaLayersAndTimeRange(
+          [projectId],
+          range,
+          sovereignProjectsIds,
+        )
+      : db.dataAvailability.getByProjectIdsAndTimeRange([projectId], range),
+    includeL2Only
+      ? db.dataAvailability.getFirstTimestampOfSummedProjectsByDaLayers(
+          [projectId],
+          sovereignProjectsIds,
+        )
+      : db.dataAvailability.getFirstTimestampByProjectIds([projectId]),
+  ])
+
+  if (throughput.length === 0) {
+    return undefined
+  }
+
+  const syncedUntil = throughput.at(-1)?.timestamp
+  assert(syncedUntil, 'syncedUntil is undefined')
+
+  const { grouped, minTimestamp, maxTimestamp } = groupByTimestampAndProjectId(
+    throughput,
+    resolution,
+  )
+
+  const expectedTo = getThroughputExpectedTimestamp({
+    to: range[1],
+    resolution,
+  })
+
+  const adjustedTo = isThroughputSynced({
+    syncedUntil,
+    pastDaySynced: false,
+    to: range[1],
+  })
+    ? maxTimestamp
+    : expectedTo
+
+  const from = getChartStartTimestamp({
+    rangeStart: range[0],
+    firstProjectTimestamp: firstTimestamp,
+    dataStart: minTimestamp,
+    resolution,
+  })
+
+  return {
+    grouped,
+    from,
+    to: adjustedTo,
+    maxTimestamp,
+    syncedUntil,
+  }
+}
+
+function groupByTimestampAndProjectId(
+  records: ProjectsSummedDataAvailabilityRecord[],
+  resolution: ChartResolution,
+) {
+  let minTimestamp = Number.POSITIVE_INFINITY
+  let maxTimestamp = Number.NEGATIVE_INFINITY
+  const result: Record<number, number> = {}
+
+  const offset = UnixTime.toStartOf(UnixTime.now(), resolution)
+  const fullySyncedRecords = records.filter((r) => r.timestamp < offset)
+
+  for (const record of fullySyncedRecords) {
+    const timestamp = UnixTime.toStartOf(record.timestamp, resolution)
+    const value = record.totalSize
+    if (!result[timestamp]) {
+      result[timestamp] = Number(value)
+    } else {
+      result[timestamp] += Number(value)
+    }
+    minTimestamp = Math.min(minTimestamp, timestamp)
+    maxTimestamp = Math.max(maxTimestamp, timestamp)
+  }
+
+  return {
+    grouped: result,
+    minTimestamp: UnixTime(minTimestamp),
+    maxTimestamp: UnixTime(maxTimestamp),
+  }
+}
+
+function getMockProjectDaThroughputChart({
+  range,
+  projectId,
+}: ProjectDaThroughputChartParams): ProjectDaThroughputChart {
+  const days = rangeToDays(range) ?? 730
+  const to = UnixTime.toStartOf(UnixTime.now(), 'day')
+  const from = range[0] ?? to - days * UnixTime.DAY
+
+  if (!['ethereum', 'celestia', 'avail', 'eigenda'].includes(projectId)) {
+    return {
+      chart: [],
+      range: [from, to],
+      syncedUntil: UnixTime.now(),
+    }
+  }
+
+  const timestamps = generateTimestamps([from, to], 'day')
+  return {
+    chart: timestamps.map((timestamp) => {
+      const throughputValue = Math.random() * 900_000_000 + 90_000_000
+
+      return [timestamp, Math.round(throughputValue)]
+    }),
+    range: [from, to],
+    syncedUntil: UnixTime.now(),
+  }
+}

@@ -1,11 +1,11 @@
-import { assert } from '@l2beat/backend-tools'
-import { ContractValue } from '@l2beat/discovery-types'
-import { z } from 'zod'
-import { ArgType, BaseTypeCaster } from './BaseTypeCaster'
+import { assert } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import type { ContractValue } from '../output/types'
+import type { ArgType, BaseTypeCaster } from './BaseTypeCaster'
 
-const Validator = z.record(
-  z.string(),
-  z.union([z.string(), z.number(), z.boolean()]),
+const Validator = v.record(
+  v.string(),
+  v.union([v.string(), v.number(), v.boolean()]),
 )
 
 export const Mapping: BaseTypeCaster = {
@@ -16,7 +16,6 @@ export const Mapping: BaseTypeCaster = {
     const validated = Validator.parse(arg)
     const mapped = validated[incomingValue.toString()]
     if (mapped === undefined) {
-      console.log(`Value (${incomingValue}) not found in mapping`)
       return incomingValue
     }
 

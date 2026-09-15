@@ -1,0 +1,956 @@
+/*
+CCIP (Chainlink Cross-Chain Interoperability Protocol) plugin.
+
+Supports two contract architectures:
+- v1.0–v1.5: Per-lane contracts (separate OnRamp/OffRamp per source-destination pair)
+- v1.6–v2.0: Per-chain contracts (single OnRamp/OffRamp per version and chain,
+              chain selectors in event data)
+
+And both TokenPool event formats used across these versions:
+- Separate Locked/Burned/Released/Minted events
+- Unified LockedOrBurned/ReleasedOrMinted events
+*/
+
+import {
+  Address32,
+  ChainSpecificAddress,
+  EthereumAddress,
+} from '@l2beat/shared-pure'
+import { keccak256 } from 'viem'
+import type { InteropConfigStore } from '../../engine/config/InteropConfigStore'
+import {
+  type CCTPNetwork,
+  CCTPV1Config,
+  CCTPV2Config,
+} from '../cctp/cctp.config'
+import {
+  cctpV1DepositForBurnLog,
+  cctpV1MessageReceivedLog,
+  cctpV2DepositForBurnLog,
+  cctpV2MessageReceivedLog,
+  findCctpDepositForBurn,
+  findCctpReceivedTransfer,
+} from '../cctp/cctp.utils'
+import { getBestEffortBridgeTypeFromPartialSupplyAction } from '../partialSupplyActionBridgeType'
+import {
+  createEventParser,
+  createInteropEventType,
+  type DataRequest,
+  type InteropEvent,
+  type InteropEventDb,
+  type InteropPluginResyncable,
+  type LogToCapture,
+  type MatchResult,
+  Result,
+} from '../types'
+import {
+  CCIPConfig,
+  getKnownOnRamps,
+  getOnRampsByDestination,
+} from './ccip.config'
+import { decodeCCIPV2Message } from './ccip.v2'
+
+// --- Messaging events (v1.0–v1.5, per-lane) ---
+
+const ccipSendRequestedLog =
+  'event CCIPSendRequested((uint64 sourceChainSelector, address sender, address receiver, uint64 sequenceNumber, uint256 gasLimit, bool strict, uint64 nonce, address feeToken, uint256 feeTokenAmount, bytes data, (address token, uint256 amount)[] tokenAmounts, bytes[] sourceTokenData, bytes32 messageId) message)'
+const parseCCIPSendRequested = createEventParser(ccipSendRequestedLog)
+
+const executionStateChangedLog =
+  'event ExecutionStateChanged(uint64 indexed sequenceNumber, bytes32 indexed messageId, uint8 state, bytes returnData)'
+const parseExecutionStateChanged = createEventParser(executionStateChangedLog)
+
+// --- Messaging events (v1.6+, per-chain) ---
+
+const ccipMessageSentLog =
+  'event CCIPMessageSent(uint64 indexed destChainSelector, uint64 indexed sequenceNumber, ((bytes32 messageId, uint64 sourceChainSelector, uint64 destChainSelector, uint64 sequenceNumber, uint64 nonce) header, address sender, bytes data, bytes receiver, bytes extraArgs, address feeToken, uint256 feeTokenAmount, uint256 feeValueJuels, (address sourcePoolAddress, bytes destTokenAddress, bytes extraData, uint256 amount, bytes destGasAmount)[] tokenAmounts) message)'
+const parseCCIPMessageSent = createEventParser(ccipMessageSentLog)
+
+const executionStateChangedV16Log =
+  'event ExecutionStateChanged(uint64 indexed sourceChainSelector, uint64 indexed sequenceNumber, bytes32 indexed messageId, bytes32 messageHash, uint8 state, bytes returnData, uint256 gasUsed)'
+const parseExecutionStateChangedV16 = createEventParser(
+  executionStateChangedV16Log,
+)
+
+// --- Messaging events (v2.0, per-chain) ---
+
+const ccipMessageSentV2Log =
+  'event CCIPMessageSent(uint64 indexed destChainSelector, address indexed sender, bytes32 indexed messageId, address feeToken, uint256 tokenAmountBeforeTokenPoolFees, bytes encodedMessage, (address issuer, uint32 destGasLimit, uint32 destBytesOverhead, uint256 feeTokenAmount, bytes extraArgs)[] receipts, bytes[] verifierBlobs)'
+const parseCCIPMessageSentV2 = createEventParser(ccipMessageSentV2Log)
+
+const executionStateChangedV2Log =
+  'event ExecutionStateChanged(uint64 indexed sourceChainSelector, uint64 indexed messageNumber, bytes32 indexed messageId, uint8 state, bytes returnData)'
+const parseExecutionStateChangedV2 = createEventParser(
+  executionStateChangedV2Log,
+)
+
+// --- TokenPool events: source side ---
+
+// Separate format (token address inferred from a preceding Transfer event)
+const lockedLog = 'event Locked(address indexed sender, uint256 amount)'
+const parseLockedEvent = createEventParser(lockedLog)
+
+const burnedLog = 'event Burned(address indexed sender, uint256 amount)'
+const parseBurnedEvent = createEventParser(burnedLog)
+
+// Non-standard: emitted by custom XERC20LockboxTokenPool (e.g. USDT on Celo).
+// The pool deposits native ERC20 into a lockbox, then burns the minted XERC20.
+// Same shape as Locked; the user's tokens are locked in the lockbox (wasBurned = false).
+const depositedAndBurnedLog =
+  'event DepositedAndBurned(address indexed sender, uint256 amount)'
+const parseDepositedAndBurned = createEventParser(depositedAndBurnedLog)
+
+// Unified format (token address in event data)
+const lockedOrBurnedLog =
+  'event LockedOrBurned(uint64 indexed remoteChainSelector, address token, address sender, uint256 amount)'
+const parseLockedOrBurned = createEventParser(lockedOrBurnedLog)
+
+// --- TokenPool events: destination side ---
+
+// Separate format (token address inferred from a preceding Transfer event)
+const releasedLog =
+  'event Released(address indexed sender, address indexed recipient, uint256 amount)'
+const parseReleased = createEventParser(releasedLog)
+
+const mintedLog =
+  'event Minted(address indexed sender, address indexed recipient, uint256 amount)'
+const parseMinted = createEventParser(mintedLog)
+
+// Non-standard: emitted by custom XERC20LockboxTokenPool (e.g. USDT on Celo).
+// The pool mints XERC20 tokens, then burns them via a lockbox to release native ERC20
+// to the receiver. MintedAndWithdrawn is emitted instead of the standard Minted event.
+const mintedAndWithdrawnLog =
+  'event MintedAndWithdrawn(address indexed sender, address indexed recipient, uint256 amount)'
+const parseMintedAndWithdrawn = createEventParser(mintedAndWithdrawnLog)
+
+// Unified format (token address in event data)
+const releasedOrMintedLog =
+  'event ReleasedOrMinted(uint64 indexed remoteChainSelector, address token, address sender, address recipient, uint256 amount)'
+const parseReleasedOrMinted = createEventParser(releasedOrMintedLog)
+
+// --- Auxiliary events ---
+
+const transferLog =
+  'event Transfer(address indexed from, address indexed to, uint256 value)'
+const parseTransfer = createEventParser(transferLog)
+
+// --- Interop event types ---
+
+export const CCIPSendRequested = createInteropEventType<{
+  messageId: `0x${string}`
+  $dstChain: string
+  token?: Address32
+  amount?: bigint
+  index?: number
+  wasBurned?: boolean
+  isCctpBacked?: boolean
+}>('ccip.CCIPSendRequested')
+
+type CcipDstToken = {
+  address: Address32
+  amount: bigint
+  wasMinted: boolean
+  isCctpBacked?: boolean
+}
+
+type CcipSrcToken = {
+  tokenAddress?: string
+  wasBurned: boolean
+}
+
+type CctpNetworks = {
+  v1Networks: CCTPNetwork[]
+  v2Networks: CCTPNetwork[]
+}
+
+export const ExecutionStateChanged = createInteropEventType<{
+  messageId: `0x${string}`
+  state: number
+  $srcChain: string
+  dstTokens?: CcipDstToken[]
+}>('ccip.ExecutionStateChanged')
+
+// --- Transfer event helpers ---
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+const DEAD_ADDRESS = '0x000000000000000000000000000000000000dead'
+
+function isBurnAddress(address: string): boolean {
+  const normalized = address.toLowerCase()
+  return normalized === ZERO_ADDRESS || normalized === DEAD_ADDRESS
+}
+
+// Find the closest preceding Transfer event with a matching amount.
+// Used to get the token address and determine lock vs burn / release vs mint.
+function findPrecedingTransfer(
+  logs: LogToCapture['txLogs'],
+  currentIndex: number,
+  amount: bigint,
+): { tokenAddress: string; from: string; to: string } | undefined {
+  for (let j = currentIndex - 1; j >= 0; j--) {
+    const prevLog = logs[j]
+    const transfer = parseTransfer(prevLog, null)
+    if (transfer && transfer.value === amount) {
+      return {
+        tokenAddress: prevLog.address,
+        from: transfer.from.toLowerCase(),
+        to: transfer.to.toLowerCase(),
+      }
+    }
+  }
+  return undefined
+}
+
+// Fallback for fee-on-transfer tokens where amounts don't match exactly.
+// Finds the closest preceding Transfer for a specific token address.
+function findPrecedingTransferForToken(
+  logs: LogToCapture['txLogs'],
+  currentIndex: number,
+  tokenAddress: string,
+): { from: string; to: string } | undefined {
+  const normalizedToken = tokenAddress.toLowerCase()
+  for (let j = currentIndex - 1; j >= 0; j--) {
+    const prevLog = logs[j]
+    if (prevLog.address.toLowerCase() !== normalizedToken) continue
+    const transfer = parseTransfer(prevLog, null)
+    if (transfer) {
+      return {
+        from: transfer.from.toLowerCase(),
+        to: transfer.to.toLowerCase(),
+      }
+    }
+  }
+  return undefined
+}
+
+// --- Plugin ---
+
+const SOURCE_TOKEN_POOL_EVENTS = [
+  lockedLog,
+  burnedLog,
+  depositedAndBurnedLog,
+  lockedOrBurnedLog,
+  transferLog,
+  cctpV1DepositForBurnLog,
+  cctpV2DepositForBurnLog,
+]
+const DEST_TOKEN_POOL_EVENTS = [
+  releasedOrMintedLog,
+  releasedLog,
+  mintedLog,
+  mintedAndWithdrawnLog,
+  transferLog,
+  cctpV1MessageReceivedLog,
+  cctpV2MessageReceivedLog,
+]
+
+export class CCIPPlugin implements InteropPluginResyncable {
+  readonly name = 'ccip'
+
+  constructor(
+    private configs: InteropConfigStore,
+    private oneSidedChains: string[] = [],
+  ) {}
+
+  getDataRequests(): DataRequest[] {
+    const networks = this.configs.get(CCIPConfig)?.networks ?? []
+
+    const v15SendAddresses: ChainSpecificAddress[] = []
+    const v15RecvAddresses: ChainSpecificAddress[] = []
+    const v16SendAddresses: ChainSpecificAddress[] = []
+    const v16RecvAddresses: ChainSpecificAddress[] = []
+    const v2SendAddresses: ChainSpecificAddress[] = []
+    const v2RecvAddresses: ChainSpecificAddress[] = []
+
+    for (const network of networks) {
+      try {
+        for (const addresses of Object.values(
+          getOnRampsByDestination(network),
+        )) {
+          for (const address of addresses) {
+            v15SendAddresses.push(
+              ChainSpecificAddress.fromLong(network.chain, address),
+            )
+          }
+        }
+        for (const addr of Object.values(network.inboundLanes)) {
+          v15RecvAddresses.push(
+            ChainSpecificAddress.fromLong(network.chain, addr),
+          )
+        }
+        for (const address of getKnownOnRamps(network)) {
+          const chainAddress = ChainSpecificAddress.fromLong(
+            network.chain,
+            address,
+          )
+          // The event signature identifies the ramp generation. Querying both
+          // signatures over the same address set also supports live migrations.
+          v16SendAddresses.push(chainAddress)
+          v2SendAddresses.push(chainAddress)
+        }
+        if (network.offRamp) {
+          v16RecvAddresses.push(
+            ChainSpecificAddress.fromLong(network.chain, network.offRamp),
+          )
+        }
+        if (network.offRampV2) {
+          v2RecvAddresses.push(
+            ChainSpecificAddress.fromLong(network.chain, network.offRampV2),
+          )
+        }
+      } catch {
+        // Chain not supported by ChainSpecificAddress, skip
+      }
+    }
+
+    return [
+      {
+        type: 'event',
+        signature: ccipSendRequestedLog,
+        includeTxEvents: SOURCE_TOKEN_POOL_EVENTS,
+        addresses: v15SendAddresses,
+      },
+      {
+        type: 'event',
+        signature: executionStateChangedLog,
+        includeTxEvents: DEST_TOKEN_POOL_EVENTS,
+        addresses: v15RecvAddresses,
+      },
+      {
+        type: 'event',
+        signature: ccipMessageSentLog,
+        includeTxEvents: SOURCE_TOKEN_POOL_EVENTS,
+        addresses: v16SendAddresses,
+      },
+      {
+        type: 'event',
+        signature: executionStateChangedV16Log,
+        includeTxEvents: DEST_TOKEN_POOL_EVENTS,
+        addresses: v16RecvAddresses,
+      },
+      {
+        type: 'event',
+        signature: ccipMessageSentV2Log,
+        includeTxEvents: SOURCE_TOKEN_POOL_EVENTS,
+        addresses: v2SendAddresses,
+      },
+      {
+        type: 'event',
+        signature: executionStateChangedV2Log,
+        includeTxEvents: DEST_TOKEN_POOL_EVENTS,
+        addresses: v2RecvAddresses,
+      },
+    ]
+  }
+
+  capture(input: LogToCapture) {
+    const config = this.configs.get(CCIPConfig)
+    if (!config) return
+    const { networks, chainSelectorToName } = config
+
+    const network = networks.find((x) => x.chain === input.chain)
+    if (!network) return
+
+    // --- v1.5 source: CCIPSendRequested from per-lane OnRamp ---
+    const sendRequested = parseCCIPSendRequested(input.log, null)
+    if (sendRequested) {
+      const logAddress = EthereumAddress(input.log.address)
+      const dstChainEntry = Object.entries(
+        getOnRampsByDestination(network),
+      ).find(([_, addresses]) => addresses.includes(logAddress))
+      if (!dstChainEntry) return
+
+      return this.captureSend(input, {
+        messageId: sendRequested.message.messageId,
+        dstChain: dstChainEntry[0],
+        tokenAmounts: sendRequested.message.tokenAmounts,
+        tokenAddressFromEvent: true,
+      })
+    }
+
+    // --- v1.5 destination: ExecutionStateChanged from per-lane OffRamp ---
+    const execChanged = parseExecutionStateChanged(input.log, null)
+    if (execChanged) {
+      const srcChainEntry = Object.entries(network.inboundLanes).find(
+        ([_, address]) => address === EthereumAddress(input.log.address),
+      )
+      if (!srcChainEntry) return
+
+      return this.captureExecution(input, {
+        messageId: execChanged.messageId,
+        state: execChanged.state,
+        srcChain: srcChainEntry[0],
+        boundaryParser: parseExecutionStateChanged,
+      })
+    }
+
+    // --- v1.6 source: CCIPMessageSent from per-chain OnRamp ---
+    const messageSent = parseCCIPMessageSent(input.log, null)
+    if (messageSent) {
+      if (
+        !getKnownOnRamps(network).includes(EthereumAddress(input.log.address))
+      )
+        return
+
+      const selector = messageSent.destChainSelector.toString()
+      const dstChain = chainSelectorToName[selector] ?? `Unknown_${selector}`
+
+      return this.captureSend(input, {
+        messageId: messageSent.message.header.messageId,
+        dstChain,
+        tokenAmounts: messageSent.message.tokenAmounts,
+        // v1.6 tokenAmounts[].sourcePoolAddress is the pool, not the token.
+        // Token address must be resolved from TokenPool events instead.
+        tokenAddressFromEvent: false,
+      })
+    }
+
+    // --- v1.6 destination: ExecutionStateChanged from per-chain OffRamp ---
+    const execChangedV16 = parseExecutionStateChangedV16(input.log, null)
+    if (execChangedV16) {
+      if (
+        !network.offRamp ||
+        EthereumAddress(input.log.address) !== network.offRamp
+      )
+        return
+
+      const srcSelector = execChangedV16.sourceChainSelector.toString()
+      const srcChain =
+        chainSelectorToName[srcSelector] ?? `Unknown_${srcSelector}`
+
+      return this.captureExecution(input, {
+        messageId: execChangedV16.messageId,
+        state: execChangedV16.state,
+        srcChain,
+        boundaryParser: parseExecutionStateChangedV16,
+      })
+    }
+
+    // --- v2.0 source: CCIPMessageSent with packed MessageV1 payload ---
+    const messageSentV2 = parseCCIPMessageSentV2(input.log, null)
+    if (messageSentV2) {
+      if (
+        !getKnownOnRamps(network).includes(EthereumAddress(input.log.address))
+      )
+        return
+
+      const message = decodeCCIPV2Message(messageSentV2.encodedMessage)
+      if (
+        !message ||
+        message.sourceChainSelector.toString() !== network.chainSelector ||
+        message.destChainSelector !== messageSentV2.destChainSelector ||
+        keccak256(messageSentV2.encodedMessage) !== messageSentV2.messageId
+      ) {
+        return []
+      }
+
+      const selector = message.destChainSelector.toString()
+      const dstChain = chainSelectorToName[selector] ?? `Unknown_${selector}`
+      const tokenAmounts = message.tokenTransfer
+        ? [
+            {
+              token: message.tokenTransfer.sourceToken,
+              amount: message.tokenTransfer.amount,
+            },
+          ]
+        : []
+
+      return this.captureSend(input, {
+        messageId: messageSentV2.messageId,
+        dstChain,
+        tokenAmounts,
+        tokenAddressFromEvent: true,
+      })
+    }
+
+    // --- v2.0 destination: ExecutionStateChanged from v2 OffRamp ---
+    const execChangedV2 = parseExecutionStateChangedV2(input.log, null)
+    if (execChangedV2) {
+      if (
+        !network.offRampV2 ||
+        EthereumAddress(input.log.address) !== network.offRampV2
+      )
+        return
+
+      const srcSelector = execChangedV2.sourceChainSelector.toString()
+      const srcChain =
+        chainSelectorToName[srcSelector] ?? `Unknown_${srcSelector}`
+
+      return this.captureExecution(input, {
+        messageId: execChangedV2.messageId,
+        state: execChangedV2.state,
+        srcChain,
+        boundaryParser: parseExecutionStateChangedV2,
+      })
+    }
+  }
+
+  // Shared logic for all CCIP send events. When tokenAddressFromEvent is true
+  // (v1.5 and v2.0), token addresses come from the message. When false (v1.6),
+  // they are resolved from TokenPool events because tokenAmounts[].sourcePoolAddress
+  // is a pool address.
+  private captureSend(
+    input: LogToCapture,
+    opts: {
+      messageId: `0x${string}`
+      dstChain: string
+      tokenAmounts: readonly { token?: string; amount: bigint }[]
+      tokenAddressFromEvent: boolean
+    },
+  ) {
+    const srcTokenInfo = this.collectSourceTokenInfo(input)
+
+    if (opts.tokenAmounts.length === 0) {
+      return [
+        CCIPSendRequested.create(input, {
+          messageId: opts.messageId,
+          $dstChain: opts.dstChain,
+        }),
+      ]
+    }
+
+    return opts.tokenAmounts.map((ta, index) => {
+      // Raw 20-byte address for CCTP comparison (Address32 zero-pads to 32 bytes)
+      const rawTokenAddress = opts.tokenAddressFromEvent
+        ? ta.token
+        : srcTokenInfo[index]?.tokenAddress
+
+      const tokenAddress = rawTokenAddress
+        ? Address32.from(rawTokenAddress)
+        : undefined
+
+      return CCIPSendRequested.create(input, {
+        messageId: opts.messageId,
+        token: tokenAddress,
+        amount: ta.amount,
+        index,
+        $dstChain: opts.dstChain,
+        wasBurned: srcTokenInfo[index]?.wasBurned,
+        isCctpBacked:
+          rawTokenAddress &&
+          this.isCctpBackedToken(input, rawTokenAddress, ta.amount)
+            ? true
+            : undefined,
+      })
+    })
+  }
+
+  // Shared logic for capturing all ExecutionStateChanged versions.
+  // State 2 = SUCCESS. Non-success states return [] to claim the log
+  // (preventing other plugins from matching it) without producing events.
+  private captureExecution(
+    input: LogToCapture,
+    opts: {
+      messageId: `0x${string}`
+      state: number
+      srcChain: string
+      boundaryParser: (log: LogToCapture['log'], address: null) => unknown
+    },
+  ) {
+    if (opts.state !== 2) return []
+
+    const dstTokens = this.collectDestTokenInfo(
+      input,
+      opts.srcChain,
+      opts.boundaryParser,
+    )
+
+    return [
+      ExecutionStateChanged.create(input, {
+        messageId: opts.messageId,
+        state: opts.state,
+        $srcChain: opts.srcChain,
+        dstTokens: dstTokens.length > 0 ? dstTokens : undefined,
+      }),
+    ]
+  }
+
+  // Check if a token transfer was delegated to CCTP (e.g. USDC).
+  // Looks for a DepositForBurn event before the CCIP send event
+  // matching both token address and amount.
+  private isCctpBackedToken(
+    input: LogToCapture,
+    tokenAddress: string,
+    amount: bigint,
+  ): boolean {
+    return (
+      findCctpDepositForBurn(input.txLogs, {
+        tokenAddress,
+        amount,
+        beforeLogIndex: input.log.logIndex ?? 0,
+      }) !== undefined
+    )
+  }
+
+  // Collect source-side token info from TokenPool events before the send event.
+  // Handles both the separate (Locked/Burned) and unified (LockedOrBurned)
+  // formats.
+  // Events appear in the same order as tokenAmounts[] in the message.
+  private collectSourceTokenInfo(input: LogToCapture): CcipSrcToken[] {
+    const result: CcipSrcToken[] = []
+    const logsBeforeSend = input.txLogs.filter(
+      (log) => (log.logIndex ?? 0) < (input.log.logIndex ?? 0),
+    )
+
+    const processedTokens = new Set<string>()
+    const addPrecedingToken = (
+      index: number,
+      amount: bigint,
+      wasBurned: boolean,
+    ) => {
+      const transfer = findPrecedingTransfer(logsBeforeSend, index, amount)
+      if (!transfer) return
+
+      const tokenKey = transfer.tokenAddress.toLowerCase()
+      if (processedTokens.has(tokenKey)) return
+
+      processedTokens.add(tokenKey)
+      result.push({ wasBurned, tokenAddress: transfer.tokenAddress })
+    }
+
+    for (let i = 0; i < logsBeforeSend.length; i++) {
+      const log = logsBeforeSend[i]
+
+      // Locked (lock & mint pattern — wasBurned = false)
+      const locked = parseLockedEvent(log, null)
+      if (locked) {
+        addPrecedingToken(i, locked.amount, false)
+        continue
+      }
+
+      // Non-standard: XERC20LockboxTokenPool deposits native ERC20 into lockbox and burns XERC20.
+      // The user's tokens are locked in the lockbox, so wasBurned = false.
+      const depositedAndBurned = parseDepositedAndBurned(log, null)
+      if (depositedAndBurned) {
+        addPrecedingToken(i, depositedAndBurned.amount, false)
+        continue
+      }
+
+      // Burned (burn & mint pattern — wasBurned = true)
+      const burned = parseBurnedEvent(log, null)
+      if (burned) {
+        addPrecedingToken(i, burned.amount, true)
+        continue
+      }
+
+      // LockedOrBurned (lock vs burn determined from preceding Transfer)
+      const lockedOrBurned = parseLockedOrBurned(log, null)
+      if (lockedOrBurned) {
+        const tokenAddr = lockedOrBurned.token.toLowerCase()
+        if (processedTokens.has(tokenAddr)) continue
+        processedTokens.add(tokenAddr)
+
+        let wasBurned = false
+        const transfer = findPrecedingTransfer(
+          logsBeforeSend,
+          i,
+          lockedOrBurned.amount,
+        )
+        if (transfer) {
+          wasBurned = isBurnAddress(transfer.to)
+        } else {
+          // Fee-on-transfer fallback: match by token address instead of amount
+          const anyTransfer = findPrecedingTransferForToken(
+            logsBeforeSend,
+            i,
+            tokenAddr,
+          )
+          if (anyTransfer) {
+            wasBurned = isBurnAddress(anyTransfer.to)
+          }
+        }
+        result.push({ wasBurned, tokenAddress: lockedOrBurned.token })
+      }
+    }
+
+    return result
+  }
+
+  // Collect destination-side token info from TokenPool events before this
+  // ExecutionStateChanged. In batched deliveries (multiple messages in one tx),
+  // only scans logs between the previous ExecutionStateChanged and this one
+  // to avoid picking up token events from other messages.
+  private collectDestTokenInfo(
+    input: LogToCapture,
+    srcChain: string,
+    boundaryParser: (log: LogToCapture['log'], address: null) => unknown,
+  ): CcipDstToken[] {
+    const result: CcipDstToken[] = []
+    const currentLogIndex = input.log.logIndex ?? 0
+    const cctpNetworks = this.getCctpNetworks()
+
+    // Find the log index of the previous ExecutionStateChanged in this tx
+    const prevBoundaryLogIndex = input.txLogs
+      .filter(
+        (log) =>
+          (log.logIndex ?? 0) < currentLogIndex &&
+          boundaryParser(log, null) !== undefined,
+      )
+      .reduce((max, log) => Math.max(max, log.logIndex ?? 0), -1)
+
+    const logsBetween = input.txLogs.filter(
+      (log) =>
+        (log.logIndex ?? 0) > prevBoundaryLogIndex &&
+        (log.logIndex ?? 0) < currentLogIndex,
+    )
+    const addDstToken = (
+      address: Address32,
+      amount: bigint,
+      wasMinted: boolean,
+    ) => {
+      result.push(
+        this.createDstTokenInfo(
+          input,
+          logsBetween,
+          cctpNetworks,
+          srcChain,
+          address,
+          amount,
+          wasMinted,
+        ),
+      )
+    }
+    const addInferredDstToken = (
+      index: number,
+      amount: bigint,
+      wasMinted: boolean,
+    ) => {
+      const transfer = findPrecedingTransfer(logsBetween, index, amount)
+      if (!transfer) return
+
+      addDstToken(Address32.from(transfer.tokenAddress), amount, wasMinted)
+    }
+
+    for (let i = 0; i < logsBetween.length; i++) {
+      const log = logsBetween[i]
+
+      // ReleasedOrMinted
+      const releasedOrMinted = parseReleasedOrMinted(log, null)
+      if (releasedOrMinted) {
+        let wasMinted = false
+        const transfer = findPrecedingTransfer(
+          logsBetween,
+          i,
+          releasedOrMinted.amount,
+        )
+        if (transfer) {
+          wasMinted = transfer.from === ZERO_ADDRESS
+        }
+        addDstToken(
+          Address32.from(releasedOrMinted.token),
+          releasedOrMinted.amount,
+          wasMinted,
+        )
+        continue
+      }
+
+      // Released (release from pool — wasMinted = false)
+      const released = parseReleased(log, null)
+      if (released) {
+        addInferredDstToken(i, released.amount, false)
+        continue
+      }
+
+      // Minted (mint new tokens — wasMinted = true)
+      const minted = parseMinted(log, null)
+      if (minted) {
+        addInferredDstToken(i, minted.amount, true)
+        continue
+      }
+
+      // Non-standard: XERC20LockboxTokenPool emits MintedAndWithdrawn instead of Minted.
+      // The pool mints XERC20, then burns it via a lockbox to release native ERC20.
+      // The preceding Transfer is the lockbox sending native ERC20 to the receiver.
+      // Marked as wasMinted: false because the receiver gets released (not minted) tokens.
+      const mintedAndWithdrawn = parseMintedAndWithdrawn(log, null)
+      if (mintedAndWithdrawn) {
+        addInferredDstToken(i, mintedAndWithdrawn.amount, false)
+      }
+    }
+
+    return result
+  }
+
+  private createDstTokenInfo(
+    input: LogToCapture,
+    txLogs: LogToCapture['txLogs'],
+    cctpNetworks: CctpNetworks,
+    srcChain: string,
+    address: Address32,
+    amount: bigint,
+    wasMinted: boolean,
+  ): CcipDstToken {
+    return {
+      address,
+      amount,
+      wasMinted,
+      isCctpBacked: this.isCctpReceivedToken(
+        input,
+        txLogs,
+        cctpNetworks,
+        srcChain,
+        address,
+        amount,
+      )
+        ? true
+        : undefined,
+    }
+  }
+
+  private isCctpReceivedToken(
+    input: LogToCapture,
+    txLogs: LogToCapture['txLogs'],
+    cctpNetworks: CctpNetworks,
+    srcChain: string,
+    tokenAddress: Address32,
+    amount: bigint,
+  ): boolean {
+    return (
+      findCctpReceivedTransfer(
+        {
+          chain: input.chain,
+          txLogs,
+        },
+        {
+          ...cctpNetworks,
+          srcChain: this.normalizeInteropChain(srcChain),
+          dstTokenAddress: tokenAddress,
+          dstAmount: amount,
+        },
+      ) !== undefined
+    )
+  }
+
+  private getCctpNetworks(): CctpNetworks {
+    return {
+      v1Networks: this.configs.get(CCTPV1Config) ?? [],
+      v2Networks: this.configs.get(CCTPV2Config) ?? [],
+    }
+  }
+
+  private normalizeOneSidedChain(chain: string): string | undefined {
+    const normalized = this.normalizeInteropChain(chain)
+    return this.oneSidedChains.includes(normalized) ? normalized : undefined
+  }
+
+  private normalizeInteropChain(chain: string): string {
+    return chain.replace(/^Unknown_/, '')
+  }
+
+  matchTypes = [ExecutionStateChanged, CCIPSendRequested]
+
+  match(delivery: InteropEvent, db: InteropEventDb): MatchResult | undefined {
+    if (ExecutionStateChanged.checkType(delivery)) {
+      return this.matchExecution(delivery, db)
+    }
+
+    if (CCIPSendRequested.checkType(delivery)) {
+      return this.matchSend(delivery, db)
+    }
+  }
+
+  private matchExecution(
+    delivery: InteropEvent,
+    db: InteropEventDb,
+  ): MatchResult | undefined {
+    if (!ExecutionStateChanged.checkType(delivery)) return
+
+    const sendRequests = db.findAll(CCIPSendRequested, {
+      messageId: delivery.args.messageId,
+    })
+
+    if (sendRequests.length === 0) {
+      const rawSrcChain = delivery.args.$srcChain
+      const srcChain = rawSrcChain && this.normalizeOneSidedChain(rawSrcChain)
+      if (!srcChain) return
+
+      const result: MatchResult = []
+      const dstTokens = delivery.args.dstTokens ?? []
+      for (const dstToken of dstTokens) {
+        if (dstToken.isCctpBacked) continue
+
+        result.push(
+          Result.Transfer('ccip.Transfer', {
+            srcChain,
+            dstEvent: delivery,
+            dstTokenAddress: dstToken.address,
+            dstAmount: dstToken.amount,
+            dstWasMinted: dstToken.wasMinted,
+            bridgeType: getBestEffortBridgeTypeFromPartialSupplyAction({
+              srcWasBurned: undefined,
+              dstWasMinted: dstToken.wasMinted,
+            }),
+          }),
+        )
+      }
+      return result
+    }
+
+    const result: MatchResult = []
+    const dstTokens = delivery.args.dstTokens ?? []
+
+    for (let i = 0; i < dstTokens.length; i++) {
+      const dstToken = dstTokens[i]
+      const matched = sendRequests.find((req) => req.args.index === i)
+      if (!matched) continue
+      if (matched.args.isCctpBacked || dstToken.isCctpBacked) continue
+      result.push(
+        Result.Transfer('ccip.Transfer', {
+          srcEvent: matched,
+          dstEvent: delivery,
+          srcTokenAddress: matched.args.token,
+          srcAmount: matched.args.amount,
+          srcWasBurned: matched.args.wasBurned,
+          dstTokenAddress: dstToken.address,
+          dstAmount: dstToken.amount,
+          dstWasMinted: dstToken.wasMinted,
+        }),
+      )
+    }
+
+    const hasTokenTransfer = sendRequests.some(
+      (req) => req.args.token !== undefined,
+    )
+    result.push(
+      Result.Message('ccip.Message', {
+        app: hasTokenTransfer ? 'CCIP Token Transfer' : 'unknown',
+        srcEvent: sendRequests[0],
+        dstEvent: delivery,
+      }),
+    )
+    return result
+  }
+
+  private matchSend(
+    delivery: InteropEvent,
+    db: InteropEventDb,
+  ): MatchResult | undefined {
+    if (!CCIPSendRequested.checkType(delivery)) return
+
+    const rawDstChain = delivery.args.$dstChain
+    const dstChain = rawDstChain && this.normalizeOneSidedChain(rawDstChain)
+    if (!dstChain) return
+
+    const hasCounterpart = db.find(ExecutionStateChanged, {
+      messageId: delivery.args.messageId,
+    })
+    if (hasCounterpart) return
+
+    if (delivery.args.token === undefined) return
+    if (delivery.args.isCctpBacked) return
+
+    return [
+      Result.Transfer('ccip.Transfer', {
+        srcEvent: delivery,
+        dstChain,
+        srcTokenAddress: delivery.args.token,
+        srcAmount: delivery.args.amount,
+        srcWasBurned: delivery.args.wasBurned,
+        bridgeType: getBestEffortBridgeTypeFromPartialSupplyAction({
+          srcWasBurned: delivery.args.wasBurned,
+          dstWasMinted: undefined,
+        }),
+      }),
+    ]
+  }
+}

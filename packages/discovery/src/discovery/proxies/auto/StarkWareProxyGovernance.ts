@@ -1,29 +1,28 @@
-import { assert } from '@l2beat/backend-tools'
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { assert, ChainSpecificAddress } from '@l2beat/shared-pure'
 
-import { Semver } from '../../../utils/semver'
+import type { Semver } from '../../../utils/semver'
 import { fetchAccessControl } from '../../handlers/user/AccessControlHandler'
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 
 export async function getProxyGovernance(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 
   proxyVersion: Semver,
-): Promise<EthereumAddress[]> {
+): Promise<ChainSpecificAddress[]> {
   if (proxyVersion.major === 5) {
     return await getProxyGovernanceV5(provider, address)
-  } else if (proxyVersion.major <= 4) {
-    return await getProxyGovernanceV4Down(provider, address)
-  } else {
-    throw new Error('Unsupported proxy version')
   }
+  if (proxyVersion.major <= 4) {
+    return await getProxyGovernanceV4Down(provider, address)
+  }
+  throw new Error('Unsupported proxy version')
 }
 
 async function getProxyGovernanceV5(
   provider: IProvider,
-  address: EthereumAddress,
-): Promise<EthereumAddress[]> {
+  address: ChainSpecificAddress,
+): Promise<ChainSpecificAddress[]> {
   // int.from_bytes(Web3.keccak(text="ROLE_UPGRADE_GOVERNOR"), "big") & MASK_250 .
   const UPGRADE_GOVERNOR_HASH =
     '0x0251e864ca2a080f55bce5da2452e8cfcafdbc951a3e7fff5023d558452ec228'
@@ -31,15 +30,15 @@ async function getProxyGovernanceV5(
 
   return (
     unnamedRoles[UPGRADE_GOVERNOR_HASH]?.members.map((address) =>
-      EthereumAddress(address),
+      ChainSpecificAddress(address),
     ) ?? []
   )
 }
 
 async function getProxyGovernanceV4Down(
   provider: IProvider,
-  address: EthereumAddress,
-): Promise<EthereumAddress[]> {
+  address: ChainSpecificAddress,
+): Promise<ChainSpecificAddress[]> {
   const deployment = await provider.getDeployment(address)
   if (!deployment) {
     throw new Error('Unable to fetch deployer for StarkWare Proxy governance')
@@ -58,33 +57,38 @@ async function getProxyGovernanceV4Down(
       provider.callMethod<boolean>(
         address,
         'function proxyIsGovernor(address testGovernor) view returns (bool)',
-        [governor],
+        [ChainSpecificAddress.address(governor)],
       ),
     ),
   )
   return fullGovernance
     .filter((_, i) => isGovernorAll[i])
-    .map((governor) => EthereumAddress(governor))
+    .map((governor) => ChainSpecificAddress(governor))
 }
 
 async function getFullGovernance(
   provider: IProvider,
-  address: EthereumAddress,
-  deployer: EthereumAddress,
-): Promise<string[]> {
+  address: ChainSpecificAddress,
+  deployer: ChainSpecificAddress,
+): Promise<ChainSpecificAddress[]> {
   const events = await provider.getEvents(
     address,
     'event LogNewGovernorAccepted(address acceptedGovernor)',
     [],
   )
-  const values = new Set<string>()
+  const values = new Set<ChainSpecificAddress>()
   // As of 04.04.2023 deployer is always a governor
   // but sometimes the event is not emitted
   // in the constructor, so we add it manually
-  values.add(deployer.toString())
+  values.add(deployer)
 
   for (const { event } of events) {
-    values.add(getString(event['acceptedGovernor']))
+    values.add(
+      ChainSpecificAddress.fromLong(
+        provider.chain,
+        getString(event['acceptedGovernor']),
+      ),
+    )
   }
   return Array.from(values)
 }

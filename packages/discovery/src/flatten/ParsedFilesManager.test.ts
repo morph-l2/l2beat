@@ -1,6 +1,6 @@
 import { expect } from 'earl'
 
-import { FileContent, ParsedFilesManager } from './ParsedFilesManager'
+import { type FileContent, ParsedFilesManager } from './ParsedFilesManager'
 
 describe(ParsedFilesManager.name, () => {
   const EMPTY_REMAPPINGS: string[] = []
@@ -23,26 +23,26 @@ describe(ParsedFilesManager.name, () => {
       expect(manager.findDeclaration('Library1').declaration).toHaveSubset({
         name: 'Library1',
         type: 'library',
-        dynamicReferences: [],
-        inheritsFrom: [],
+        signatureReferences: [],
+        implementationReferences: [],
       })
       expect(manager.findDeclaration('Interface1').declaration).toHaveSubset({
         name: 'Interface1',
         type: 'interface',
-        dynamicReferences: [],
-        inheritsFrom: [],
+        signatureReferences: [],
+        implementationReferences: [],
       })
       expect(manager.findDeclaration('Abstract1').declaration).toHaveSubset({
         name: 'Abstract1',
         type: 'abstract',
-        dynamicReferences: [],
-        inheritsFrom: [],
+        signatureReferences: [],
+        implementationReferences: [],
       })
       expect(manager.findDeclaration('Contract1').declaration).toHaveSubset({
         name: 'Contract1',
         type: 'contract',
-        dynamicReferences: [],
-        inheritsFrom: [],
+        signatureReferences: [],
+        implementationReferences: [],
       })
     })
 
@@ -76,8 +76,8 @@ describe(ParsedFilesManager.name, () => {
         declaration: expect.subset({
           name: 'Contract1',
           type: 'contract',
-          dynamicReferences: [],
-          inheritsFrom: [],
+          signatureReferences: [],
+          implementationReferences: [],
         }),
         file: expect.subset({
           path: 'path1',
@@ -256,7 +256,7 @@ describe(ParsedFilesManager.name, () => {
       const manager = ParsedFilesManager.parseFiles(files, EMPTY_REMAPPINGS)
       const root = manager.findDeclaration('R1')
 
-      expect(root.declaration.dynamicReferences.sort()).toEqual(
+      expect(root.declaration.signatureReferences.sort()).toEqual(
         ['L1', 'L2'].sort(),
       )
     })
@@ -291,9 +291,171 @@ describe(ParsedFilesManager.name, () => {
       const manager = ParsedFilesManager.parseFiles(files, EMPTY_REMAPPINGS)
       const root = manager.findDeclaration('R1')
 
-      expect(root.declaration.dynamicReferences.sort()).toEqual(
+      expect(root.declaration.signatureReferences.sort()).toEqual(
         ['L1', 'L2', 'S1', 'T1', 'f1'].sort(),
       )
+    })
+
+    it('finds file-level constants, events, and errors', () => {
+      const files = [
+        {
+          path: 'Globals.sol',
+          content: `
+          uint256 constant GLOBAL_VALUE = 42;
+          event EventHappened(uint256 value, address account);
+          error CustomError(address account);
+          `,
+        },
+        {
+          path: 'Usage.sol',
+          content: `
+          import "./Globals.sol";
+          contract User {
+            function doSomething() public {
+              emit EventHappened(GLOBAL_VALUE, msg.sender);
+              revert CustomError(msg.sender);
+            }
+          }
+          `,
+        },
+      ]
+
+      const manager = ParsedFilesManager.parseFiles(files, EMPTY_REMAPPINGS, {
+        includeAll: true,
+      })
+      const root = manager.findDeclaration('User')
+
+      expect(root.declaration.signatureReferences.sort()).toEqual(
+        ['CustomError', 'EventHappened', 'GLOBAL_VALUE'].sort(),
+      )
+      expect(manager.findDeclaration('GLOBAL_VALUE').declaration).toHaveSubset({
+        name: 'GLOBAL_VALUE',
+        type: 'constant',
+      })
+      expect(manager.findDeclaration('EventHappened').declaration).toHaveSubset(
+        {
+          name: 'EventHappened',
+          type: 'event',
+        },
+      )
+      expect(manager.findDeclaration('CustomError').declaration).toHaveSubset({
+        name: 'CustomError',
+        type: 'error',
+      })
+    })
+  })
+
+  describe('leading comments', () => {
+    it('does NOT include leading comments when includeAll is false (default)', () => {
+      const files: FileContent[] = [
+        {
+          path: 'Test.sol',
+          content: `// SPDX-License-Identifier: MIT
+/// @title MyContract
+/// @notice This is a NatSpec comment
+contract MyContract { function f() public {} }`,
+        },
+      ]
+
+      const manager = ParsedFilesManager.parseFiles(files, EMPTY_REMAPPINGS)
+      const result = manager.findDeclaration('MyContract')
+
+      // Content should start with 'contract', not comments
+      expect(result.declaration.content.startsWith('contract')).toEqual(true)
+      expect(result.declaration.content).not.toInclude('/// @title')
+    })
+
+    it('includes leading single-line comments when includeAll is true', () => {
+      const files: FileContent[] = [
+        {
+          path: 'Test.sol',
+          content: `// SPDX-License-Identifier: MIT
+/// @title MyContract
+/// @notice This is a NatSpec comment
+contract MyContract { function f() public {} }`,
+        },
+      ]
+
+      const manager = ParsedFilesManager.parseFiles(files, EMPTY_REMAPPINGS, {
+        includeAll: true,
+      })
+      const result = manager.findDeclaration('MyContract')
+
+      // Content should include the NatSpec comments
+      expect(result.declaration.content).toInclude('/// @title MyContract')
+      expect(result.declaration.content).toInclude('/// @notice')
+      expect(result.declaration.content).toInclude('contract MyContract')
+    })
+
+    it('includes leading block comments when includeAll is true', () => {
+      const files: FileContent[] = [
+        {
+          path: 'Test.sol',
+          content: `/**
+ * @title MyContract
+ * @notice Block comment style
+ */
+contract MyContract { function f() public {} }`,
+        },
+      ]
+
+      const manager = ParsedFilesManager.parseFiles(files, EMPTY_REMAPPINGS, {
+        includeAll: true,
+      })
+      const result = manager.findDeclaration('MyContract')
+
+      // Content should include the block comment
+      expect(result.declaration.content).toInclude('/**')
+      expect(result.declaration.content).toInclude('@title MyContract')
+      expect(result.declaration.content).toInclude('*/')
+      expect(result.declaration.content).toInclude('contract MyContract')
+    })
+
+    it('does NOT attach same-line trailing comments from previous declaration', () => {
+      const files: FileContent[] = [
+        {
+          path: 'Test.sol',
+          content: `contract First { } // trailing comment
+contract Second { function f() public {} }`,
+        },
+      ]
+
+      const manager = ParsedFilesManager.parseFiles(files, EMPTY_REMAPPINGS, {
+        includeAll: true,
+      })
+      const result = manager.findDeclaration('Second')
+
+      // Second contract should NOT include the trailing comment from First
+      expect(result.declaration.content.startsWith('contract Second')).toEqual(
+        true,
+      )
+      expect(result.declaration.content).not.toInclude('trailing comment')
+    })
+
+    it('preserves comments for multiple declarations in same file', () => {
+      const files: FileContent[] = [
+        {
+          path: 'Test.sol',
+          content: `/// @title First contract
+contract First { }
+
+/// @title Second contract
+contract Second { function f() public {} }`,
+        },
+      ]
+
+      const manager = ParsedFilesManager.parseFiles(files, EMPTY_REMAPPINGS, {
+        includeAll: true,
+      })
+
+      const first = manager.findDeclaration('First')
+      const second = manager.findDeclaration('Second')
+
+      expect(first.declaration.content).toInclude('/// @title First contract')
+      expect(first.declaration.content).not.toInclude('Second contract')
+
+      expect(second.declaration.content).toInclude('/// @title Second contract')
+      expect(second.declaration.content).not.toInclude('First contract')
     })
   })
 })

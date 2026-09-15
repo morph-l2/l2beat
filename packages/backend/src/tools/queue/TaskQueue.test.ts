@@ -1,7 +1,7 @@
 import { Logger } from '@l2beat/backend-tools'
-import { EventTracker } from '@l2beat/shared'
+import type { EventTracker } from '@l2beat/shared'
 import { Retries } from '@l2beat/shared-pure'
-import { InstalledClock, install } from '@sinonjs/fake-timers'
+import { type InstalledClock, install } from '@sinonjs/fake-timers'
 import { expect, mockFn, mockObject } from 'earl'
 
 import { TaskQueue } from './TaskQueue'
@@ -117,7 +117,7 @@ describe(TaskQueue.name, () => {
     const queue = new TaskQueue(execute, logger, {
       shouldRetry: Retries.exponentialBackOff({
         stepMs: 1,
-        maxDistanceMs: Infinity,
+        maxDistanceMs: Number.POSITIVE_INFINITY,
         maxAttempts: 5,
         notifyAfterAttempts: 2,
       }),

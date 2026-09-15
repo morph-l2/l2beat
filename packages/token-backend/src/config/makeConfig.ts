@@ -1,0 +1,131 @@
+import type { Env } from '@l2beat/backend-tools'
+import { createRemoteJWKSet } from 'jose'
+import type { AuthConfig, Config, DatabaseConfig } from './Config'
+
+interface MakeConfigOptions {
+  name: string
+  isLocal?: boolean
+}
+
+export function makeConfig(env: Env, options: MakeConfigOptions): Config {
+  const coingeckoApiKey = env.optionalString('COINGECKO_API_KEY')
+
+  return {
+    tokenDatabase: getTokenDatabaseConfig(env, options),
+    database: getDatabaseConfig(env, options),
+    auth: options.isLocal ? false : getAuthConfig(env),
+    coingeckoApiKey,
+    coingeckoCallsPerMinute: positiveInteger(
+      env,
+      'COINGECKO_CALLS_PER_MINUTE',
+      coingeckoApiKey ? 400 : 10,
+    ),
+    etherscanApiKey: env.optionalString('ETHERSCAN_API_KEY'),
+    readOnlyAuthToken: env.optionalString('TOKEN_BACKEND_READONLY_AUTH_TOKEN'),
+    jsonBodyLimitMb: env.integer('TOKEN_BACKEND_JSON_BODY_LIMIT_MB', 20),
+    tokenIngestion: {
+      enabled: env.boolean('TOKEN_INGESTION_ENABLED', false),
+      intervalMs: env.integer('TOKEN_INGESTION_INTERVAL_MS', 60_000),
+      autoApprove: env.boolean('TOKEN_INGESTION_AUTOAPPROVE', false),
+      maxProcessedPerRun: env.integer(
+        'TOKEN_INGESTION_MAX_PROCESSED_PER_RUN',
+        1_000,
+      ),
+    },
+  }
+}
+
+function positiveInteger(env: Env, key: string, fallback: number): number {
+  const value = env.integer(key, fallback)
+  if (value < 1) {
+    throw new Error(`Environment variable ${key} must be a positive integer!`)
+  }
+  return value
+}
+
+function getDatabaseConfig(
+  env: Env,
+  options: MakeConfigOptions,
+): DatabaseConfig {
+  const localDbUrl = env.string(
+    'LOCAL_DB_URL',
+    'postgresql://postgres:password@localhost:5432/l2beat_local',
+  )
+
+  const logsEnabled = env.boolean('DATABASE_LOGS_ENABLED', false)
+
+  if (options.isLocal) {
+    return {
+      pool: {
+        connectionString: localDbUrl,
+        application_name: options.name,
+        ssl: !localDbUrl.includes('localhost')
+          ? { rejectUnauthorized: false }
+          : undefined,
+
+        min: 2,
+        max: 10,
+      },
+      logsEnabled,
+    }
+  }
+
+  return {
+    pool: {
+      connectionString: env.string('DATABASE_URL'),
+      application_name: env.string('DATABASE_APP_NAME', options.name),
+      ssl: { rejectUnauthorized: false },
+
+      min: 20,
+      max: env.integer('DATABASE_MAX_POOL_SIZE', 20),
+    },
+    logsEnabled,
+  }
+}
+
+function getTokenDatabaseConfig(
+  env: Env,
+  options: MakeConfigOptions,
+): DatabaseConfig {
+  const localDbUrl = env.string(
+    'LOCAL_TOKEN_DB_URL',
+    'postgresql://postgres:password@localhost:5432/l2beat_local',
+  )
+  const logsEnabled = env.boolean('DATABASE_LOGS_ENABLED', false)
+
+  if (options.isLocal) {
+    return {
+      pool: {
+        connectionString: localDbUrl,
+        application_name: options.name,
+        ssl: !localDbUrl.includes('localhost')
+          ? { rejectUnauthorized: false }
+          : undefined,
+        min: 2,
+        max: 10,
+      },
+      logsEnabled,
+    }
+  }
+
+  return {
+    pool: {
+      connectionString: env.string('DATABASE_URL'),
+      application_name: env.string('DATABASE_APP_NAME', options.name),
+      ssl: { rejectUnauthorized: false },
+      min: 20,
+      max: env.integer('DATABASE_MAX_POOL_SIZE', 20),
+    },
+    logsEnabled,
+  }
+}
+
+function getAuthConfig(env: Env): AuthConfig {
+  const TEAM_DOMAIN = env.string('CF_TEAM_DOMAIN') // e.g. https://myteam.cloudflareaccess.com
+  const AUD = env.string('CF_ACCESS_AUD') // your Access app's AUD
+  return {
+    JWKS: createRemoteJWKSet(new URL(`${TEAM_DOMAIN}/cdn-cgi/access/certs`)),
+    aud: AUD,
+    teamDomain: TEAM_DOMAIN,
+  }
+}

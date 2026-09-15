@@ -1,16 +1,15 @@
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
+import type { Bytes, ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
 import { utils } from 'ethers'
-import * as z from 'zod'
 
 import { getErrorMessage } from '../../../utils/getErrorMessage'
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
 import {
-  Reference,
-  ScopeVariables,
-  generateScopeVariables,
+  generateReferenceInput,
   getReferencedName,
+  Reference,
+  type ReferenceInput,
   resolveReference,
 } from '../reference'
 import { SingleSlot } from '../storageCommon'
@@ -18,15 +17,19 @@ import { NumberFromString } from '../types'
 import { bytes32ToContractValue } from '../utils/bytes32ToContractValue'
 import { valueToBigInt } from '../utils/valueToBigInt'
 
-export type StorageHandlerDefinition = z.infer<typeof StorageHandlerDefinition>
-export const StorageHandlerDefinition = z.strictObject({
-  type: z.literal('storage'),
-  slot: z.union([SingleSlot, z.array(SingleSlot).min(1)]),
-  offset: z.optional(
-    z.union([z.number().int().nonnegative(), NumberFromString, Reference]),
-  ),
-  returnType: z.optional(z.enum(['address', 'bytes', 'number'])),
-  ignoreRelative: z.optional(z.boolean()),
+export type StorageHandlerDefinition = v.infer<typeof StorageHandlerDefinition>
+export const StorageHandlerDefinition = v.strictObject({
+  type: v.literal('storage'),
+  slot: v.union([SingleSlot, v.array(SingleSlot).check((v) => v.length >= 1)]),
+  offset: v
+    .union([
+      v.number().check((v) => Number.isInteger(v) && v >= 0),
+      NumberFromString,
+      Reference,
+    ])
+    .optional(),
+  returnType: v.enum(['address', 'bytes', 'number', 'uint8']).optional(),
+  ignoreRelative: v.boolean().optional(),
 })
 
 export class StorageHandler implements Handler {
@@ -35,23 +38,21 @@ export class StorageHandler implements Handler {
   constructor(
     readonly field: string,
     private readonly definition: StorageHandlerDefinition,
-    readonly logger: DiscoveryLogger,
   ) {
     this.dependencies = getDependencies(definition)
   }
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
     previousResults: Record<string, HandlerResult | undefined>,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, ['Reading storage'])
-    const scopeVariables = generateScopeVariables(provider, address)
-    const resolved = resolveDependencies(
-      this.definition,
+    const referenceInput = generateReferenceInput(
       previousResults,
-      scopeVariables,
+      provider,
+      address,
     )
+    const resolved = resolveDependencies(this.definition, referenceInput)
 
     let storage: Bytes
     try {
@@ -85,39 +86,30 @@ function getDependencies(definition: StorageHandlerDefinition): string[] {
 type ResolvedDefinition = ReturnType<typeof resolveDependencies>
 function resolveDependencies(
   definition: StorageHandlerDefinition,
-  previousResults: Record<string, HandlerResult | undefined>,
-  scopeVariables: ScopeVariables,
+  referenceInput: ReferenceInput,
 ): {
   slot: bigint | bigint[]
   offset: bigint
-  returnType: 'number' | 'address' | 'bytes'
+  returnType: 'number' | 'address' | 'bytes' | 'uint8'
 } {
   let offset = 0n
   if (definition.offset) {
-    const resolved = resolveReference(
-      definition.offset,
-      previousResults,
-      scopeVariables,
-    )
+    const resolved = resolveReference(definition.offset, referenceInput)
     offset = valueToBigInt(resolved)
   }
 
   let slot: bigint | bigint[]
   if (Array.isArray(definition.slot)) {
     slot = definition.slot.map((x) => {
-      const resolved = resolveReference(x, previousResults, scopeVariables)
+      const resolved = resolveReference(x, referenceInput)
       return valueToBigInt(resolved)
     })
   } else {
-    const resolved = resolveReference(
-      definition.slot,
-      previousResults,
-      scopeVariables,
-    )
+    const resolved = resolveReference(definition.slot, referenceInput)
     slot = valueToBigInt(resolved)
   }
 
-  const returnType: 'number' | 'address' | 'bytes' =
+  const returnType: 'number' | 'address' | 'bytes' | 'uint8' =
     definition.returnType ?? 'bytes'
 
   return {

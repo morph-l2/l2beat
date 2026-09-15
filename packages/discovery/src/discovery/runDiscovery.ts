@@ -1,116 +1,190 @@
-import { DiscoveryOutput } from '@l2beat/discovery-types'
-import { providers } from 'ethers'
-
-import { Hash256 } from '@l2beat/shared-pure'
-import { DiscoveryChainConfig, DiscoveryModuleConfig } from '../config/types'
-import { HttpClient } from '../utils/HttpClient'
-import { printSharedModuleInfo } from '../utils/printSharedModuleInfo'
-import { DiscoveryLogger } from './DiscoveryLogger'
-import { Analysis } from './analysis/AddressAnalyzer'
+import type { Logger } from '@l2beat/backend-tools'
+import type { HttpClient } from '@l2beat/shared'
+import { ChainSpecificAddress, UnixTime, unique } from '@l2beat/shared-pure'
+import chalk from 'chalk'
+import path from 'path'
+import type {
+  DiscoveryChainConfig,
+  DiscoveryModuleConfig,
+} from '../config/types'
 import {
-  ExecutedMatches,
-  printExecutedMatches,
-} from './analysis/TemplateService'
-import { ConfigReader } from './config/ConfigReader'
-import { DiscoveryConfig } from './config/DiscoveryConfig'
+  findEntrypointConsumers,
+  ownsEntrypoints,
+  printEntrypointConsumers,
+} from '../utils/printEntrypointConsumers'
+import type { Analysis } from './analysis/AddressAnalyzer'
+import { TEMPLATES_PATH, TemplateService } from './analysis/TemplateService'
+import type { ConfigReader } from './config/ConfigReader'
+import type { ConfigRegistry } from './config/ConfigRegistry'
+import type { DiscoveryPaths } from './config/getDiscoveryPaths'
+import type { AddressStats } from './engine/DiscoveryEngine'
 import { getDiscoveryEngine } from './getDiscoveryEngine'
+import { OverwriteCacheWrapper } from './OverwriteCacheWrapper'
 import { diffDiscovery } from './output/diffDiscovery'
+import { printTemplatization } from './output/printTemplatization'
 import { saveDiscoveryResult } from './output/saveDiscoveryResult'
 import { toDiscoveryOutput } from './output/toDiscoveryOutput'
+import type { DiscoveryOutput } from './output/types'
 import { SQLiteCache } from './provider/SQLiteCache'
-import { AllProviderStats, printProviderStats } from './provider/Stats'
+import { type AllProviderStats, printProviderStats } from './provider/Stats'
+
+function getTimestamp(
+  configReader: ConfigReader,
+  config: DiscoveryModuleConfig,
+): Date {
+  // TODO(radomski): I don't know how to handle discovery on a block with different chains
+  if (config.blockNumber !== undefined) {
+    throw new Error('Discovery on a block is not supported yet')
+    // const provider = new providers.StaticJsonRpcProvider(config.chain.rpcUrl)
+    // return UnixTime.toDate(
+    //   (await provider.getBlock(config.blockNumber)).timestamp,
+    // )
+  }
+
+  const configuredTimestamp =
+    config.timestamp ??
+    (config.dev
+      ? configReader.readDiscovery(config.project).timestamp
+      : undefined) ??
+    UnixTime.now() - UnixTime.MINUTE
+
+  return UnixTime.toDate(configuredTimestamp)
+}
 
 export async function runDiscovery(
+  paths: DiscoveryPaths,
   http: HttpClient,
   configReader: ConfigReader,
   config: DiscoveryModuleConfig,
   chainConfigs: DiscoveryChainConfig[],
+  logger: Logger,
 ): Promise<void> {
-  const projectConfig = configReader.readConfig(
-    config.project,
-    config.chain.name,
-  )
+  const projectConfig = configReader.readConfig(config.project)
 
-  const configuredBlockNumber =
-    config.blockNumber ??
-    (config.dev
-      ? configReader.readDiscovery(config.project, config.chain.name)
-          .blockNumber
-      : undefined)
+  const timestampDate = getTimestamp(configReader, config)
 
-  const logger = DiscoveryLogger.CLI
-  const {
-    result,
-    blockNumber,
-    providerStats,
-    shapeFilesHash,
-    executedMatches,
-  } = await discover(
-    chainConfigs,
-    projectConfig,
-    logger,
-    configuredBlockNumber,
-    http,
-  )
+  const { result, timestamp, usedBlockNumbers, providerStats, addressStats } =
+    await discover(
+      paths,
+      chainConfigs,
+      projectConfig,
+      logger,
+      timestampDate,
+      http,
+      config.overwriteCache,
+    )
+
+  const templatesFolder = path.join(paths.discovery, TEMPLATES_PATH)
 
   await saveDiscoveryResult(
     result,
     projectConfig,
-    blockNumber,
+    timestamp,
+    usedBlockNumbers,
     logger,
-    shapeFilesHash,
     {
+      paths,
       sourcesFolder: config.sourcesFolder,
       flatSourcesFolder: config.flatSourcesFolder,
       discoveryFilename: config.discoveryFilename,
       saveSources: config.saveSources,
+      templatesFolder,
+      projectDiscoveryFolder: configReader.getProjectPath(
+        projectConfig.structure.name,
+      ),
     },
   )
 
-  if (config.project.startsWith('shared-')) {
-    const allConfigs = configReader.readAllConfigsForChain(config.chain.name)
-    const backrefConfigs = allConfigs.filter((c) =>
-      c.sharedModules.includes(config.project),
+  if (ownsEntrypoints(projectConfig.structure)) {
+    printEntrypointConsumers(
+      logger,
+      findEntrypointConsumers(configReader, config.project),
     )
-    printSharedModuleInfo(backrefConfigs)
   }
 
   if (config.printStats) {
-    printProviderStats(providerStats)
+    printProviderStats(logger, providerStats)
   }
-  if (config.printTemplateSimilarity) {
-    printExecutedMatches(
-      executedMatches,
-      config.templateSimilarityCutoff ?? 0.5,
+
+  const templateService = new TemplateService(paths.discovery)
+
+  printTemplatization(
+    logger,
+    result,
+    !!config.verboseTemplatization,
+    projectConfig.color,
+    templateService,
+  )
+
+  if (addressStats.skipped > 0) {
+    printMaxAddressesWarning(
+      logger,
+      addressStats.skipped,
+      projectConfig.structure.maxAddresses,
     )
   }
 }
 
+function printMaxAddressesWarning(
+  logger: Logger,
+  skipped: number,
+  maxAddresses: number,
+) {
+  const lines = [
+    '  ⚠  WARNING — DISCOVERY IS INCOMPLETE  ⚠  ',
+    '',
+    `  maxAddresses limit reached: ${skipped} address${skipped === 1 ? '' : 'es'} were SKIPPED.`,
+    '  These addresses were NOT analyzed and are MISSING from discovered.json.',
+    '',
+    `  FIX: raise "maxAddresses" (currently ${maxAddresses}) in the project config,`,
+    '       then re-run discovery.',
+  ]
+  const width = lines.reduce((max, l) => Math.max(max, l.length), 0)
+  const padded = lines.map((l) => ' ' + l.padEnd(width) + ' ')
+  const blank = ' '.repeat(width + 2)
+  const banner = [blank, ...padded, blank].map((l) => chalk.bgRed.white.bold(l))
+  logger.info('')
+  for (const line of banner) {
+    logger.info(line)
+  }
+  logger.info('')
+}
+
 export async function dryRunDiscovery(
+  paths: DiscoveryPaths,
   http: HttpClient,
   configReader: ConfigReader,
   config: DiscoveryModuleConfig,
   chainConfigs: DiscoveryChainConfig[],
+  logger: Logger,
 ): Promise<void> {
-  const provider = new providers.StaticJsonRpcProvider(config.chain.rpcUrl)
-  const blockNumber = await provider.getBlockNumber()
-  const BLOCKS_PER_DAY = 86400 / 12
-  const blockNumberYesterday = blockNumber - BLOCKS_PER_DAY
+  const now = UnixTime.now() - UnixTime.MINUTE
+  const yesterday = now - UnixTime.DAY
 
-  const projectConfig = configReader.readConfig(
-    config.project,
-    config.chain.name,
-  )
+  const projectConfig = configReader.readConfig(config.project)
 
   const [discovered, discoveredYesterday] = await Promise.all([
-    justDiscover(chainConfigs, projectConfig, blockNumber, http),
-    justDiscover(chainConfigs, projectConfig, blockNumberYesterday, http),
+    justDiscover(
+      paths,
+      chainConfigs,
+      projectConfig,
+      UnixTime.toDate(now),
+      http,
+      config.overwriteCache,
+      logger,
+    ),
+    justDiscover(
+      paths,
+      chainConfigs,
+      projectConfig,
+      UnixTime.toDate(yesterday),
+      http,
+      config.overwriteCache,
+      logger,
+    ),
   ])
 
-  const diff = diffDiscovery(
-    discoveredYesterday.contracts,
-    discovered.contracts,
-  )
+  const diff = diffDiscovery(discoveredYesterday.entries, discovered.entries)
 
   if (diff.length > 0) {
     console.log(JSON.stringify(diff, null, 2))
@@ -120,58 +194,81 @@ export async function dryRunDiscovery(
 }
 
 async function justDiscover(
+  paths: DiscoveryPaths,
   chainConfigs: DiscoveryChainConfig[],
-  config: DiscoveryConfig,
-  blockNumber: number,
+  config: ConfigRegistry,
+  timestampDate: Date,
   http: HttpClient,
+  overwriteCache: boolean,
+  logger: Logger,
 ): Promise<DiscoveryOutput> {
-  const { result, shapeFilesHash } = await discover(
+  const { result, timestamp, usedBlockNumbers } = await discover(
+    paths,
     chainConfigs,
     config,
-    DiscoveryLogger.CLI,
-    blockNumber,
+    logger,
+    timestampDate,
     http,
+    overwriteCache,
   )
+
+  const templateService = new TemplateService(paths.discovery)
+
   return toDiscoveryOutput(
-    config.name,
-    config.chain,
-    config.hash,
-    blockNumber,
+    templateService,
+    config,
+    timestamp,
+    usedBlockNumbers,
     result,
-    shapeFilesHash,
   )
 }
 
 export async function discover(
+  paths: DiscoveryPaths,
   chainConfigs: DiscoveryChainConfig[],
-  config: DiscoveryConfig,
-  logger: DiscoveryLogger,
-  blockNumber: number | undefined,
+  config: ConfigRegistry,
+  logger: Logger,
+  timestampDate: Date | undefined,
   http: HttpClient,
+  overwriteCache: boolean,
 ): Promise<{
   result: Analysis[]
-  blockNumber: number
-  providerStats: AllProviderStats
-  shapeFilesHash: Hash256
-  executedMatches: ExecutedMatches
+  timestamp: UnixTime
+  usedBlockNumbers: Record<string, number>
+  providerStats: Record<string, AllProviderStats>
+  addressStats: AddressStats
 }> {
-  const sqliteCache = new SQLiteCache()
-  await sqliteCache.init()
+  const sqliteCache = new SQLiteCache(paths.cache)
 
-  const { allProviders, discoveryEngine, templateService } = getDiscoveryEngine(
+  const cache = overwriteCache
+    ? new OverwriteCacheWrapper(sqliteCache)
+    : sqliteCache
+
+  const { allProviders, discoveryEngine } = getDiscoveryEngine(
+    paths,
     chainConfigs,
-    sqliteCache,
+    cache,
     http,
     logger,
-    config.chain,
   )
-  blockNumber ??= await allProviders.getLatestBlockNumber(config.chain)
-  const provider = allProviders.get(config.chain, blockNumber)
+  const timestamp = UnixTime.fromDate(timestampDate ?? new Date())
+  const { analyses: result, stats: addressStats } =
+    await discoveryEngine.discover(allProviders, config.structure, timestamp)
+  const chains = unique(
+    result.map((c) => ChainSpecificAddress.longChain(c.address)),
+  )
+
+  const usedBlockNumbers: Record<string, number> = {}
+  for (const chain of chains) {
+    const provider = await allProviders.get(chain, timestamp)
+    usedBlockNumbers[chain] = provider.blockNumber
+  }
+
   return {
-    result: await discoveryEngine.discover(provider, config),
-    blockNumber,
-    providerStats: allProviders.getStats(config.chain),
-    shapeFilesHash: templateService.getShapeFilesHash(),
-    executedMatches: templateService.executedMatches,
+    result,
+    timestamp,
+    usedBlockNumbers,
+    providerStats: allProviders.getStats(),
+    addressStats,
   }
 }

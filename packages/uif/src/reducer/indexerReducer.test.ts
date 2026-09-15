@@ -2,9 +2,9 @@ import { expect } from 'earl'
 
 import { getInitialState } from './getInitialState'
 import { indexerReducer } from './indexerReducer'
-import { IndexerAction } from './types/IndexerAction'
-import { IndexerReducerResult } from './types/IndexerReducerResult'
-import { IndexerState } from './types/IndexerState'
+import type { IndexerAction } from './types/IndexerAction'
+import type { IndexerReducerResult } from './types/IndexerReducerResult'
+import type { IndexerState } from './types/IndexerState'
 
 describe(indexerReducer.name, () => {
   describe('Initialization', () => {
@@ -452,7 +452,7 @@ describe(indexerReducer.name, () => {
 
     describe('complex scenarios', () => {
       it('if parent is waiting, it keeps waiting until notifyReady', () => {
-        //1. grandparent ticks lower (to: x1) && parent updating (to: x2)-> parent sets (safeHeight: x1), but still updating (to:x2), child sets (safeHeight: x1) -> parennt finishes update (to: x2, waiting: true), child notifies ready
+        //1. grandparent ticks lower (to: x1) && parent updating (to: x2)-> parent sets (safeHeight: x1), but still updating (to:x2), child sets (safeHeight: x1) -> parent finishes update (to: x2, waiting: true), child notifies ready
         const initState = getAfterInit({
           safeHeight: 100,
           childCount: 1,

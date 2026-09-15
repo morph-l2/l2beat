@@ -1,11 +1,10 @@
 import { Logger } from '@l2beat/backend-tools'
+import type { Database, LivenessRecord } from '@l2beat/database'
+import { createTrackedTxId, type TrackedTxConfigEntry } from '@l2beat/shared'
 import { EthereumAddress, ProjectId, UnixTime } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
-
-import { Database, LivenessRecord } from '@l2beat/database'
-import { TrackedTxConfigEntry, createTrackedTxId } from '@l2beat/shared'
 import { mockDatabase } from '../../../../test/database'
-import { TrackedTxResult } from '../../types/model'
+import type { TrackedTxResult } from '../../types/model'
 import { LivenessUpdater } from './LivenessUpdater'
 
 const MIN_TIMESTAMP = UnixTime.fromDate(new Date('2023-05-01T00:00:00Z'))
@@ -42,6 +41,7 @@ describe(LivenessUpdater.name, () => {
           blockNumber: transactions[0].blockNumber,
           timestamp: transactions[0].blockTimestamp,
           configurationId: transactions[0].id,
+          groupingKey: 'epoch-1',
         },
         {
           txHash: transactions[1].hash,
@@ -87,6 +87,7 @@ describe(LivenessUpdater.name, () => {
           blockNumber: transactions[0].blockNumber,
           timestamp: transactions[0].blockTimestamp,
           configurationId: transactions[0].id,
+          groupingKey: 'epoch-1',
         },
         {
           txHash: transactions[1].hash,
@@ -121,12 +122,12 @@ function getMockTrackedTxResults(): TrackedTxResult[] {
       type: 'liveness',
       subtype: 'batchSubmissions',
       id: getMockRuntimeConfigurations()[0].id,
-      receiptGasUsed: 100,
+      groupingKey: 'epoch-1',
+      gasUsed: 100,
       gasPrice: 10n,
       dataLength: 5,
       calldataGasUsed: 10,
-      receiptBlobGasPrice: null,
-      receiptBlobGasUsed: null,
+      blobVersionedHashes: null,
     },
     {
       formula: 'transfer',
@@ -139,12 +140,11 @@ function getMockTrackedTxResults(): TrackedTxResult[] {
       fromAddress: EthereumAddress.random(),
       toAddress: EthereumAddress.random(),
       projectId: ProjectId('test2'),
-      receiptGasUsed: 200,
+      gasUsed: 200,
       gasPrice: 20n,
       dataLength: 0,
       calldataGasUsed: 0,
-      receiptBlobGasPrice: null,
-      receiptBlobGasUsed: null,
+      blobVersionedHashes: null,
     },
   ]
 }
@@ -154,9 +154,9 @@ function getMockRuntimeConfigurations(): TrackedTxConfigEntry[] {
     {
       params: {
         formula: 'functionCall',
-
         address: EthereumAddress.random(),
         selector: '0x',
+        signature: 'function foo()',
       },
       projectId: ProjectId('test'),
       sinceTimestamp: MIN_TIMESTAMP,
@@ -169,6 +169,7 @@ function getMockRuntimeConfigurations(): TrackedTxConfigEntry[] {
         formula: 'functionCall',
         address: EthereumAddress.random(),
         selector: '0x',
+        signature: 'function foo()',
       },
       projectId: ProjectId('test2'),
       sinceTimestamp: MIN_TIMESTAMP,

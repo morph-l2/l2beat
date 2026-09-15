@@ -1,0 +1,12 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "dbk",
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": ["eth:0x28f1b9F457CB51E0af56dff1d11CD6CEdFfD1977"],
+  "names": { "eth:0xcCcc98e93CeE060a03604D3916EE527a57078c8b": "SystemConfig" },
+  "overrides": {
+    "eth:0xcCcc98e93CeE060a03604D3916EE527a57078c8b": {
+      "ignoreRelatives": ["disputeGameFactory", "gasPayingToken"]
+    }
+  }
+}

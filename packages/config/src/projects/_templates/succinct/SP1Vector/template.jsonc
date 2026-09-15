@@ -1,0 +1,51 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "ignoreMethods": ["state_dataCommitments", "proxiableUUID"],
+  "ignoreInWatchMode": ["latestBlock", "latestAuthoritySetId"],
+  "description": "The Vector bridge contract that accepts and stores Avail data availability commitments on Ethereum.",
+  "fields": {
+    "accessControl": {
+      "handler": {
+        "type": "accessControl"
+      }
+    },
+    "isRelayerApproved": {
+      "handler": {
+        "type": "call",
+        "method": "function approvedRelayers(address) view returns (bool)",
+        "args": ["0x27BF7DE579c5779DbFbB8e9d69999E4D1370787D"]
+      }
+    },
+    "relayers": {
+      "handler": {
+        "type": "hardcoded",
+        "value": ["0x27BF7DE579c5779DbFbB8e9d69999E4D1370787D"]
+      },
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "it is a ‘Relayer’ and can call commitHeaderRange() to commit block ranges to the Vector contract. Since adding and removing Relayers emits no events, there can be more relayers than are presented here."
+        }
+      ]
+    },
+    "guardians": {
+      "handler": {
+        "type": "accessControl",
+        "pickRoleMembers": "GUARDIAN_ROLE"
+      },
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "can freeze the Vector contract and update the list of authorized relayers."
+        }
+      ]
+    },
+    "timelocks": {
+      "handler": {
+        "type": "accessControl",
+        "pickRoleMembers": "TIMELOCK_ROLE"
+      },
+      "permissions": [{ "type": "upgrade" }]
+    }
+  }
+}

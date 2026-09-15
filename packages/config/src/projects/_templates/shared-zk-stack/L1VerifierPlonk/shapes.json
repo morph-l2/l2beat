@@ -1,0 +1,60 @@
+{
+  "L1VerifierPlonk": {
+    "hash": "0xba563b3e93c053e22e0d26b866f611ea2fcbd2c57551aac025e12cf6a59e0366",
+    "address": "eth:0xAd36FFc4066855aeF3Bdf6BF03cA427bb084636e",
+    "blockNumber": 22423941
+  },
+  "L1VerifierPlonk_v28": {
+    "hash": "0x4307e17da28c7b2fe29ba4658f25dec8e6611161bb60270d2ad04feb38988dc2",
+    "address": "eth:0x5BAfEF6729228add8775aF4Cecd2E68a51424Ee1",
+    "blockNumber": 22775246
+  },
+  "L1VerifierPlonk_v28_1": {
+    "hash": "0xec6ace0c70a65bb3a520b16f88be2f013354490bc29572255ece332c9dbe2d14",
+    "address": "gateway:0x92A9Fd0E84354213D9c3d33128eDd6Ea55ee0717",
+    "blockNumber": 17025
+  },
+  "L1VerifierPlonk_v29": {
+    "hash": "0x4e306eb2936a09bd91390a0b661bfd8eda46b873600b8c7b4fb9be3cc3867a8d",
+    "address": "gateway:0xfA7c56B328bEb5deB9218f3a4b60ADc59Bb6Ad8d",
+    "blockNumber": 75862
+  },
+  "L1VerifierPlonk_Airbender": {
+    "hash": "0x9fcab13afddb5d3eab2fff3a4f5df75281d1d9019bace6f64c13b210e1550958",
+    "address": "eth:0x8F870CF6621AEaF6026dFfc77f484FdAb370c4Ba",
+    "blockNumber": 24038982
+  },
+  "ZKsyncOSVerifierPlonk_v30_0_ADI": {
+    "hash": "0x369b284860edc23e3dc04a83d43fa393d45f1c0ebe6122e70b08550e27d1ecec",
+    "address": "eth:0x84871A20Cd4DB1Ac1Db641841Fc7d900e230F92D",
+    "blockNumber": 24275768
+  },
+  "L1VerifierPlonk_v29_3": {
+    "hash": "0xe8a7e33cfb1a360c71df97e37b905283f19c3fe03faa2e0ddc14cfad7ccb4bd2",
+    "address": "eth:0xB3f4396C2040e502d0556Cbb16C0B22fE777A026",
+    "blockNumber": 24318608
+  },
+  "L1VerifierPlonk_v29_4": {
+    "hash": "0xe38966c281da6e4e3ddc5ab7742793830661367f328c4431e577bb310435f470",
+    "address": "eth:0x7f33D100f482093182111d69a4a457289e99f4ec",
+    "blockNumber": 24419115
+  },
+  "L1VerifierPlonk_v31": {
+    "hash": "0x354ed18832eff6fedf48d1200929d8d1c523b199f1e7ad95aa11856b4aa26cf3",
+    "address": "eth:0xd22cA89e8991FCE568456914c616d303e3142395",
+    "chain": "ethereum",
+    "blockNumber": 25625379
+  },
+  "L1VerifierPlonk_v30_0": {
+    "hash": "0x583dc7da886d67e3dccd8e65e4db1d4d6aad3dd47fd9cc2f75cdce2d42cb7b76",
+    "address": "eth:0x35CD3865199F2D9c574f34DD72520B19842d440c",
+    "chain": "ethereum",
+    "blockNumber": 25704941
+  },
+  "EraVerifierPlonk_v30_1": {
+    "hash": "0x0ab2b031f6964199dfc9f49330365e06bf50ea3b669eb96e80633d81333c44fc",
+    "address": "eth:0x0DAAB2B7b38ab48712996E760152c569FA356DbF",
+    "chain": "ethereum",
+    "blockNumber": 25753516
+  }
+}

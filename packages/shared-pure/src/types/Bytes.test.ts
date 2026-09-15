@@ -1,6 +1,6 @@
 import { expect } from 'earl'
 
-import { Bytes } from './Bytes'
+import { Bytes } from './Bytes.js'
 
 describe(Bytes.name, () => {
   describe(Bytes.fromHex.name, () => {
@@ -37,9 +37,12 @@ describe(Bytes.name, () => {
     it('checks constructor arguments', () => {
       expect(() => Bytes.fromNumber(1.5)).toThrow(TypeError)
       expect(() => Bytes.fromNumber(-2)).toThrow(TypeError)
+      expect(() => Bytes.fromNumber(Number.MAX_SAFE_INTEGER + 1)).toThrow(
+        TypeError,
+      )
     })
 
-    it('encodes 0 as a empty', () => {
+    it('encodes 0 as empty', () => {
       const bytes = Bytes.fromNumber(0)
       expect(bytes.toString()).toEqual('0x')
     })

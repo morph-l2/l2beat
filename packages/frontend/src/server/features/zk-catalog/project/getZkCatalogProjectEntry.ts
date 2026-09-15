@@ -1,0 +1,207 @@
+import type {
+  Project,
+  ProjectRedWarning,
+  ProjectZkCatalogInfo,
+} from '@l2beat/config'
+import type { UnixTime } from '@l2beat/shared-pure'
+import type { ProjectLink } from '~/components/projects/links/types'
+import type { ProjectDetailsSection } from '~/components/projects/sections/types'
+import { ps } from '~/server/projects'
+import type { PercentageChangePeriod } from '~/utils/calculatePercentageChange'
+import { manifest } from '~/utils/Manifest'
+import { getContractUtils } from '~/utils/project/contracts-and-permissions/getContractUtils'
+import { getProgramHashesSection } from '~/utils/project/getProgramHashesSection'
+import { getProjectLinks } from '~/utils/project/getProjectLinks'
+import { getTrustedSetupsSection } from '~/utils/project/getTrustedSetupsSection'
+import { getVerifiersSection } from '~/utils/project/getVerifiersSection'
+import {
+  getUnderReviewStatus,
+  type UnderReviewStatus,
+} from '~/utils/project/underReview'
+import { get7dTvsBreakdown } from '../../layer2s/tvs/get7dTvsBreakdown'
+import {
+  getTrustedSetupsWithVerifiersAndAttesters,
+  type TrustedSetupsByProofSystem,
+} from '../utils/getTrustedSetupsWithVerifiersAndAttesters'
+import { getZkCatalogProjectTvs } from '../utils/getZkCatalogProjectTvs'
+import { getZkCatalogTvsSection } from '../utils/getZkCatalogTvsSection'
+
+export interface ProjectZkCatalogEntry {
+  name: string
+  shortName: string | undefined
+  creator?: string
+  quantumResistant?: boolean
+  slug: string
+  icon: string
+  archivedAt: UnixTime | undefined
+  underReviewStatus: UnderReviewStatus
+  header: {
+    warning?: string
+    redWarning?: ProjectRedWarning
+    emergencyWarning?: string
+    description?: string
+    links: ProjectLink[]
+    trustedSetupsByProofSystem: TrustedSetupsByProofSystem
+    techStack: ProjectZkCatalogInfo['techStack']
+    tvs: {
+      value: number
+      change: number
+      changePeriod: PercentageChangePeriod
+    }
+  }
+  sections: ProjectDetailsSection[]
+}
+
+export async function getZkCatalogProjectEntry(
+  project: Project<
+    'display' | 'zkCatalogInfo' | 'statuses',
+    'archivedAt' | 'milestones' | 'tvsInfo'
+  >,
+): Promise<ProjectZkCatalogEntry> {
+  const [allProjects, allProjectsWithContracts, tvs, contractUtils] =
+    await Promise.all([
+      ps.getProjects({
+        optional: [
+          'display',
+          'daBridge',
+          'scalingInfo',
+          'daLayer',
+          'privacyInfo',
+          'defiInfo',
+        ],
+      }),
+      ps.getProjects({
+        select: ['contracts'],
+      }),
+      get7dTvsBreakdown({ type: 'all' }),
+      getContractUtils(),
+    ])
+
+  const trustedSetupsByProofSystem = getTrustedSetupsWithVerifiersAndAttesters(
+    project,
+    contractUtils,
+    tvs,
+    allProjects,
+  )
+  const {
+    tvs: tvsForProject,
+    change,
+    changePeriod,
+  } = getZkCatalogProjectTvs(project, allProjects, tvs)
+
+  const sortedMilestones =
+    project.milestones?.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    ) ?? []
+
+  const header: ProjectZkCatalogEntry['header'] = {
+    description: project.display.description,
+    warning: project.statuses.yellowWarning,
+    redWarning: project.statuses.redWarning,
+    emergencyWarning: project.statuses.emergencyWarning,
+    links: getProjectLinks(project.display.links),
+    trustedSetupsByProofSystem,
+    techStack: project.zkCatalogInfo.techStack,
+    tvs: {
+      value: tvsForProject,
+      change,
+      changePeriod,
+    },
+  }
+
+  const common = {
+    name: project.name,
+    creator: project.zkCatalogInfo.creator,
+    quantumResistant: project.zkCatalogInfo.quantumResistant,
+    shortName: project.shortName,
+    slug: project.slug,
+    icon: manifest.getUrl(`/icons/${project.slug}.png`),
+    underReviewStatus: getUnderReviewStatus({
+      isUnderReview: !!project.statuses.reviewStatus,
+      impactfulChange: false,
+    }),
+    archivedAt: project.archivedAt,
+    header,
+  }
+
+  const sections: ProjectDetailsSection[] = []
+
+  const zkCatalogTvsSection = getZkCatalogTvsSection(project, allProjects)
+  if (zkCatalogTvsSection) {
+    sections.push({
+      type: 'ZkCatalogTvsSection',
+      props: {
+        id: 'tvs',
+        title: 'Value Secured',
+        ...zkCatalogTvsSection,
+      },
+    })
+  }
+
+  if (project.zkCatalogInfo.proofSystemInfo) {
+    sections.push({
+      type: 'MarkdownSection',
+      props: {
+        id: 'proof-system',
+        title: 'Proof System',
+        content: project.zkCatalogInfo.proofSystemInfo,
+      },
+    })
+  }
+
+  if (project.milestones && project.milestones.length > 0) {
+    sections.push({
+      type: 'MilestonesAndIncidentsSection',
+      props: {
+        id: 'milestones-and-incidents',
+        title: 'Milestones & Incidents',
+        milestones: sortedMilestones,
+      },
+    })
+  }
+
+  const trustedSetupsSection = getTrustedSetupsSection(project)
+  sections.push({
+    type: 'TrustedSetupSection',
+    props: {
+      id: 'trusted-setups',
+      title: 'Trusted Setups',
+      ...trustedSetupsSection,
+    },
+  })
+
+  const verifiersSection = await getVerifiersSection(
+    project.zkCatalogInfo.verifierHashes,
+    contractUtils,
+    allProjects,
+    tvs,
+  )
+  sections.push({
+    type: 'VerifiersSection',
+    props: {
+      id: 'verifiers',
+      title: 'Verifier IDs',
+      variant: 'zkCatalog',
+      ...verifiersSection,
+    },
+  })
+
+  const programHashesSection = await getProgramHashesSection(
+    project,
+    allProjectsWithContracts,
+    allProjects,
+    tvs,
+  )
+  if (programHashesSection) {
+    sections.push({
+      type: 'ProgramHashesSection',
+      props: {
+        id: 'program-hashes',
+        title: 'Program Hashes',
+        ...programHashesSection,
+      },
+    })
+  }
+
+  return { ...common, sections }
+}

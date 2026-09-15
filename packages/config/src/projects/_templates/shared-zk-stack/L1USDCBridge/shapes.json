@@ -1,0 +1,12 @@
+{
+  "L1USDCBridge": {
+    "hash": "0x9067afd8d6e06698845e42a97769da7f5ddff13123a1263a6a40a1617bf9229c",
+    "address": "eth:0x86dF12f51E3531689e0615bb2F739ddf01337715",
+    "blockNumber": 22188285
+  },
+  "L1USDCBridge_reinitialize": {
+    "hash": "0xed3ae20cf58c6035b0e9fce756c07e2f087a8044a1f78fb4fbedea5d7846df80",
+    "address": "eth:0x2ccD5486Ea1b2A52dcD387c01314F6A328f66cbB",
+    "blockNumber": 22188285
+  }
+}

@@ -1,5 +1,5 @@
-import { EthereumAddress, UnixTime } from '@l2beat/shared-pure'
-import { providers } from 'ethers'
+import { type EthereumAddress, UnixTime } from '@l2beat/shared-pure'
+import type { providers } from 'ethers'
 
 export async function getContractCreationTimestamp(
   provider: providers.JsonRpcProvider,
@@ -21,10 +21,11 @@ export async function getContractCreationTimestamp(
   )
 
   const block = await provider.getBlock(creationBlock)
-  return new UnixTime(block.timestamp)
+  console.log(block.number)
+  return UnixTime(block.timestamp)
 }
 
-export async function bisectToFindCreationBlock(
+async function bisectToFindCreationBlock(
   provider: providers.JsonRpcProvider,
   address: EthereumAddress,
   minBlockNumber: number,
@@ -45,12 +46,11 @@ export async function bisectToFindCreationBlock(
       minBlockNumber,
       midBlockNumber,
     )
-  } else {
-    return bisectToFindCreationBlock(
-      provider,
-      address,
-      midBlockNumber + 1,
-      maxBlockNumber,
-    )
   }
+  return bisectToFindCreationBlock(
+    provider,
+    address,
+    midBlockNumber + 1,
+    maxBlockNumber,
+  )
 }

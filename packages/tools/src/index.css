@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #f97315 transparent;
+}
+
+:focus-visible {
+  @apply outline outline-orange-500;
+}
+
+::selection {
+  @apply bg-orange-900;
+}
+
+@layer utilities {
+  .pixelated {
+    image-rendering: pixelated;
+  }
+
+  .pixel-animate {
+    @apply animate-pixelate transition-none;
+    animation-delay: calc(var(--pixel-index) * 0.05s);
+  }
+}

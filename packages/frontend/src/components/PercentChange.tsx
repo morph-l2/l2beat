@@ -1,37 +1,85 @@
-import React from 'react'
+import { EM_DASH } from '~/consts/characters'
+import { TrendArrowDownIcon, TrendArrowUpIcon } from '~/icons/TrendArrow'
+import {
+  formatPercent,
+  type PercentageChangePeriod,
+} from '~/utils/calculatePercentageChange'
+import { cn } from '~/utils/cn'
+import { Tooltip, TooltipContent, TooltipTrigger } from './core/tooltip/Tooltip'
 
-import { cn } from '../utils/cn'
-import { ArrowDownIcon, ArrowUpIcon } from './icons/Arrows'
-
-interface Props {
-  value: string
-  role?: string
-  className?: string
+const COMPARISON_PERIOD_LABELS: Record<PercentageChangePeriod, string> = {
+  '1D': 'one day ago',
+  '7D': 'seven days ago',
+  last24h: 'the previous 24 hours',
+  last7d: 'the previous seven days',
+  last30d: 'the previous 30 days',
 }
 
-/*  IMPORTANT
-  If you change this file you need to update the following file too:
-  * packages/frontend/src/scripts/charts/view-controller/header/getChangeHtml.ts
-*/
-export function PercentChange({ value, className, role }: Props) {
-  const isMore = value.startsWith('+')
-  const isLess = value.startsWith('-')
+export function PercentageChangeTooltipContent({
+  period,
+}: {
+  period: PercentageChangePeriod
+}) {
+  return <>Percentage change compared to {COMPARISON_PERIOD_LABELS[period]}.</>
+}
 
-  return (
+interface Props {
+  value: number
+  className?: string
+  textClassName?: string
+  period?: PercentageChangePeriod
+  disabledOnMobile?: boolean
+}
+
+export function PercentChange({
+  value,
+  className,
+  textClassName,
+  period,
+  disabledOnMobile,
+}: Props) {
+  const isMore = value > 0
+  const isLess = value < 0
+
+  const content = (
     <span
       className={cn(
-        isMore && 'text-green-300 dark:text-green-450',
+        isMore && 'text-positive',
         isLess && 'text-red-300',
         'relative',
         className,
       )}
-      data-role={role}
     >
-      {isMore && <ArrowUpIcon className="-translate-y-1/2 absolute top-1/2" />}
-      {isLess && (
-        <ArrowDownIcon className="-translate-y-1/2 absolute top-1/2" />
+      {isMore && (
+        <TrendArrowUpIcon className="-translate-y-1/2 absolute top-1/2 left-0.5" />
       )}
-      <span className="relative pl-3.5">{value.substring(1)}</span>
+      {isLess && (
+        <TrendArrowDownIcon className="-translate-y-1/2 absolute top-1/2 left-0.5" />
+      )}
+      <span
+        className={cn(
+          'relative inline-block w-[52px] pl-3.5 text-right text-xs',
+          value === 0 && 'text-secondary',
+          textClassName,
+        )}
+      >
+        {isNaN(value) ? EM_DASH : formatPercent(Math.abs(value))}
+      </span>
     </span>
+  )
+
+  if (!period) {
+    return content
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild disabledOnMobile={disabledOnMobile}>
+        {content}
+      </TooltipTrigger>
+      <TooltipContent>
+        <PercentageChangeTooltipContent period={period} />
+      </TooltipContent>
+    </Tooltip>
   )
 }

@@ -1,0 +1,10 @@
+import { v } from '@l2beat/validate'
+
+export const LogoGeneratorProject = v.object({
+  name: v.string(),
+  type: v.enum(['layer2', 'layer3']),
+  slug: v.string(),
+  isArchived: v.boolean().optional(),
+})
+
+export type LogoGeneratorProject = v.infer<typeof LogoGeneratorProject>

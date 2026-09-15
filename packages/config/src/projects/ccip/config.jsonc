@@ -1,0 +1,491 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "ccip",
+  "import": ["../globalConfig.jsonc"],
+  // The v2 CommitteeVerifier and USDC security stack extend the existing RMN and OCR permission graph.
+  "maxAddresses": 500,
+  "initialAddresses": [
+    "eth:0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D",
+    "eth:0x06179f7C1be40863405f374E7f5F8806c728660A",
+    "arb1:0xee85aEfb15b9489563A6a29891ebe0750AA1A7Ae",
+    "base:0xf09AFe78d3c7d359b334d7cB88995751F7eC5E13",
+    "oeth:0xee85aEfb15b9489563A6a29891ebe0750AA1A7Ae",
+    "bnb:0xA27056438FfA1f286AB197488808692F0db93F8B",
+    "matic:0x77FDbd20ED582794b1d9F1a8a94e4a60494D677e",
+    "eth:0x76a443768A5e3B8d1AED0105FC250877841Deb40",
+    // Shared v2 ramps must be explicit because Router route values are intentionally not traversed.
+    "eth:0xc3423F3FB30857D9C14717b119884b1B63d250b7",
+    "eth:0x408428bca0e24A25ac8baAc1b70f64AF257717c3",
+    // Track the local Executor endpoint explicitly; OnRamp destination configs mix local and remote-chain addresses.
+    "eth:0x6608d995bBDE874De5292bFD289643c88D176ED3",
+    "eth:0x17D8a409fE2ceF2d3808bcB61F14aBEFfc28876e",
+    // TokenAdminRegistry pool values are not traversed; include only the specialized USDC graph and one standard v2 pool.
+    "eth:0xf70B4B6ec7AdB8822b23119c844729E9b1B1683D",
+    "eth:0xF00B3b06690bC7E2bC6A9ccae55d17b7CD818465"
+  ],
+  "types": {
+    "CCIPChainName": {
+      "typeCaster": "Mapping",
+      "arg": {
+        "4426351306075016396": "0g",
+        "4829375610284793157": "ab",
+        "3577778157919314504": "abstract",
+        "4059281736450291836": "adi",
+        "14894068710063348487": "apechain",
+        "4741433654826277614": "aptos",
+        "6433500567565415381": "avalanche",
+        "1294465214383781161": "berachain",
+        "465944652040885897": "opbnb",
+        "7937294810946806131": "bitlayer",
+        "3849287863852499584": "bob",
+        "4560701533377838164": "botanix",
+        "5406759801798337480": "bsquared",
+        "241851231317828981": "bitcoin-merlin",
+        "2135107236357186872": "bittensor",
+        "11344663589394136015": "bsc",
+        "2308837218439511688": "canton",
+        "1346049177634351622": "celo",
+        "1224752112135636129": "core",
+        "9043146809313071210": "corn",
+        "18240105181246962294": "creditcoin",
+        "1456215246176062136": "cronos",
+        "8788096068760390840": "cronos-zkevm",
+        "6325494908023253251": "edge",
+        "8805746078405598895": "andromeda",
+        "4949039107694359620": "arbitrum",
+        "15971525489660198786": "base",
+        "7613811247471741961": "hashkey",
+        "3461204551265785888": "ink",
+        "4627098889531055414": "linea",
+        "1556008542357238666": "mantle",
+        "7264351850409363825": "mode",
+        "3734403246176062136": "optimism",
+        "13204309965629103672": "scroll",
+        "16468599424800719238": "taiko",
+        "1923510103922296319": "unichain",
+        "2049429975587534727": "worldchain",
+        "3016212468291539606": "xlayer",
+        "17198166215261833993": "zircuit",
+        "1562403441176082196": "zksync",
+        "13624601974233774587": "etherlink",
+        "1462016016387883143": "fraxtal",
+        "3229138320728879060": "hedera",
+        "1804312132722180201": "hemi",
+        "2442541497099098535": "hyperliquid",
+        "1523760397290643893": "jovay",
+        "9813823125703490621": "kaia",
+        "5608378062013572713": "lens",
+        "15293031020466096408": "lisk",
+        "5009297550715157269": "ethereum",
+        "4051577828743386545": "matic",
+        "6093540873831549674": "megaeth",
+        "13447077090413146373": "metal",
+        "11690709103138290329": "mind",
+        "17164792800244661392": "mint",
+        "8481857512324358265": "monad",
+        "18164309074156128038": "morph",
+        "4215185756725900654": "mova",
+        "12657445206920369324": "henesys",
+        "7801139999541420232": "pharos",
+        "9335212494177455608": "plasma",
+        "17912061998839310979": "plume",
+        "6422105447186081193": "astar",
+        "2459028469735686113": "katana",
+        "6180753054346818345": "robinhood",
+        "6370580034781731079": "arc",
+        "6916147374840168594": "ronin",
+        "11964252391146578476": "rootstock",
+        "9027416829622342829": "sei",
+        "3993510008929295315": "shibarium",
+        "124615329519749607": "solana",
+        "12505351618335765396": "soneium",
+        "1673871237479749969": "sonic",
+        "16978377838628290997": "stable",
+        "470401360549526817": "superseed",
+        "5936861837188149645": "tac",
+        "7281642695469137430": "tempo",
+        "16448340667252469081": "ton",
+        "5142893604156789321": "wemix",
+        "465200170687744372": "xdai",
+        "17673274061779414707": "xdc",
+        "3555797439612589184": "zora",
+        "17529533435026248318": "sui",
+        "9762610643973837292": "sui-testnet",
+        "6473245816409426016": "memento",
+        "9723842205701363942": "everclear",
+        "1546563616611573946": "tron",
+        "4348158687435793198": "polygonzkevm",
+        "4411394078118774322": "blast",
+        "5214452172935136222": "treasure",
+        "7222032299962346917": "neox"
+      }
+    }
+  },
+  "names": {
+    "eth:0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D": "MainRouter",
+    "eth:0x3237c0D7B58BEc8Dc17F00103B784Bd6678f789E": "DeprecatedRouter",
+    "eth:0x06179f7C1be40863405f374E7f5F8806c728660A": "GHOEthereumTokenPool",
+    "eth:0x913814782144864e523C3FdB78E3ca25D2c2aeCa": "EthereumOnRamp_v1_6",
+    "eth:0xc3423F3FB30857D9C14717b119884b1B63d250b7": "EthereumOnRamp_v2_0",
+    "eth:0x408428bca0e24A25ac8baAc1b70f64AF257717c3": "EthereumOffRamp_v2_0",
+    "eth:0x6608d995bBDE874De5292bFD289643c88D176ED3": "ExecutorProxy",
+    "eth:0x05CEB5F0d52316B48a84fECA8230c90492a4B75b": "Executor",
+    "eth:0x2CaAfd3B4Cf606220580c885Bd2B448FB93dC03b": "VersionedVerifierResolver",
+    "eth:0x7BcE1A3297604CAFa601f05799b6Ed98e8c01B7F": "CommitteeVerifier",
+    "eth:0x17D8a409fE2ceF2d3808bcB61F14aBEFfc28876e": "TokenPoolFactory",
+    "eth:0xf70B4B6ec7AdB8822b23119c844729E9b1B1683D": "USDCTokenPoolProxy",
+    "eth:0xF00B3b06690bC7E2bC6A9ccae55d17b7CD818465": "ReUSDTokenPool",
+    "eth:0xf38c74E599Ad1243D47b50D30b5C873B813ED7C1": "USDCTokenPoolCCTPV1",
+    "eth:0x34a786a4D88c438f71be45D0FaB6240Dc9F74574": "USDCTokenPoolCCTPV2",
+    "eth:0x806489226179d519D7bf5814BA8ea0F7D850aCf2": "CCTPThroughCCVTokenPool",
+    "eth:0xed37ecDcc2bb79ab310457702713626d5C07FC2D": "SiloedUSDCTokenPool",
+    "eth:0xBfD2109d3ff5b6f09281BDb52ca6b56D7Bb1ff12": "USDCCCTPVerifierResolver",
+    "eth:0xa22606F055146f0eac2FBEd49253E779b781355D": "CCTPVerifier_v2_0",
+    "eth:0x1A0F886eFBBf88C1D2Ac399a02720A2b1568E2Af": "CCTPVerifier_v2_1",
+    "eth:0x65E0c4AB4Da5d22E824879DEB43123D23217DEdD": "CCTPMessageTransmitterProxy_v2_0",
+    "eth:0x8d8Aab1Ef7047C1bBc6D17202CB39EcA43263CFC": "CCTPMessageTransmitterProxy_v1_6",
+    "eth:0x966A3BE75103C680b6A4248689630c788659d2A5": "BobUSDCERC20LockBox",
+    "eth:0xcd8ba189347Fc5e968778BBFFDB656ea94a7737D": "BitlayerUSDCERC20LockBox",
+    "eth:0xE16982d9262dC0483Bd3dAdE2C020fFcB402E459": "JovayUSDCERC20LockBox",
+    "eth:0x35cce3F115A25e7a90101E02906a57b9f8e4C2c6": "ZeroGUSDCERC20LockBox",
+    "eth:0xC373cB40513af4A9a128E6350F2b127F5D413E88": "WemixUSDCERC20LockBox",
+    "eth:0xE5E7C0a97877Cc6b3aDb735Fa725BCD60B3E9FB4": "ADIUSDCERC20LockBox",
+    "eth:0xE77aD12b305cD90eEe6b769Ac6490a42c0039d67": "RoninUSDCERC20LockBox",
+    "eth:0xD061610Ea164ddFdCe7162fd543951A82E6D446b": "PharosUSDCERC20LockBox",
+    "eth:0x2baFBBC2c96Bf2e76ab253899Fb51F9522b8Ef3D": "NeoxUSDCERC20LockBox",
+    "eth:0x76a443768A5e3B8d1AED0105FC250877841Deb40": "CCIPHome",
+    "eth:0x006bC1F599a10B73C88cc3cD19a92829C4AC1E83": "CapabilitiesRegistry",
+    "eth:0x26d3681DfC9E4c8C79cfbf461adec8A21d5d73C5": "EthereumOffRamp_v1_6",
+    "arb1:0xee85aEfb15b9489563A6a29891ebe0750AA1A7Ae": "ArbitrumOffRamp_v1_6",
+    "base:0xf09AFe78d3c7d359b334d7cB88995751F7eC5E13": "BaseOffRamp_v1_6",
+    "oeth:0xee85aEfb15b9489563A6a29891ebe0750AA1A7Ae": "OptimismOffRamp_v1_6",
+    "bnb:0xA27056438FfA1f286AB197488808692F0db93F8B": "BscOffRamp_v1_6",
+    "matic:0x77FDbd20ED582794b1d9F1a8a94e4a60494D677e": "PolygonPosOffRamp_v1_6",
+    "eth:0xdf615eF8D4C64d0ED8Fd7824BBEd2f6a10245aC9": "ArbitrumToEthereumOffRamp_v1_5",
+    "eth:0xeFC4a18af59398FF23bfe7325F2401aD44286F4d": "OLD_ArbitrumToEthereumOffRamp",
+    "eth:0x9B2EEd6A1e16cB50Ed4c876D2dD69468B21b7749": "ArbitrumToEthereumCommitStore",
+    "eth:0x8c9b2Efb7c64C394119270bfecE7f54763b958Ad": "PriceRegistry",
+    "eth:0x411dE17f12D1A34ecC7F45f49844626267c75e81": "ARMProxy",
+    "eth:0xe8464c353210Cc398A45dB2454FBc5BCd25fFf20": "RMNRemote",
+    "eth:0x0B047953451A207743fB62541B21199b95190602": "RMN",
+    "eth:0x44835bBBA9D40DEDa9b64858095EcFB2693c9449": "ARMTimelock",
+    "eth:0x6608920e3F6b591EC3Cf15CA1DDf66fBE117F56A": "RMNTimelock",
+    "eth:0xD9aB1714Df2b5d0011B22f6D94812e7813Fa5795": "RMN_CurseTimelock",
+    "eth:0x186B378fDcC2FcAD08E52678e5F7617DD3512c7B": "RMN_CurseCallProxy",
+    "eth:0x7a07a474D8c33E25327b4BEb659B9be65012e852": "RMN_CurseProposerMultisig",
+    "eth:0x95176427A9555fCa942828F3d22b665bE36b718B": "RMN_CurseCancellerMultisig",
+    "eth:0x42e83F35E8f32056884311C07CB195547785Efa9": "RMN_CurseBypasserMultisig",
+    "eth:0x117ec8aD107976e1dBCc21717ff78407Bc36aADc": "ARM_Multisig4",
+    "eth:0x82b8A19497fA25575f250a3DcFfCD2562B575A2e": "ARMCallProxy",
+    "eth:0xD6597750bf74DCAEC57e0F9aD2ec998D837005bf": "ARM_GnosisSafe",
+    "eth:0xD9757aA52907798d1aF2FDa7A6C0cC733E5aCf7e": "ARM_Multisig1",
+    "eth:0xE53289F32c8E690b7173aA33affE9B6B0CB0012F": "ARM_Multisig2",
+    "eth:0xAD97C0270a243270136E40278155C12ce7C7F87B": "ARM_Multisig3",
+    "eth:0x2F2A3e36CE5Fb0924C414BEB1D98B531Cdf17e0B": "EthereumToArbitrumOnRampTokenLimitAdmin",
+    "eth:0x49edf594E698F406A15afEf44CE7a0Fd8d998610": "RMNCallProxy",
+    "eth:0x79bC82F3931A7d017719146A822e4AD8152b157e": "RMN_Multisig1",
+    "eth:0x806659842cFeEE3CBEF35F8ad2eA42460574b413": "RMN_Multisig2",
+    "eth:0x8C00Cc7cC37396e88BbFe66371341a59D1b5771F": "RMN_Multisig3",
+    "eth:0xC5BcC58BE6172769ca1a78B8A45752E3C5059c39": "GhoCcipSteward",
+    "eth:0x8513e6F37dBc52De87b166980Fa3F50639694B60": "AaveRiskCouncil"
+  },
+  "overrides": {
+    // These two contracts are not source-verified. Only fields read through their deployed runtime interface are included.
+    "eth:0xa22606F055146f0eac2FBEd49253E779b781355D": {
+      "fields": {
+        "typeAndVersion": {
+          "handler": {
+            "type": "call",
+            "method": "function typeAndVersion() view returns (string)",
+            "args": []
+          }
+        },
+        "owner": {
+          "handler": {
+            "type": "call",
+            "method": "function owner() view returns (address)",
+            "args": []
+          }
+        },
+        "versionTag": {
+          "handler": {
+            "type": "call",
+            "method": "function versionTag() view returns (bytes4)",
+            "args": []
+          }
+        },
+        "getAllowedFinalityConfig": {
+          "handler": {
+            "type": "call",
+            "method": "function getAllowedFinalityConfig() view returns (bytes4)",
+            "args": []
+          },
+          "edit": ["format", "CCIPAllowedFinality"]
+        },
+        "getStaticConfig": {
+          "handler": {
+            "type": "call",
+            "method": "function getStaticConfig() view returns (address tokenMessenger, address messageTransmitterProxy, address usdcToken, uint32 localDomainIdentifier)",
+            "args": []
+          }
+        },
+        "getDynamicConfig": {
+          "handler": {
+            "type": "call",
+            "method": "function getDynamicConfig() view returns ((address feeAggregator, address allowlistAdmin, uint16 fastFinalityBps) dynamicConfig)",
+            "args": []
+          }
+        },
+        "getStorageLocations": {
+          "handler": {
+            "type": "call",
+            "method": "function getStorageLocations() view returns (string[])",
+            "args": []
+          }
+        },
+        "remoteChainSelectors": {
+          "handler": {
+            "type": "event",
+            "select": "remoteChainSelector",
+            "add": {
+              "event": "event RemoteChainConfigSet(uint64 indexed remoteChainSelector, address router, bool allowlistEnabled)"
+            }
+          }
+        },
+        "remoteChainConfigs": {
+          "handler": {
+            "type": "array",
+            "method": "function getRemoteChainConfig(uint64 remoteChainSelector) view returns ((address router, uint64 remoteChainSelector, bool allowlistEnabled, uint16 feeUSDCents, uint32 gasForVerification, uint16 payloadSizeBytes) remoteChainConfig, address[] allowedSendersList)",
+            "indices": "{{ remoteChainSelectors }}"
+          },
+          "edit": [
+            "pipe",
+            [
+              "map",
+              [
+                "pipe",
+                ["shape", "remoteChainConfig", "allowedSendersList"],
+                [
+                  "set",
+                  ["remoteChainConfig", "remoteChainSelector"],
+                  ["format", "CCIPChainName"]
+                ],
+                ["set", "allowedSendersList", ["sort"]]
+              ]
+            ],
+            ["sort", ["get", "remoteChainConfig", "remoteChainSelector"]]
+          ]
+        }
+      }
+    },
+    "eth:0x65E0c4AB4Da5d22E824879DEB43123D23217DEdD": {
+      "fields": {
+        "typeAndVersion": {
+          "handler": {
+            "type": "call",
+            "method": "function typeAndVersion() view returns (string)",
+            "args": []
+          }
+        },
+        "owner": {
+          "handler": {
+            "type": "call",
+            "method": "function owner() view returns (address)",
+            "args": []
+          }
+        },
+        "i_cctpTransmitter": {
+          "handler": {
+            "type": "call",
+            "method": "function i_cctpTransmitter() view returns (address)",
+            "args": []
+          }
+        },
+        "getAllAuthorizedCallers": {
+          "handler": {
+            "type": "call",
+            "method": "function getAllAuthorizedCallers() view returns (address[])",
+            "args": []
+          },
+          "edit": ["sort"]
+        }
+      }
+    },
+    "eth:0x006bC1F599a10B73C88cc3cD19a92829C4AC1E83": {
+      "description": "Keystone CapabilitiesRegistry used by CCIP to manage node operators, nodes, capabilities, and DONs. When a DON includes the registered CCIP capability, updating it forwards the DON membership and configuration to CCIPHome, where the payload can set, revoke, or promote an OCR configuration.",
+      // These unbounded, frequently rotating arrays duplicate CCIP membership and configuration data already surfaced through CCIPHome.
+      "ignoreMethods": ["getNodes", "getDONs"]
+    },
+    "arb1:0xee85aEfb15b9489563A6a29891ebe0750AA1A7Ae": {
+      "description": "v1.6 OffRamp on Arbitrum One.",
+      "ignoreRelatives": true
+    },
+    "base:0xf09AFe78d3c7d359b334d7cB88995751F7eC5E13": {
+      "description": "v1.6 OffRamp on Base.",
+      "ignoreRelatives": true
+    },
+    "oeth:0xee85aEfb15b9489563A6a29891ebe0750AA1A7Ae": {
+      "description": "v1.6 OffRamp on OP Mainnet.",
+      "ignoreRelatives": true
+    },
+    "bnb:0xA27056438FfA1f286AB197488808692F0db93F8B": {
+      "description": "v1.6 OffRamp on BNB Chain.",
+      "ignoreRelatives": true
+    },
+    "matic:0x77FDbd20ED582794b1d9F1a8a94e4a60494D677e": {
+      "description": "v1.6 OffRamp on Polygon PoS.",
+      "ignoreRelatives": true
+    },
+    "eth:0x5300A1a15135EA4dc7aD5a167152C01EFc9b192A": {
+      "ignoreDiscovery": true
+    },
+    "eth:0xdf615eF8D4C64d0ED8Fd7824BBEd2f6a10245aC9": {
+      "ignoreDiscovery": true
+    },
+    "eth:0xeFC4a18af59398FF23bfe7325F2401aD44286F4d": {
+      "ignoreDiscovery": true
+    },
+    "eth:0x514910771AF9Ca656af840dff83E8264EcF986CA": {
+      "description": "Token accepted as fee token for sending outgoing messages.",
+      "ignoreRelatives": true,
+      "ignoreInWatchMode": ["totalSupply"]
+    },
+    "eth:0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": {
+      "description": "Token accepted as fee token for sending outgoing messages.",
+      "ignoreInWatchMode": ["totalSupply"]
+    },
+    "eth:0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f": {
+      "description": "Token accepted as fee token for sending outgoing messages.",
+      "ignoreRelatives": true
+    },
+    "eth:0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D": {
+      "fields": {
+        "arbitrumOnRamp": {
+          "description": "Ethereum-to-Arbitrum OnRamp selected by the Router when users call ccipSend() for the Arbitrum chain selector.",
+          "handler": {
+            "type": "call",
+            "method": "getOnRamp",
+            "args": ["4949039107694359620"]
+          }
+        },
+        "arbitrumOffRamps": {
+          "description": "Every Arbitrum-to-Ethereum OffRamp the Router accepts routeMessage() calls from. Multiple OffRamps can be active in parallel during a version migration, all are listed here.",
+          "handler": { "type": "call", "method": "getOffRamps", "args": [] },
+          "edit": [
+            "pipe",
+            ["filter", ["=", "#sourceChainSelector", "4949039107694359620"]],
+            ["map", ["get", "offRamp"]]
+          ]
+        },
+        "isArbitrumSupported": {
+          "description": "True if the Ethereum CCIP Router supports sending to Arbitrum One.",
+          "handler": {
+            "type": "call",
+            "method": "isChainSupported",
+            "args": ["4949039107694359620"]
+          }
+        }
+      }
+    },
+    "eth:0x06179f7C1be40863405f374E7f5F8806c728660A": {
+      "ignoreRelatives": true,
+      "canActIndependently": false,
+      "description": "GHO lock-and-release token pool on Ethereum. It trusts configured remote pools and only accepts inbound token releases routed through CCIP OffRamps.",
+      "types": {
+        "RemoteAddress": {
+          "typeCaster": "SliceAddress",
+          "arg": { "offset": 12 }
+        }
+      },
+      "fields": {
+        "isArbitrumSupported": {
+          "description": "True if this GHO token pool supports the Ethereum to Arbitrum One route.",
+          "handler": {
+            "type": "call",
+            "method": "isSupportedChain",
+            "args": ["4949039107694359620"]
+          }
+        },
+        "arbitrumRemotePools": {
+          "description": "The GHO token pool addresses trusted as remote peers on Arbitrum One.",
+          "handler": {
+            "type": "call",
+            "method": "getRemotePools",
+            "args": ["4949039107694359620"],
+            "ignoreRelative": true
+          },
+          "edit": ["map", ["format", "RemoteAddress"]]
+        },
+        "arbitrumRemoteToken": {
+          "description": "The remote GHO token address on Arbitrum One.",
+          "handler": {
+            "type": "call",
+            "method": "getRemoteToken",
+            "args": ["4949039107694359620"],
+            "ignoreRelative": true
+          },
+          "edit": ["format", "RemoteAddress"]
+        },
+        "arbitrumInboundRateLimiter": {
+          "description": "Inbound rate limit config for GHO transfers arriving from Arbitrum One.",
+          "handler": {
+            "type": "call",
+            "method": "getCurrentInboundRateLimiterState",
+            "args": ["4949039107694359620"]
+          },
+          "edit": ["pick", "isEnabled", "capacity", "rate"]
+        },
+        "arbitrumOutboundRateLimiter": {
+          "description": "Outbound rate limit config for GHO transfers sent to Arbitrum One.",
+          "handler": {
+            "type": "call",
+            "method": "getCurrentOutboundRateLimiterState",
+            "args": ["4949039107694359620"]
+          },
+          "edit": ["pick", "isEnabled", "capacity", "rate"]
+        }
+      }
+    },
+    "eth:0xF00B3b06690bC7E2bC6A9ccae55d17b7CD818465": {
+      // The token remains exposed through getToken, but its implementation is outside the CCIP contract graph.
+      "ignoreRelatives": ["getToken"],
+      "fields": {
+        "outboundRequiredCCVsToInk": {
+          "description": "Token-specific CCVs returned by this pool for a one reUSD full-finality transfer to Ink. An empty list makes the v2 OnRamp use the route's default CCVs; any mandatory route CCVs are applied separately.",
+          "handler": {
+            "type": "call",
+            "method": "function getRequiredCCVs(address localToken, uint64 remoteChainSelector, uint256 sourceDenominatedAmount, bytes4 requestedFinalityConfig, bytes extraData, uint8 direction) view returns (address[] requiredCCVs)",
+            "args": [
+              "0x5086bf358635B81D8C47C66d1C8b9E567Db70c72",
+              "3461204551265785888",
+              "1000000000000000000",
+              "0x00000000",
+              "0x",
+              0
+            ]
+          }
+        },
+        "inboundRequiredCCVsFromInk": {
+          "description": "Token-specific CCVs returned by this pool for a one reUSD full-finality transfer from Ink. An empty list makes the v2 OffRamp use the route's default CCVs; any mandatory route CCVs are applied separately.",
+          "handler": {
+            "type": "call",
+            "method": "function getRequiredCCVs(address localToken, uint64 remoteChainSelector, uint256 sourceDenominatedAmount, bytes4 requestedFinalityConfig, bytes extraData, uint8 direction) view returns (address[] requiredCCVs)",
+            "args": [
+              "0x5086bf358635B81D8C47C66d1C8b9E567Db70c72",
+              "3461204551265785888",
+              "1000000000000000000",
+              "0x00000000",
+              "0x",
+              1
+            ]
+          }
+        }
+      }
+    },
+    "eth:0x3237c0D7B58BEc8Dc17F00103B784Bd6678f789E": {
+      "description": "Deprecated router used by BSC.",
+      // The shared v2.0 OffRamp is an explicit entrypoint; do not crawl it once per route.
+      "ignoreRelatives": ["getOffRamps"]
+    }
+  }
+}

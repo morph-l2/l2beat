@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "description": "Part of the LayerZero messaging protocol. OApp owners or their delegates can configure custom verification- (message libraries) and execution settings here.",
+  "fields": {
+    "owner": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "configure the default send/receive libraries used for verification, affecting all OApps that have not set up a custom security config."
+        }
+      ]
+    }
+  },
+  "category": "core"
+}

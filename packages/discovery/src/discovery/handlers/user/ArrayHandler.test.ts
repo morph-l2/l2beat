@@ -1,9 +1,9 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { ChainSpecificAddress } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { ArrayHandler } from './ArrayHandler'
+import type { IProvider } from '../../provider/IProvider'
+import { toFunctionFragment } from '../utils/toFunctionFragment'
+import { ArrayHandler, getArrayFragment } from './ArrayHandler'
 
 describe(ArrayHandler.name, () => {
   describe('dependencies', () => {
@@ -16,7 +16,6 @@ describe(ArrayHandler.name, () => {
           length: 1,
         },
         [],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.dependencies).toEqual([])
@@ -31,7 +30,6 @@ describe(ArrayHandler.name, () => {
           length: '{{ foo }}',
         },
         [],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.dependencies).toEqual(['foo'])
@@ -46,10 +44,23 @@ describe(ArrayHandler.name, () => {
           indices: '{{ foo }}',
         },
         [],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.dependencies).toEqual(['foo'])
+    })
+
+    it('detects the base field of a nested reference', () => {
+      const handler = new ArrayHandler(
+        'someName',
+        {
+          type: 'array',
+          method: 'function foo(uint i) view returns (uint)',
+          length: '{{ constructorArgs._length }}',
+        },
+        [],
+      )
+
+      expect(handler.dependencies).toEqual(['constructorArgs'])
     })
   })
 
@@ -62,7 +73,6 @@ describe(ArrayHandler.name, () => {
           method: 'function foo(uint i) view returns (uint)',
         },
         [],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.getMethod()).toEqual(
@@ -80,7 +90,6 @@ describe(ArrayHandler.name, () => {
               method: 'function foo() view returns (uint)',
             },
             [],
-            DiscoveryLogger.SILENT,
           ),
       ).toThrow('Invalid method abi')
     })
@@ -95,23 +104,17 @@ describe(ArrayHandler.name, () => {
               method: 'function foo(uint256 i) returns (uint)',
             },
             [],
-            DiscoveryLogger.SILENT,
           ),
       ).toThrow('Invalid method abi')
     })
 
     it('finds the method by field name', () => {
-      const handler = new ArrayHandler(
-        'someName',
-        { type: 'array' },
-        [
-          'function foo(uint256 i) view returns (uint256)',
-          'function someName(uint256 i) view returns (uint256)',
-          'function someName(uint256 a, uint256 b) view returns (uint256)',
-          'function someName() view returns (uint256)',
-        ],
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new ArrayHandler('someName', { type: 'array' }, [
+        'function foo(uint256 i) view returns (uint256)',
+        'function someName(uint256 i) view returns (uint256)',
+        'function someName(uint256 a, uint256 b) view returns (uint256)',
+        'function someName() view returns (uint256)',
+      ])
 
       expect(handler.getMethod()).toEqual(
         'function someName(uint256 i) view returns (uint256)',
@@ -121,16 +124,11 @@ describe(ArrayHandler.name, () => {
     it('throws if it cannot find the method by field name', () => {
       expect(
         () =>
-          new ArrayHandler(
-            'someName',
-            { type: 'array' },
-            [
-              'function foo(uint256 i) view returns (uint256)',
-              'function someName(uint256 a, uint256 b) view returns (uint256)',
-              'function someName() view returns (uint256)',
-            ],
-            DiscoveryLogger.SILENT,
-          ),
+          new ArrayHandler('someName', { type: 'array' }, [
+            'function foo(uint256 i) view returns (uint256)',
+            'function someName(uint256 a, uint256 b) view returns (uint256)',
+            'function someName() view returns (uint256)',
+          ]),
       ).toThrow('Cannot find a matching method for someName')
     })
 
@@ -147,7 +145,6 @@ describe(ArrayHandler.name, () => {
           'function bar(uint256 a, uint256 b) view returns (uint256)',
           'function bar() view returns (uint256)',
         ],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.getMethod()).toEqual(
@@ -158,30 +155,26 @@ describe(ArrayHandler.name, () => {
     it('throws if it cannot find the method by method name', () => {
       expect(
         () =>
-          new ArrayHandler(
-            'someName',
-            { type: 'array', method: 'bar' },
-            [
-              'function foo(uint256 i) view returns (uint256)',
-              'function someName(uint256 i) view returns (uint256)',
-              'function someName(uint256 a, uint256 b) view returns (uint256)',
-              'function someName() view returns (uint256)',
-              'function bar(uint256 a, uint256 b) view returns (uint256)',
-              'function bar() view returns (uint256)',
-            ],
-            DiscoveryLogger.SILENT,
-          ),
+          new ArrayHandler('someName', { type: 'array', method: 'bar' }, [
+            'function foo(uint256 i) view returns (uint256)',
+            'function someName(uint256 i) view returns (uint256)',
+            'function someName(uint256 a, uint256 b) view returns (uint256)',
+            'function someName() view returns (uint256)',
+            'function bar(uint256 a, uint256 b) view returns (uint256)',
+            'function bar() view returns (uint256)',
+          ]),
       ).toThrow('Cannot find a matching method for bar')
     })
   })
 
   describe('execute', () => {
     const method = 'function owners(uint256 index) view returns (address)'
-    const address = EthereumAddress.random()
+    const arrayFragment = getArrayFragment(toFunctionFragment(method))
+    const address = ChainSpecificAddress.random()
     const owners = [
-      EthereumAddress.random(),
-      EthereumAddress.random(),
-      EthereumAddress.random(),
+      ChainSpecificAddress.random(),
+      ChainSpecificAddress.random(),
+      ChainSpecificAddress.random(),
     ]
 
     it('calls the method "length" times', async () => {
@@ -189,7 +182,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -206,11 +199,11 @@ describe(ArrayHandler.name, () => {
         'owners',
         { type: 'array', method, length: 3 },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         value: owners.map((x) => x.toString()),
         ignoreRelative: undefined,
       })
@@ -221,7 +214,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -235,11 +228,11 @@ describe(ArrayHandler.name, () => {
         'owners',
         { type: 'array', method, length: 3, ignoreRelative: true },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         value: owners.map((x) => x.toString()),
         ignoreRelative: true,
       })
@@ -250,7 +243,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -264,13 +257,13 @@ describe(ArrayHandler.name, () => {
         'owners',
         { type: 'array', method, length: '{{ foo }}' },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {
         foo: { field: 'foo', value: 3 },
       })
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         value: owners.map((x) => x.toString()),
         ignoreRelative: undefined,
       })
@@ -281,7 +274,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -298,7 +291,6 @@ describe(ArrayHandler.name, () => {
         'owners',
         { type: 'array', method, length: 3 },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
@@ -312,7 +304,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -325,15 +317,11 @@ describe(ArrayHandler.name, () => {
         },
       })
 
-      const handler = new ArrayHandler(
-        'owners',
-        { type: 'array', method },
-        [],
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new ArrayHandler('owners', { type: 'array', method }, [])
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         value: owners.map((x) => x.toString()),
         ignoreRelative: undefined,
       })
@@ -344,7 +332,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -357,12 +345,7 @@ describe(ArrayHandler.name, () => {
         },
       })
 
-      const handler = new ArrayHandler(
-        'owners',
-        { type: 'array', method },
-        [],
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new ArrayHandler('owners', { type: 'array', method }, [])
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'owners',
@@ -375,21 +358,17 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>() {
-          return EthereumAddress.ZERO as T
+          return ChainSpecificAddress.ZERO('ethereum') as T
         },
       })
 
-      const handler = new ArrayHandler(
-        'owners',
-        { type: 'array', method },
-        [],
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new ArrayHandler('owners', { type: 'array', method }, [])
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         error: 'Too many values. Provide a higher maxLength value',
-        value: new Array(100).fill('0x' + '0'.repeat(40)),
+        value: new Array(100).fill(ChainSpecificAddress.ZERO('ethereum')),
       })
     })
 
@@ -398,7 +377,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>() {
-          return EthereumAddress.ZERO as T
+          return ChainSpecificAddress.ZERO('ethereum') as T
         },
       })
 
@@ -406,13 +385,13 @@ describe(ArrayHandler.name, () => {
         'owners',
         { type: 'array', method, maxLength: 15 },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         error: 'Too many values. Provide a higher maxLength value',
-        value: new Array(15).fill('0x' + '0'.repeat(40)),
+        value: new Array(15).fill(ChainSpecificAddress.ZERO('ethereum')),
       })
     })
 
@@ -421,7 +400,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -435,23 +414,25 @@ describe(ArrayHandler.name, () => {
         'owners',
         { type: 'array', method, indices: [0, 2] },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         value: [owners[0]!.toString(), owners[2]!.toString()],
         ignoreRelative: undefined,
       })
     })
     it('returns correct order of indices', async () => {
-      const owners = new Array(10).fill(0).map(() => EthereumAddress.random())
+      const owners = new Array(10)
+        .fill(0)
+        .map(() => ChainSpecificAddress.random())
 
       const provider = mockObject<IProvider>({
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -469,11 +450,11 @@ describe(ArrayHandler.name, () => {
         'owners',
         { type: 'array', method, indices: [0, 2, 3, 4, 5, 6] },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         value: [
           owners[0],
           owners[2],
@@ -491,7 +472,7 @@ describe(ArrayHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -505,16 +486,59 @@ describe(ArrayHandler.name, () => {
         'owners',
         { type: 'array', method, indices: '{{ foo }}' },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {
         foo: { field: 'foo', value: [0, 2] },
       })
       expect(result).toEqual({
         field: 'owners',
+        fragment: arrayFragment,
         value: [owners[0]!.toString(), owners[2]!.toString()],
         ignoreRelative: undefined,
       })
+    })
+
+    it('resolves uint64 indices above the safe integer range', async () => {
+      const selectors = [1556008542357238666n, 17912061998839310979n]
+      const uint64Method =
+        'function configs(uint64 selector) view returns (uint64)'
+      const uint64ArrayFragment = getArrayFragment(
+        toFunctionFragment(uint64Method),
+      )
+      const calledSelectors: bigint[] = []
+      const provider = mockObject<IProvider>({
+        blockNumber: 123,
+        chain: 'foo',
+        async callMethod<T>(
+          passedAddress: ChainSpecificAddress,
+          _abi: string,
+          data: unknown[],
+        ) {
+          expect(passedAddress).toEqual(address)
+          calledSelectors.push(data[0] as bigint)
+          return (data[0] as bigint).toString() as T
+        },
+      })
+
+      const handler = new ArrayHandler(
+        'configs',
+        { type: 'array', method: uint64Method, indices: '{{ selectors }}' },
+        [],
+      )
+      const result = await handler.execute(provider, address, {
+        selectors: {
+          field: 'selectors',
+          value: selectors.map((x) => x.toString()),
+        },
+      })
+
+      expect(result).toEqual({
+        field: 'configs',
+        fragment: uint64ArrayFragment,
+        value: selectors.map((x) => x.toString()),
+        ignoreRelative: undefined,
+      })
+      expect(calledSelectors).toEqual(selectors)
     })
   })
 })

@@ -1,0 +1,114 @@
+import { ProjectId, UnixTime } from '@l2beat/shared-pure'
+import { DERIVATION, REASON_FOR_BEING_OTHER } from '../../common'
+import { BADGES } from '../../common/badges'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import { getOpStackDaTracking, opStackL2 } from '../../templates/opStack'
+
+const discovery = new ProjectDiscovery('worldchain')
+const genesisTimestamp = UnixTime(1719335639)
+
+export const worldchain = opStackL2({
+  ecosystemInfo: {
+    id: ProjectId('superchain'),
+    isPartOfSuperchain: true,
+  },
+  addedAt: UnixTime(1729123200), // 2024-10-17T00:00:00Z
+  genesisTimestamp,
+  discovery,
+  daTracking: [getOpStackDaTracking(discovery, { sinceBlock: 20178207 })],
+  additionalBadges: [BADGES.RaaS.Alchemy],
+  additionalPurposes: ['Identity'],
+  reasonsForBeingOther: [REASON_FOR_BEING_OTHER.CLOSED_PROOFS],
+  display: {
+    name: 'World Chain',
+    aliases: ['Worldcoin'],
+    slug: 'world',
+    description:
+      'World Chain is an OP Stack Rollup built to scale Proof of Personhood, aiming to offer priority blockspace for users with a World ID.',
+    links: {
+      websites: ['https://worldcoin.org/world-chain'],
+      bridges: [
+        'https://worldchain-mainnet.bridge.alchemy.com/',
+        'https://worldcoin.org/download-app',
+      ],
+      documentation: ['https://docs.world.org/world-chain/'],
+      explorers: [
+        'https://worldscan.org',
+        'https://worldchain-mainnet.explorer.alchemy.com/',
+        'https://worldplorer.com/',
+      ],
+      repositories: ['https://github.com/worldcoin'],
+      socialMedia: [
+        'https://x.com/worldcoin',
+        'https://discord.com/invite/worldnetwork',
+        'https://t.me/worldcoin',
+        'https://linkedin.com/company/worldcoinproject/',
+        'https://youtube.com/@worldcoinofficial',
+      ],
+      other: [
+        'https://rollup.codes/world-chain',
+        'https://growthepie.com/chains/worldchain',
+      ],
+    },
+  },
+  interopConfig: {
+    name: 'World Chain Canonical',
+    durationSplit: {
+      lockAndMint: [
+        {
+          label: 'L1 -> L2',
+          transferTypes: [
+            'opstack.L1ToL2Transfer',
+            'opstack-standardbridge.L1ToL2Transfer',
+          ],
+        },
+        {
+          label: 'L2 -> L1',
+          transferTypes: [
+            'opstack.L2ToL1Transfer',
+            'opstack-standardbridge.L2ToL1Transfer',
+          ],
+        },
+      ],
+    },
+    plugins: [
+      {
+        chain: 'worldchain',
+        plugin: 'opstack',
+        bridgeType: 'lockAndMint',
+      },
+      {
+        chain: 'worldchain',
+        plugin: 'opstack-standardbridge',
+        bridgeType: 'lockAndMint',
+      },
+    ],
+    type: 'canonical',
+  },
+  associatedTokens: ['WLD'],
+  chainConfig: {
+    name: 'worldchain',
+    coingeckoPlatform: 'world-chain',
+    sinceTimestamp: genesisTimestamp,
+    chainId: 480,
+    apis: [
+      {
+        type: 'rpc',
+        url: 'https://worldchain-mainnet.g.alchemy.com/public',
+        callsPerMinute: 300,
+      },
+    ],
+  },
+  stateDerivation: DERIVATION.OPSTACK('WORLD'),
+  isNodeAvailable: 'UnderReview',
+  milestones: [
+    {
+      title: 'World Chain Launch',
+      url: 'https://world.org/blog/announcements/world-chain-now-open-every-human', // TO UPDATE
+      date: '2024-10-17T00:00:00Z',
+      description: 'World Chain Mainnet is officially live.',
+      type: 'general',
+    },
+  ],
+  hasProperSecurityCouncil: false,
+})

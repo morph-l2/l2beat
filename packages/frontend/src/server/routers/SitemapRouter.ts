@@ -1,0 +1,36 @@
+import express from 'express'
+import { PRODUCTION_ORIGIN } from '~/consts/productionOrigin'
+import { getPagePaths } from '~/server/pagePaths'
+
+export function createSitemapRouter() {
+  const router = express.Router()
+
+  router.get('/sitemap.xml', async (_req, res) => {
+    const paths = await getPagePaths()
+
+    const urls = paths
+      .map(
+        (path) =>
+          `  <url>\n    <loc>${escapeXml(PRODUCTION_ORIGIN + path)}</loc>\n  </url>`,
+      )
+      .join('\n')
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`
+
+    res.header('Content-Type', 'application/xml').send(xml)
+  })
+
+  return router
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll("'", '&apos;')
+    .replaceAll('"', '&quot;')
+}

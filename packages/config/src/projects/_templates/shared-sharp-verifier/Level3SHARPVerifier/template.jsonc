@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "displayName": "Level3SHARPVerifier",
+  "category": "spam",
+  "description": "Legacy third-level shared StarkWare SHARP verifier retained as a fallback or historical fact registry. Its facts are safety-relevant only while an active verifier or call-proxy route still refers to it.",
+  "fields": {
+    "constructorArgs": {
+      "description": "All immutable proof-verifier dependencies, including the outer bootloader, memory-page registry, supported CPU-layout verifier array, and security configuration.",
+      "severity": "HIGH",
+      "type": "CODE_CHANGE",
+      "handler": {
+        "type": "constructorArgs",
+        "nameArgs": true
+      }
+    }
+  }
+}

@@ -1,0 +1,79 @@
+import type { TrustedSetup, ZkCatalogTag } from '@l2beat/config'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/core/tooltip/Tooltip'
+import { TechStackTag } from './TechStackTag'
+import {
+  TrustedSetupRiskDot,
+  type TrustedSetupRiskDotSize,
+} from './TrustedSetupRiskDot'
+
+interface Props {
+  trustedSetups: (TrustedSetup & {
+    proofSystem: ZkCatalogTag
+  })[]
+  dotSize?: TrustedSetupRiskDotSize
+  displayType?: 'type' | 'typeAndName'
+}
+
+export function TrustedSetupCell({
+  trustedSetups,
+  dotSize,
+  displayType = 'type',
+}: Props) {
+  const proofSystem = trustedSetups[0]?.proofSystem
+  if (trustedSetups.length === 0 || !proofSystem) return null
+
+  const worstRisk = pickWorstRisk(trustedSetups)
+
+  return (
+    <Tooltip>
+      <TooltipTrigger className="flex items-center gap-2">
+        <TrustedSetupRiskDot risk={worstRisk} size={dotSize} />
+        <TechStackTag
+          tag={proofSystem}
+          withoutTooltip
+          displayType={displayType}
+        />
+      </TooltipTrigger>
+      <TooltipContent>
+        <div className="mb-3 text-paragraph-14">
+          Trusted setups for{' '}
+          <TechStackTag
+            tag={proofSystem}
+            className="inline-block"
+            withoutTooltip
+            displayType="type"
+          />
+        </div>
+        {trustedSetups.map((trustedSetup) => {
+          return (
+            <div key={trustedSetup.id} className="flex gap-2">
+              <TrustedSetupRiskDot
+                risk={trustedSetup.risk}
+                size="sm"
+                className="shrink-0"
+              />
+              <span className="text-xs leading-normal">
+                {trustedSetup.shortDescription}
+              </span>
+            </div>
+          )
+        })}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function pickWorstRisk(trustedSetups: TrustedSetup[]): TrustedSetup['risk'] {
+  const riskHierarchy = ['red', 'yellow', 'green', 'N/A'] as const
+
+  for (const risk of riskHierarchy) {
+    if (trustedSetups.some((ts) => ts.risk === risk)) {
+      return risk
+    }
+  }
+  return 'N/A'
+}

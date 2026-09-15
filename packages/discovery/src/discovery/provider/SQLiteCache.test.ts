@@ -1,8 +1,7 @@
-import { existsSync, unlinkSync } from 'fs'
-import { assert } from '@l2beat/backend-tools'
+import { assert } from '@l2beat/shared-pure'
 import { expect } from 'earl'
+import { existsSync, unlinkSync } from 'fs'
 import sqlite3 from 'sqlite3'
-
 import { SQLiteCache } from './SQLiteCache'
 
 describe('SQLiteCache', () => {
@@ -10,10 +9,8 @@ describe('SQLiteCache', () => {
     withTemporaryFile(async (sqlCache, rqe) => {
       const key = 'key'
       const value = 'value'
-      const chain = 'ethereum'
-      const blockNumber = 1
 
-      await sqlCache.set(key, value, chain, blockNumber)
+      await sqlCache.set(key, value)
       const queriedValue = await sqlCache.get(key)
 
       const resultRaw = await rqe.query<CacheEntry[]>(
@@ -36,18 +33,13 @@ describe('SQLiteCache', () => {
   it('replaces old value in case of conflict', () =>
     withTemporaryFile(async (sqlCache, rqe) => {
       const key = 'key'
-
       const value = 'value'
-      const chain = 'ethereum'
-      const blockNumber = 1
 
       const newValue = 'newValue'
-      const newChain = 'arbitrum'
-      const newBlockNumber = 2
 
-      await sqlCache.set(key, value, chain, blockNumber)
+      await sqlCache.set(key, value)
 
-      await sqlCache.set(key, newValue, newChain, newBlockNumber)
+      await sqlCache.set(key, newValue)
 
       const resultRaw = await rqe.query<CacheEntry[]>(
         'SELECT * FROM cache WHERE key=$1',
@@ -61,8 +53,6 @@ describe('SQLiteCache', () => {
       expect(resultRaw.length).toEqual(1)
       expect(result.key).toEqual(key)
       expect(result.value).toEqual(newValue)
-      expect(result.blockNumber).toEqual(newBlockNumber)
-      expect(result.chain).toEqual(newChain)
     }))
 })
 
@@ -90,7 +80,6 @@ async function withTemporaryFile<T>(
   const file = randomSqlFile()
   const sqlCache = new SQLiteCache(file)
   const rqe = rawQueryExecutor(file)
-  await sqlCache.init()
 
   return fn(sqlCache, rqe).finally(() => destroyFile(file))
 }

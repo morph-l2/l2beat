@@ -1,51 +1,48 @@
-import { assert } from '../tools'
-import { notUndefined } from './notUndefined'
-import { pluralize } from './pluralize'
+import { assert } from '../tools/assert.js'
+import { pluralize } from './pluralize.js'
 
-const units = ['d', 'h', 'm', 's']
-const fullUnits = ['day', 'hour', 'minute', 'second']
+const units = ['y', 'mo', 'd', 'h', 'm', 's']
+const fullUnits = ['year', 'month', 'day', 'hour', 'minute', 'second']
+const secondsInUnit = [365n * 86400n, 30n * 86400n, 86400n, 3600n, 60n, 1n]
 
 export function formatSeconds(
-  seconds: number,
+  seconds: number | bigint,
   opts?: { preventRoundingUp?: boolean; fullUnit?: boolean },
 ): string {
   assert(seconds !== undefined, 'seconds is required')
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor(((seconds % 86400) % 3600) / 60)
-  const secs = Math.floor(((seconds % 86400) % 3600) % 60)
+  assert(
+    typeof seconds === 'bigint' || Number.isFinite(Number(seconds)),
+    'seconds must be finite',
+  )
 
-  const values = [days, hours, minutes, secs]
-  if (opts?.preventRoundingUp) {
-    return values
-      .map((v, i) =>
-        v > 0
-          ? opts.fullUnit
-            ? `${v} ${pluralize(v, fullUnits[i])}`
-            : `${v}${units[i]}`
-          : undefined,
-      )
-      .filter(notUndefined)
-      .join(' ')
-  }
+  const total =
+    typeof seconds === 'bigint' ? seconds : BigInt(Math.trunc(Number(seconds)))
+  const negative = total < 0n
 
-  const firstNonZeroIndex = values.findIndex((v) => v > 0)
-  if (firstNonZeroIndex === -1) {
+  let remaining = negative ? -total : total
+  const parts = secondsInUnit.map((secondsPerUnit, index) => {
+    const count = remaining / secondsPerUnit
+    remaining %= secondsPerUnit
+    return { count, index }
+  })
+
+  const nonZero = parts.filter((part) => part.count > 0n)
+  const mostSignificant = nonZero.at(0)
+  if (!mostSignificant) {
     return opts?.fullUnit ? '0 seconds' : '0s'
   }
 
-  return values
-    .slice(firstNonZeroIndex, firstNonZeroIndex + 2)
-    .map((v, i) =>
-      v > 0
-        ? opts?.fullUnit
-          ? `${v} ${pluralize(
-              v,
-              fullUnits.slice(firstNonZeroIndex, firstNonZeroIndex + 2)[i],
-            )}`
-          : `${v}${units.slice(firstNonZeroIndex, firstNonZeroIndex + 2)[i]}`
-        : undefined,
+  const shown = opts?.preventRoundingUp
+    ? nonZero
+    : nonZero.filter((part) => part.index <= mostSignificant.index + 1)
+
+  const formatted = shown
+    .map(({ count, index }) =>
+      opts?.fullUnit
+        ? `${count} ${pluralize(Number(count), fullUnits[index])}`
+        : `${count}${units[index]}`,
     )
-    .filter(notUndefined)
     .join(' ')
+
+  return negative ? `-${formatted}` : formatted
 }

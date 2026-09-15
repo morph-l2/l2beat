@@ -1,0 +1,35 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "worldchain",
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": [
+    "eth:0xd5ec14a83B7d95BE1E2Ac12523e2dEE12Cbeea6C",
+    "eth:0x153A69e4bb6fEDBbAaF463CB982416316c84B2dB"
+  ],
+  "names": { "eth:0x2ba529D229FDc1DA08e67F536588aE45932d030A": "Burn Caller" },
+  "overrides": {
+    "eth:0x069c4c579671f8c120b1327a73217D01Ea2EC5ea": {
+      "ignoreInWatchMode": ["permissionedGamesTotal", "gameCount"]
+    },
+    "eth:0x305d0ceBB616623AD88Ee9A3ACA56aE5984e8033": {
+      "fields": {
+        "proposer": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to post new state roots of the current layer to the host chain."
+            }
+          ]
+        },
+        "challenger": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to challenge or delete state roots proposed by a Proposer."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

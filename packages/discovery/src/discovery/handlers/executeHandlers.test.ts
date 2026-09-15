@@ -1,12 +1,12 @@
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
+import { Logger } from '@l2beat/backend-tools'
+import { Bytes, ChainSpecificAddress } from '@l2beat/shared-pure'
 import { expect, mockFn, mockObject } from 'earl'
-
-import { DiscoveryLogger } from '../DiscoveryLogger'
-import { IProvider } from '../provider/IProvider'
-import { Handler, HandlerResult } from './Handler'
+import type { IProvider } from '../provider/IProvider'
 import { executeHandlers } from './executeHandlers'
+import type { Handler, HandlerResult } from './Handler'
 import { SimpleMethodHandler } from './system/SimpleMethodHandler'
-import { ArrayHandler } from './user/ArrayHandler'
+import { ArrayHandler, getArrayFragment } from './user/ArrayHandler'
+import { CallHandler } from './user/CallHandler'
 import { StorageHandler } from './user/StorageHandler'
 import { toFunctionFragment } from './utils/toFunctionFragment'
 
@@ -31,19 +31,18 @@ describe(executeHandlers.name, () => {
     const values = await executeHandlers(
       provider,
       [
-        new StorageHandler(
-          'foo',
-          { type: 'storage', slot: 1, returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'bar',
-          { type: 'storage', slot: 2, returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
+        new StorageHandler('foo', {
+          type: 'storage',
+          slot: 1,
+          returnType: 'number',
+        }),
+        new StorageHandler('bar', {
+          type: 'storage',
+          slot: 2,
+          returnType: 'number',
+        }),
       ],
-      EthereumAddress.random(),
-      DiscoveryLogger.SILENT,
+      ChainSpecificAddress.random(),
     )
     expect<unknown[]>(values).toEqual([
       { field: 'foo', value: 123, ignoreRelative: undefined },
@@ -61,29 +60,28 @@ describe(executeHandlers.name, () => {
     const values = await executeHandlers(
       provider,
       [
-        new StorageHandler(
-          'xxx',
-          { type: 'storage', slot: '{{ foo }}', returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'yyy',
-          { type: 'storage', slot: '{{ bar }}', returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'foo',
-          { type: 'storage', slot: 1, returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'bar',
-          { type: 'storage', slot: 2, returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
+        new StorageHandler('xxx', {
+          type: 'storage',
+          slot: '{{ foo }}',
+          returnType: 'number',
+        }),
+        new StorageHandler('yyy', {
+          type: 'storage',
+          slot: '{{ bar }}',
+          returnType: 'number',
+        }),
+        new StorageHandler('foo', {
+          type: 'storage',
+          slot: 1,
+          returnType: 'number',
+        }),
+        new StorageHandler('bar', {
+          type: 'storage',
+          slot: 2,
+          returnType: 'number',
+        }),
       ],
-      EthereumAddress.random(),
-      DiscoveryLogger.SILENT,
+      ChainSpecificAddress.random(),
     )
     expect<unknown[]>(values).toEqual([
       { field: 'foo', value: 123, ignoreRelative: undefined },
@@ -105,59 +103,42 @@ describe(executeHandlers.name, () => {
     const values = await executeHandlers(
       provider,
       [
-        new StorageHandler(
-          'aab',
-          {
-            type: 'storage',
-            slot: '{{ a }}',
-            offset: '{{ ab }}',
-            returnType: 'number',
-          },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'ab',
-          {
-            type: 'storage',
-            slot: '{{ a }}',
-            offset: '{{ b }}',
-            returnType: 'number',
-          },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'bb',
-          {
-            type: 'storage',
-            slot: '{{ b }}',
-            offset: '{{ b }}',
-            returnType: 'number',
-          },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'a',
-          { type: 'storage', slot: 1, returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'aabbb',
-          {
-            type: 'storage',
-            slot: '{{ aab }}',
-            offset: '{{ bb }}',
-            returnType: 'number',
-          },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'b',
-          { type: 'storage', slot: 2, returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
+        new StorageHandler('aab', {
+          type: 'storage',
+          slot: '{{ a }}',
+          offset: '{{ ab }}',
+          returnType: 'number',
+        }),
+        new StorageHandler('ab', {
+          type: 'storage',
+          slot: '{{ a }}',
+          offset: '{{ b }}',
+          returnType: 'number',
+        }),
+        new StorageHandler('bb', {
+          type: 'storage',
+          slot: '{{ b }}',
+          offset: '{{ b }}',
+          returnType: 'number',
+        }),
+        new StorageHandler('a', {
+          type: 'storage',
+          slot: 1,
+          returnType: 'number',
+        }),
+        new StorageHandler('aabbb', {
+          type: 'storage',
+          slot: '{{ aab }}',
+          offset: '{{ bb }}',
+          returnType: 'number',
+        }),
+        new StorageHandler('b', {
+          type: 'storage',
+          slot: 2,
+          returnType: 'number',
+        }),
       ],
-      EthereumAddress.random(),
-      DiscoveryLogger.SILENT,
+      ChainSpecificAddress.random(),
     )
     expect<unknown[]>(values).toEqual([
       { field: 'a', value: 100, ignoreRelative: undefined },
@@ -173,15 +154,8 @@ describe(executeHandlers.name, () => {
     const provider = mockObject<IProvider>()
     const promise = executeHandlers(
       provider,
-      [
-        new StorageHandler(
-          'a',
-          { type: 'storage', slot: '{{ a }}' },
-          DiscoveryLogger.SILENT,
-        ),
-      ],
-      EthereumAddress.random(),
-      DiscoveryLogger.SILENT,
+      [new StorageHandler('a', { type: 'storage', slot: '{{ a }}' })],
+      ChainSpecificAddress.random(),
     )
     await expect(promise).toBeRejectedWith('Impossible to resolve dependencies')
   })
@@ -190,15 +164,8 @@ describe(executeHandlers.name, () => {
     const provider = mockObject<IProvider>()
     const promise = executeHandlers(
       provider,
-      [
-        new StorageHandler(
-          'a',
-          { type: 'storage', slot: '{{ foo }}' },
-          DiscoveryLogger.SILENT,
-        ),
-      ],
-      EthereumAddress.random(),
-      DiscoveryLogger.SILENT,
+      [new StorageHandler('a', { type: 'storage', slot: '{{ foo }}' })],
+      ChainSpecificAddress.random(),
     )
     await expect(promise).toBeRejectedWith('Impossible to resolve dependencies')
   })
@@ -208,19 +175,10 @@ describe(executeHandlers.name, () => {
     const promise = executeHandlers(
       provider,
       [
-        new StorageHandler(
-          'a',
-          { type: 'storage', slot: '{{ b }}' },
-          DiscoveryLogger.SILENT,
-        ),
-        new StorageHandler(
-          'b',
-          { type: 'storage', slot: '{{ a }}' },
-          DiscoveryLogger.SILENT,
-        ),
+        new StorageHandler('a', { type: 'storage', slot: '{{ b }}' }),
+        new StorageHandler('b', { type: 'storage', slot: '{{ a }}' }),
       ],
-      EthereumAddress.random(),
-      DiscoveryLogger.SILENT,
+      ChainSpecificAddress.random(),
     )
     await expect(promise).toBeRejectedWith('Impossible to resolve dependencies')
   })
@@ -229,7 +187,7 @@ describe(executeHandlers.name, () => {
     class FunkyHandler implements Handler {
       dependencies: string[] = []
       field = 'foo'
-      logger = DiscoveryLogger.SILENT
+      logger = Logger.SILENT
       async execute(): Promise<HandlerResult> {
         throw new Error('oops')
       }
@@ -239,14 +197,13 @@ describe(executeHandlers.name, () => {
     const values = await executeHandlers(
       provider,
       [new FunkyHandler()],
-      EthereumAddress.random(),
-      DiscoveryLogger.SILENT,
+      ChainSpecificAddress.random(),
     )
     expect<unknown[]>(values).toEqual([{ field: 'foo', error: 'oops' }])
   })
 
   it('handles multicallable handlers', async () => {
-    const ADDRESS = EthereumAddress.random()
+    const ADDRESS = ChainSpecificAddress.random()
     const method = 'function foo() external view returns (uint256)'
     const fragment = toFunctionFragment(method)
     const provider = mockObject<IProvider>({
@@ -258,15 +215,14 @@ describe(executeHandlers.name, () => {
     const values = await executeHandlers(
       provider,
       [
-        new StorageHandler(
-          'a',
-          { type: 'storage', slot: 1, returnType: 'number' },
-          DiscoveryLogger.SILENT,
-        ),
-        new SimpleMethodHandler(method, DiscoveryLogger.SILENT),
+        new StorageHandler('a', {
+          type: 'storage',
+          slot: 1,
+          returnType: 'number',
+        }),
+        new SimpleMethodHandler(method),
       ],
       ADDRESS,
-      DiscoveryLogger.SILENT,
     )
 
     expect(values).toEqualUnsorted([
@@ -276,7 +232,7 @@ describe(executeHandlers.name, () => {
   })
 
   it('handles multicallable handlers with dependencies', async () => {
-    const ADDRESS = EthereumAddress.random()
+    const ADDRESS = ChainSpecificAddress.random()
     const method = 'function foo() external view returns (uint256)'
     const fragment = toFunctionFragment(method)
     const provider = mockObject<IProvider>({
@@ -284,6 +240,8 @@ describe(executeHandlers.name, () => {
       blockNumber: 123,
       chain: 'foo',
     })
+    const arrayMethod = 'function bar(uint256) external view returns (uint256)'
+    const arrayFragment = getArrayFragment(toFunctionFragment(arrayMethod))
     const values = await executeHandlers(
       provider,
       [
@@ -294,20 +252,75 @@ describe(executeHandlers.name, () => {
             method: 'bar',
             length: '{{ foo }}',
           },
-          ['function bar(uint256) external view returns (uint256)'],
-          DiscoveryLogger.SILENT,
+          [arrayMethod],
         ),
-        new SimpleMethodHandler(method, DiscoveryLogger.SILENT),
+        new SimpleMethodHandler(method),
       ],
       ADDRESS,
-      DiscoveryLogger.SILENT,
     )
 
     expect(values).toEqual([
       { field: 'foo', fragment, value: 3 },
       {
         field: 'bar',
+        fragment: arrayFragment,
         value: [0x12345678, 0x12345678, 0x12345678],
+        ignoreRelative: undefined,
+      },
+    ])
+  })
+
+  it('schedules a handler that depends on a nested reference', async () => {
+    const ADDRESS = ChainSpecificAddress.random()
+    const REGISTRY = ChainSpecificAddress.random()
+    const method = 'function owner() view returns (address)'
+    const fragment = toFunctionFragment(method)
+    const provider = mockObject<IProvider>({
+      blockNumber: 123,
+      chain: 'foo',
+      async callMethod<T>(passedAddress: ChainSpecificAddress) {
+        expect(passedAddress).toEqual(REGISTRY)
+        return ADDRESS.toString() as T
+      },
+    })
+    const constructorArgs = mockObject<Handler>({
+      field: 'constructorArgs',
+      dependencies: [],
+      async execute(): Promise<HandlerResult> {
+        return {
+          field: 'constructorArgs',
+          value: { _addressesRegistry: REGISTRY.toString() },
+        }
+      },
+    })
+
+    const values = await executeHandlers(
+      provider,
+      [
+        new CallHandler(
+          'owner',
+          {
+            type: 'call',
+            method,
+            args: [],
+            address: '{{ constructorArgs._addressesRegistry }}',
+          },
+          [],
+        ),
+        constructorArgs,
+      ],
+      ADDRESS,
+    )
+
+    expect(values).toEqual([
+      {
+        field: 'constructorArgs',
+        value: { _addressesRegistry: REGISTRY.toString() },
+      },
+      {
+        field: 'owner',
+        fragment,
+        value: ADDRESS.toString(),
         ignoreRelative: undefined,
       },
     ])

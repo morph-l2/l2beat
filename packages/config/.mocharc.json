@@ -1,6 +1,7 @@
 {
   "spec": "{src,scripts}/**/*.test.ts",
-  "require": "esbuild-register",
+  "node-option": ["import=tsx"],
   "watchExtensions": "ts",
-  "extension": "ts"
+  "extension": "ts",
+  "reporter": "progress"
 }

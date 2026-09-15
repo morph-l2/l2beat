@@ -1,46 +1,60 @@
+import type { Logger } from '@l2beat/backend-tools'
+import type { Database } from '@l2beat/database'
 import {
-  ConfigReader,
-  DiscoveryChainConfig,
-  DiscoveryLogger,
-  HttpClient,
-  DiscoveryCache as IDiscoveryCache,
+  type DiscoveryChainConfig,
+  type DiscoveryPaths,
   getDiscoveryEngine,
+  type DiscoveryCache as IDiscoveryCache,
+  InMemoryCache,
+  LeveledCache,
+  TemplateService,
 } from '@l2beat/discovery'
-
-import { Peripherals } from '../../peripherals/Peripherals'
-import { DiscoveryCache } from './DiscoveryCache'
+import type { HttpClient, RpcMetricsAggregator } from '@l2beat/shared'
+import { assert } from '@l2beat/shared-pure'
+import { DatabaseCache } from './DatabaseCache'
 import { DiscoveryRunner } from './DiscoveryRunner'
+import { RedisCache } from './RedisCache'
 
 export function createDiscoveryRunner(
+  paths: DiscoveryPaths,
   http: HttpClient,
-  configReader: ConfigReader,
-  peripherals: Peripherals,
-  discoveryLogger: DiscoveryLogger,
+  db: Database,
+  discoveryLogger: Logger,
   chainConfigs: DiscoveryChainConfig[],
-  chain: string,
-  enableCache: boolean,
+  cacheEnabled: boolean,
+  cacheUri: string,
+  rpcMetricsAggregator?: RpcMetricsAggregator,
 ) {
-  let discoveryCache: IDiscoveryCache = new DiscoveryCache(peripherals.database)
-  if (!enableCache) {
-    discoveryCache = {
-      get: async () => undefined,
-      set: async () => {},
-    }
+  let discoveryCache: IDiscoveryCache = {
+    get: async () => undefined,
+    set: async () => {},
   }
 
-  const { allProviders, discoveryEngine, templateService } = getDiscoveryEngine(
+  if (cacheEnabled) {
+    const l1Cache = new InMemoryCache(5000)
+    const l2Cache = decodeCacheUri(cacheUri, db)
+    discoveryCache = new LeveledCache(l1Cache, l2Cache)
+  }
+
+  const { allProviders, discoveryEngine } = getDiscoveryEngine(
+    paths,
     chainConfigs,
     discoveryCache,
     http,
     discoveryLogger,
-    chain,
+    rpcMetricsAggregator,
   )
 
-  return new DiscoveryRunner(
-    allProviders,
-    discoveryEngine,
-    configReader,
-    chain,
-    templateService,
-  )
+  const templateService = new TemplateService(paths.discovery)
+  return new DiscoveryRunner(allProviders, discoveryEngine, templateService)
+}
+
+function decodeCacheUri(uri: string, database: Database): IDiscoveryCache {
+  if (uri === 'postgres') {
+    return new DatabaseCache(database)
+  }
+  if (uri.startsWith('redis')) {
+    return new RedisCache(uri)
+  }
+  assert(false, 'unsupported cache URI')
 }

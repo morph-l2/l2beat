@@ -1,6 +1,10 @@
-import { ContractSources } from '../discovery/source/SourceCodeService'
-import { FileContent } from './ParsedFilesManager'
+import { Hash256 } from '@l2beat/shared-pure'
+import { createHash } from 'crypto'
+import type { PerContractSource } from '../discovery/source/SourceCodeService'
+import type { ContractSource } from '../utils/IEtherscanClient'
 import { flattenStartingFrom } from './flatten'
+import { format } from './format'
+import type { FileContent } from './ParsedFilesManager'
 
 export interface HashedChunks {
   content: string
@@ -13,77 +17,101 @@ export interface HashedFileContent {
   content: string
 }
 
+const cache: Map<string, Hash256> = new Map()
+
 // Flatten the first (non-proxy) source file.
 // This functions is used to find "matching" contract templates.
 // This handles gross majority of cases and works very well
 // even when there are multiple sources.
 // In the future it may be reimplemented to support
 // all sources for comparison with templates.
-export function flattenFirstSource(
-  sources: ContractSources,
-): string | undefined {
-  const source =
-    sources.sources.length === 1 ? sources.sources[0] : sources.sources[1]
+export function getHashForMatchingFromSources(
+  perContractSources: PerContractSource[],
+): Hash256 | undefined {
+  const hashes = recalculateSourceHashes(perContractSources)
 
-  if (source === undefined) {
+  if (hashes === undefined) {
+    return undefined
+  }
+
+  return getHashToBeMatched(hashes)
+}
+
+export function getHashToBeMatched(
+  hashes: (string | undefined)[],
+): Hash256 | undefined {
+  if (hashes.length < 1) {
+    return undefined
+  }
+
+  const hashToBeMatched = hashes.length === 1 ? hashes[0] : hashes[1]
+
+  if (hashToBeMatched === undefined) {
     throw Error('No sources found')
   }
 
-  const input: FileContent[] = Object.entries(source.source.files)
+  return Hash256(hashToBeMatched)
+}
+
+export function contractFlatteningHash(
+  source: ContractSource,
+): string | undefined {
+  if (!source.isVerified) {
+    return undefined
+  }
+
+  const input: FileContent[] = Object.entries(source.files)
     .map(([fileName, content]) => ({
       path: fileName,
       content,
     }))
     .filter((e) => e.path.endsWith('.sol'))
 
-  if (input.length === 0) {
-    return undefined
-  }
+  const { name, rootFile, remappings } = source
+  const hash =
+    input.length === 0
+      ? sha2_256bit(Object.values(source.files).join('\n'))
+      : flatteningHash(flattenStartingFrom(name, rootFile, input, remappings))
 
-  const output = flattenStartingFrom(
-    source.name,
-    input,
-    source.source.remappings,
-  )
-  return output
+  return hash
 }
 
-export function removeComments(source: string): string {
-  let result = ''
-  let isInSingleLineComment = false
-  let isInMultiLineComment = false
-
-  for (let i = 0; i < source.length; i++) {
-    if (isInSingleLineComment && source[i] === '\n') {
-      isInSingleLineComment = false
-      result += source[i] // Keep newline characters
-    } else if (
-      isInMultiLineComment &&
-      source[i] === '*' &&
-      source[i + 1] === '/'
-    ) {
-      isInMultiLineComment = false
-      i++ // Skip the '/'
-    } else if (
-      !isInMultiLineComment &&
-      source[i] === '/' &&
-      source[i + 1] === '/'
-    ) {
-      isInSingleLineComment = true
-      i++ // Skip the second '/'
-    } else if (
-      !isInSingleLineComment &&
-      source[i] === '/' &&
-      source[i + 1] === '*'
-    ) {
-      isInMultiLineComment = true
-      i++ // Skip the '*'
-    } else if (!isInSingleLineComment && !isInMultiLineComment) {
-      result += source[i]
-    }
+export function flatteningHash(source: string): Hash256 {
+  const hashed = sha2_256bit(source)
+  const cached = cache.get(hashed)
+  if (cached !== undefined) {
+    return cached
   }
 
-  return result
+  const value = sha2_256bit(formatIntoHashable(source))
+  cache.set(hashed, value)
+  return value
+}
+
+function formatIntoHashable(source: string) {
+  let formatted = format(source)
+
+  if (formatted.startsWith('pragma')) {
+    const firstNewlineIndex = formatted.indexOf('\n')
+    formatted =
+      firstNewlineIndex === -1
+        ? formatted
+        : formatted.slice(firstNewlineIndex + 1)
+  }
+
+  return formatted.trim()
+}
+
+export function sha2_256bit(input: string | string[]): Hash256 {
+  const baseHash = createHash('sha256')
+  const inputs = Array.isArray(input) ? input : [input]
+
+  inputs.reduce((hash, input) => {
+    hash.update(input)
+    return hash
+  }, baseHash)
+
+  return Hash256(`0x${baseHash.digest('hex')}`)
 }
 
 export function buildSimilarityHashmap(input: string): HashedChunks[] {
@@ -165,7 +193,7 @@ export function estimateSimilarity(
     lhsIndex++
   }
 
-  return sourceCopied / Math.max(lhs.content.length, rhs.content.length)
+  return (sourceCopied * 2) / (lhs.content.length + rhs.content.length)
 }
 
 function splitLineKeepingNewlines(input: string): string[] {
@@ -200,4 +228,42 @@ function checkIfLineCountIsCorrect(input: string, lines: string[]): void {
       `Line count mismatch: ${inputLineCount} vs ${linesLineCount}`,
     )
   }
+}
+
+// Source hashes logic
+export function recalculateSourceHashes(
+  sources: PerContractSource[],
+): (string | undefined)[] | undefined {
+  const hashes = sources.map((source) => source.hash)
+
+  if (hashes.length === 0) {
+    return undefined
+  }
+
+  // if it's just one source, it must have hash defined
+  if (hashes.length === 1 && hashes[0] === undefined) {
+    return undefined
+  }
+
+  // If any source (except proxy) has undefined hash, return undefined
+  if (hashes.slice(1).some((hash) => hash === undefined)) {
+    return undefined
+  }
+
+  // Single source or proxy + impl
+  if (hashes.length === 1 || hashes.length === 2) {
+    return hashes
+  }
+
+  // >2 - Diamonds and similar with multiple 'sub-implementations'
+  const [proxy, ...implementations] = hashes
+
+  const masterHash = combineImplementationHashes(implementations as string[])
+
+  // biome-ignore lint/style/noNonNullAssertion: checked above
+  return [proxy!, masterHash]
+}
+
+export function combineImplementationHashes(hashes: string[]): Hash256 {
+  return sha2_256bit(hashes.sort())
 }

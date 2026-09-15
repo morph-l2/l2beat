@@ -1,22 +1,26 @@
 import { v4 as uuidv4 } from 'uuid'
-
-import { LoggerTransport } from '../logger/types'
-import { formatDate } from '../logger/utils'
+import { formatEcsLog } from '../logger/formatEcsLog'
+import type { LogEntry, LoggerTransport } from '../logger/types'
 import {
   ElasticSearchClient,
-  ElasticSearchClientOptions,
+  type ElasticSearchClientOptions,
 } from './ElasticSearchClient'
 
 export interface ElasticSearchTransportOptions
   extends ElasticSearchClientOptions {
+  /** UTF-8 byte threshold for CRITICAL alert when buffered size exceeds it; nothing is trimmed. */
+  bufferAlertBytes?: number
   flushInterval?: number
   indexPrefix?: string
 }
 
 export type UuidProvider = () => string
 
+export const DEFAULT_BUFFER_ALERT_BYTES = 128 * 1024 * 1024 // 128 MiB
+
 export class ElasticSearchTransport implements LoggerTransport {
   private readonly buffer: string[]
+  private readonly bufferAlertBytes: number
 
   constructor(
     private readonly options: ElasticSearchTransportOptions,
@@ -26,23 +30,17 @@ export class ElasticSearchTransport implements LoggerTransport {
     private readonly uuidProvider: UuidProvider = uuidv4,
   ) {
     this.buffer = []
+    this.bufferAlertBytes =
+      options.bufferAlertBytes ?? DEFAULT_BUFFER_ALERT_BYTES
     this.start()
   }
 
-  public debug(message: string): void {
-    this.buffer.push(message)
+  log(entry: LogEntry): void {
+    this.push(formatEcsLog(entry))
   }
 
-  public log(message: string): void {
-    this.buffer.push(message)
-  }
-
-  public warn(message: string): void {
-    this.buffer.push(message)
-  }
-
-  public error(message: string): void {
-    this.buffer.push(message)
+  push(log: string) {
+    this.buffer.push(log)
   }
 
   private start(): void {
@@ -55,16 +53,32 @@ export class ElasticSearchTransport implements LoggerTransport {
     interval.unref()
   }
 
+  /**
+   * Manually flush all buffered logs to Elastic Search.
+   * This should be called before the process exits to ensure all logs are sent.
+   */
+  public async flush(): Promise<void> {
+    await this.flushLogs()
+  }
+
   private async flushLogs(): Promise<void> {
     if (!this.buffer.length) {
       return
     }
 
+    const bufferedBytes = sumBufferUtf8Bytes(this.buffer)
+    if (bufferedBytes > this.bufferAlertBytes) {
+      await this.reportBufferOverflow(bufferedBytes, this.buffer.length)
+    }
+
+    /** In scope for `catch` so we can correlate flush failures with batched log strings. */
+    let batch: string[] = []
+
     try {
       const index = await this.createIndex()
 
       // copy buffer contents as it may change during async operations below
-      const batch = [...this.buffer]
+      batch = [...this.buffer]
 
       //clear buffer
       this.buffer.splice(0)
@@ -77,14 +91,40 @@ export class ElasticSearchTransport implements LoggerTransport {
       const response = await this.client.bulk(documents, index)
 
       if (!response.isSuccess) {
-        throw new Error('Failed to push logs to Elastic Search node', {
+        throw new Error('Failed to push some logs to Elastic Search node', {
           cause: {
-            documentErrors: response.errors,
+            failedDocuments: JSON.stringify(response.failedDocuments),
           },
         })
       }
     } catch (error) {
       console.log(error)
+      try {
+        // We want to get notified in case there is a "push time error"
+        // e.g. fields types collision https://github.com/l2beat/l2beat/pull/10136
+        // There is an additional Alert set in Kibana for this.
+        await this.client.bulk(
+          [
+            {
+              id: this.uuidProvider(),
+              ...JSON.parse(
+                formatEcsLog({
+                  time: new Date(),
+                  level: 'ERROR',
+                  message: error instanceof Error ? error.message : '',
+                  parameters: {
+                    cause:
+                      error instanceof Error
+                        ? (error.cause ?? undefined)
+                        : undefined,
+                  },
+                }),
+              ),
+            },
+          ],
+          await this.createIndex(),
+        )
+      } catch {}
     }
   }
 
@@ -99,4 +139,47 @@ export class ElasticSearchTransport implements LoggerTransport {
     }
     return indexName
   }
+
+  private async reportBufferOverflow(
+    bufferedBytes: number,
+    bufferItemCount: number,
+  ): Promise<void> {
+    try {
+      await this.client.bulk(
+        [
+          {
+            id: this.uuidProvider(),
+            ...JSON.parse(
+              formatEcsLog({
+                time: new Date(),
+                level: 'CRITICAL',
+                message: 'Elastic Search transport buffer exceeds byte budget',
+                parameters: {
+                  bufferedBytes,
+                  bufferItemCount,
+                  bufferAlertBytes: this.bufferAlertBytes,
+                },
+              }),
+            ),
+          },
+        ],
+        await this.createIndex(),
+      )
+    } catch {}
+  }
+}
+
+function sumBufferUtf8Bytes(buffer: string[]): number {
+  let sum = 0
+  for (const item of buffer) {
+    sum += Buffer.byteLength(item, 'utf8')
+  }
+  return sum
+}
+
+export function formatDate(date: Date): string {
+  const padStart = (value: number): string => value.toString().padStart(2, '0')
+  return `${padStart(date.getDate())}-${padStart(
+    date.getMonth() + 1,
+  )}-${date.getFullYear()}`
 }

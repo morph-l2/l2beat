@@ -1,32 +1,40 @@
-import { assert } from '@l2beat/backend-tools'
-import { EthereumAddress } from '@l2beat/shared-pure'
-import * as z from 'zod'
-
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
 import {
-  generateScopeVariables,
+  assert,
+  ChainSpecificAddress,
+  EthereumAddress,
+} from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+
+import type { Transaction } from '../../../utils/IEtherscanClient'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
+import {
+  generateReferenceInput,
   getReferencedName,
   resolveReference,
 } from '../reference'
 import { valueToAddress } from '../utils/valueToAddress'
 
-export type OpStackSequencerInboxHandlerDefinition = z.infer<
+export type OpStackSequencerInboxHandlerDefinition = v.infer<
   typeof OpStackSequencerInboxHandlerDefinition
 >
-export const OpStackSequencerInboxHandlerDefinition = z.strictObject({
-  type: z.literal('opStackSequencerInbox'),
-  sequencerAddress: z.string(),
+export const OpStackSequencerInboxHandlerDefinition = v.strictObject({
+  type: v.literal('opStackSequencerInbox'),
+  sequencerAddress: v.string(),
 })
 
 export class OpStackSequencerInboxHandler implements Handler {
   readonly dependencies: string[] = []
 
+  // NOTE(radomski): Let's just say that it needs to 8/10 transactions to a
+  // single address. Saying that all transactions need to go to the same
+  // address is a little too extreme. If the sequencer EOA wants to move ETH
+  // funds or anything else this fails
+  readonly qualificationThreshold: number = 0.8
+
   constructor(
     readonly field: string,
     readonly definition: OpStackSequencerInboxHandlerDefinition,
-    readonly logger: DiscoveryLogger,
   ) {
     const dependency = getReferencedName(this.definition.sequencerAddress)
     if (dependency) {
@@ -36,43 +44,61 @@ export class OpStackSequencerInboxHandler implements Handler {
 
   async execute(
     provider: IProvider,
-    currentContractAddress: EthereumAddress,
+    currentContractAddress: ChainSpecificAddress,
     previousResults: Record<string, HandlerResult | undefined>,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, [
-      'Checking OP Stack Sequencer Inbox Address',
-    ])
-    const scopeVariables = generateScopeVariables(
+    const referenceInput = generateReferenceInput(
+      previousResults,
       provider,
       currentContractAddress,
     )
-
     const resolved = resolveReference(
       this.definition.sequencerAddress,
-      previousResults,
-      scopeVariables,
+      referenceInput,
     )
     const sequencerAddress = valueToAddress(resolved)
 
-    const last10Txs = await provider.raw(
+    const lastTxs = await provider.raw(
       `optimism_sequencer_100.${sequencerAddress}.${provider.blockNumber}`,
       ({ etherscanClient }) =>
-        etherscanClient.getLast10OutgoingTxs(
+        etherscanClient.getAtMost10RecentOutgoingTxs(
           sequencerAddress,
           provider.blockNumber,
         ),
     )
 
-    // check if all last 10 txs have the same to address
-    const toAddress = last10Txs[0]?.to
-    assert(toAddress, 'No to address found')
-    for (const tx of last10Txs) {
-      assert(tx.to === toAddress, 'Different to address')
-    }
-
     return {
       field: this.field,
-      value: toAddress.toString(),
+      value: this.getInboxAddress(provider, lastTxs),
     }
+  }
+
+  getInboxAddress(provider: IProvider, lastTxs: Transaction[]): string {
+    if (lastTxs.length === 0) {
+      return ChainSpecificAddress.fromLong(provider.chain, EthereumAddress.ZERO)
+    }
+
+    const toAddresses = lastTxs.map((tx) => tx.to)
+    const occurrence = toAddresses.reduce(
+      (acc, address) => {
+        const str = address.toString()
+        acc[str] ??= 0
+        acc[str] += 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
+    const entries = Object.entries(occurrence).sort((a, b) => {
+      return b[1] - a[1]
+    })
+
+    // biome-ignore lint/style/noNonNullAssertion: we know it's there
+    const [inboxAddress, addressFrequency] = entries[0]!
+    assert(
+      addressFrequency / lastTxs.length >= this.qualificationThreshold,
+      'Sequencer posts too many different addresses',
+    )
+
+    return inboxAddress
   }
 }

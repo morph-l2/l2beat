@@ -1,7 +1,7 @@
-import { EthereumAddress, Hash256, UnixTime } from '@l2beat/shared-pure'
-import { BlockscoutClient } from './BlockscoutClient'
-import { EtherscanClient } from './EtherscanClient'
-import { HttpClient } from './HttpClient'
+import { Logger } from '@l2beat/backend-tools'
+import type { HttpClient } from '@l2beat/shared'
+import type { EthereumAddress, Hash256, UnixTime } from '@l2beat/shared-pure'
+import { CombiningEtherscanClient } from './CombiningEtherscanClient'
 
 // If a given instance of Etherscan does not support some endpoint set a
 // corresponding variable to true, otherwise do not set to anything -
@@ -10,29 +10,75 @@ export interface EtherscanUnsupportedMethods {
   getContractCreation?: boolean
 }
 
-export interface EtherscanExplorerConfig {
+interface EtherscanExplorerConfig {
   type: 'etherscan'
+  url: string
+  chainId: number
+  apiKey: string
+  unsupported?: EtherscanUnsupportedMethods
+}
+
+interface EtherscanV1ExplorerConfig {
+  type: 'etherscan-v1'
   url: string
   apiKey: string
   unsupported?: EtherscanUnsupportedMethods
 }
 
-export interface BlockscoutExplorerConfig {
+interface BlockscoutExplorerConfig {
   type: 'blockscout'
   url: string
   unsupported?: EtherscanUnsupportedMethods
 }
 
-export type ExplorerConfig = EtherscanExplorerConfig | BlockscoutExplorerConfig
+interface RoutescanExplorerConfig {
+  type: 'routescan'
+  url: string
+  unsupported?: EtherscanUnsupportedMethods
+}
+
+interface SourcifyExplorerConfig {
+  type: 'sourcify'
+  chainId: number
+}
+
+export interface Transaction {
+  input: string
+  to: EthereumAddress
+  hash: Hash256
+}
+
+export type ExplorerConfig =
+  | EtherscanExplorerConfig
+  | EtherscanV1ExplorerConfig
+  | BlockscoutExplorerConfig
+  | RoutescanExplorerConfig
+  | SourcifyExplorerConfig
 
 export interface ContractSource {
   name: string
+  rootFile: string | undefined
   isVerified: boolean
   abi: string[]
   solidityVersion: string
   constructorArguments: string
   files: Record<string, string>
   remappings: string[]
+  libraries: Record<string, EthereumAddress>
+  compilerSettings?: {
+    optimizer?: { enabled?: boolean; runs?: number }
+    evmVersion?: string
+    viaIR?: boolean
+    metadata?: {
+      bytecodeHash?: string
+      useLiteralContent?: boolean
+      appendCBOR?: boolean
+    }
+    debug?: {
+      revertStrings: string
+      debugInfo?: string[]
+    }
+  }
 }
 
 export interface IEtherscanClient {
@@ -43,30 +89,16 @@ export interface IEtherscanClient {
   ): Promise<Hash256 | undefined>
 
   getFirstTxTimestamp(address: EthereumAddress): Promise<UnixTime>
-  getLast10OutgoingTxs(
+  getAtMost10RecentOutgoingTxs(
     address: EthereumAddress,
     blockNumber: number,
-  ): Promise<{ input: string; to: EthereumAddress; hash: Hash256 }[]>
+  ): Promise<Transaction[]>
 }
 
 export function getExplorerClient(
   httpClient: HttpClient,
-  config: ExplorerConfig,
+  configs: ExplorerConfig[],
+  logger: Logger = Logger.SILENT,
 ): IEtherscanClient {
-  switch (config.type) {
-    case 'etherscan': {
-      return EtherscanClient.createForDiscovery(
-        httpClient,
-        config.url,
-        config.apiKey,
-        config.unsupported,
-      )
-    }
-    case 'blockscout': {
-      return new BlockscoutClient(httpClient, config.url, config.unsupported)
-    }
-    default: {
-      throw new Error('Unknown explorer type')
-    }
-  }
+  return new CombiningEtherscanClient(httpClient, configs, logger)
 }

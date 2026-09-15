@@ -1,54 +1,75 @@
-import { Logger } from '@l2beat/backend-tools'
-import { notUndefined } from '@l2beat/shared-pure'
-
-import { CoingeckoClient, CoingeckoQueryService } from '@l2beat/shared'
-import { Config } from '../../config'
-import { Peripherals } from '../../peripherals/Peripherals'
-import { BigQueryClient } from '../../peripherals/bigquery/BigQueryClient'
-import { Clock } from '../../tools/Clock'
+import { CoingeckoQueryService, DuneQueryService } from '@l2beat/shared'
+import { assert } from '@l2beat/shared-pure'
+import partition from 'lodash/partition'
+import uniqBy from 'lodash/uniqBy'
+import { HourlyIndexer } from '../../tools/HourlyIndexer'
 import { IndexerService } from '../../tools/uif/IndexerService'
-import {
-  ApplicationModule,
-  ApplicationModuleWithIndexer,
-} from '../ApplicationModule'
-import { HourlyIndexer } from './HourlyIndexer'
-import { TrackedTxsClient } from './TrackedTxsClient'
-import { TrackedTxsIndexer } from './TrackedTxsIndexer'
-import { createTrackedTxsStatusRouter } from './api/TrackedTxsStatusRouter'
-import { createL2CostsModule } from './modules/l2-costs/L2CostsModule'
+import type { ApplicationModule, ModuleDependencies } from '../types'
 import { L2CostsAggregatorIndexer } from './modules/l2-costs/indexers/L2CostsAggregatorIndexer'
 import { L2CostsPricesIndexer } from './modules/l2-costs/indexers/L2CostsPricesIndexer'
-import { createLivenessModule } from './modules/liveness/LivenessModule'
+import { createL2CostsModule } from './modules/l2-costs/L2CostsModule'
 import { AnomaliesIndexer } from './modules/liveness/indexers/AnomaliesIndexer'
 import { LivenessAggregatingIndexer } from './modules/liveness/indexers/LivenessAggregatingIndexer'
+import { createLivenessModule } from './modules/liveness/LivenessModule'
+import { TrackedTxsClient } from './TrackedTxsClient'
+import { TrackedTxsIndexer } from './TrackedTxsIndexer'
+import { createTrackedTxsTrpcRouter } from './trpc/router'
 
 export function createTrackedTxsModule(
-  config: Config,
-  logger: Logger,
-  peripherals: Peripherals,
-  clock: Clock,
-): ApplicationModuleWithIndexer<TrackedTxsIndexer> | undefined {
+  deps: ModuleDependencies,
+): ApplicationModule | undefined {
+  let { config, logger, db, providers, clock } = deps
+
   if (!config.trackedTxsConfig) {
     logger.info('TrackedTxsModule disabled')
     return
   }
 
-  const indexerService = new IndexerService(peripherals.database)
+  logger = logger.tag({ module: 'tracked-txs' })
 
-  const hourlyIndexer = new HourlyIndexer(logger, clock, 'tracked-txs')
-  const bigQueryClient = peripherals.getClient(
-    BigQueryClient,
-    config.trackedTxsConfig.bigQuery,
+  const indexerService = new IndexerService(db)
+
+  const duneClient = providers.clients.dune
+  assert(duneClient, 'Dune client is required')
+
+  const duneQueryService = new DuneQueryService({
+    logger,
+    duneClient,
+  })
+
+  const trackedTxsClient = new TrackedTxsClient(duneQueryService, logger)
+  const trpcRouter = createTrackedTxsTrpcRouter({
+    projects: config.trackedTxsConfig.projects,
+  })
+  const runtimeConfigurations = config.trackedTxsConfig.projects.flatMap(
+    (project) => project.configurations,
   )
 
-  const trackedTxsClient = new TrackedTxsClient(bigQueryClient)
+  const hourlyIndexer = new HourlyIndexer(logger, clock, {
+    onTick: async (targetTimestamp) => {
+      const [l2CostsConfigs, livenessConfigs] = partition(
+        runtimeConfigurations,
+        (c) => c.type === 'l2costs',
+      )
+      await db.syncMetadata.upsertMany([
+        // There might be multiple configurations for the same project
+        // so we need to uniq them
+        ...uniqBy(l2CostsConfigs, (c) => c.projectId).map((c) => ({
+          feature: 'l2costs' as const,
+          id: c.projectId,
+          target: targetTimestamp,
+        })),
+        ...uniqBy(livenessConfigs, (c) => c.projectId).map((c) => ({
+          feature: 'liveness' as const,
+          id: c.projectId,
+          target: targetTimestamp,
+        })),
+      ])
+    },
+  })
 
-  const runtimeConfigurations = config.projects
-    .flatMap((project) => project.trackedTxsConfig)
-    .filter(notUndefined)
-
-  const livenessModule = createLivenessModule(config, logger, peripherals)
-  const l2costsModule = createL2CostsModule(config, logger, peripherals)
+  const livenessModule = createLivenessModule(deps)
+  const l2costsModule = createL2CostsModule(deps)
 
   const subModules: (ApplicationModule | undefined)[] = [
     livenessModule,
@@ -56,29 +77,29 @@ export function createTrackedTxsModule(
   ]
 
   const updaters = [livenessModule?.updater, l2costsModule?.updater].filter(
-    notUndefined,
+    (x) => x !== undefined,
   )
 
-  const minTimestamp = config.trackedTxsConfig.minTimestamp.toNumber()
+  const minTimestamp = config.trackedTxsConfig.minTimestamp
 
-  const trackedTxsIndexer = new TrackedTxsIndexer({
+  const trackedTxsIndexer = new TrackedTxsIndexer(
+    {
+      parents: [hourlyIndexer],
+      indexerService,
+      trackedTxsClient,
+      configurations: runtimeConfigurations.map((c) => ({
+        properties: c,
+        minHeight:
+          c.sinceTimestamp < minTimestamp ? minTimestamp : c.sinceTimestamp,
+        maxHeight: c.untilTimestamp ?? null,
+        id: c.id,
+      })),
+      updaters,
+      db,
+      projects: config.trackedTxsConfig.projects,
+    },
     logger,
-    parents: [hourlyIndexer],
-    indexerService,
-    trackedTxsClient,
-    configurations: runtimeConfigurations.map((c) => ({
-      properties: c,
-      minHeight:
-        c.sinceTimestamp.toNumber() < minTimestamp
-          ? minTimestamp
-          : c.sinceTimestamp.toNumber(),
-      maxHeight: c.untilTimestamp?.toNumber() ?? null,
-      id: c.id,
-    })),
-    updaters,
-    db: peripherals.database,
-    serializeConfiguration: (config) => JSON.stringify(config),
-  })
+  )
 
   let l2CostPricesIndexer: L2CostsPricesIndexer | undefined
   let l2CostsAggregatorIndexer: L2CostsAggregatorIndexer | undefined
@@ -87,52 +108,60 @@ export function createTrackedTxsModule(
     config.trackedTxsConfig.uses.l2costs &&
     config.trackedTxsConfig.uses.l2costs.aggregatorEnabled
   ) {
-    const coingeckoClient = peripherals.getClient(CoingeckoClient, {
-      apiKey: config.trackedTxsConfig.uses.l2costs.coingeckoApiKey,
-    })
+    const coingeckoClient = providers.clients.coingecko
+    const coingeckoQueryService = new CoingeckoQueryService(
+      coingeckoClient,
+      logger.tag({ tag: 'trackedTxs' }),
+    )
 
-    const coingeckoQueryService = new CoingeckoQueryService(coingeckoClient)
+    l2CostPricesIndexer = new L2CostsPricesIndexer(
+      {
+        coingeckoQueryService,
+        db,
+        parents: [hourlyIndexer],
+        indexerService,
+        minHeight: config.trackedTxsConfig.minTimestamp,
+      },
+      logger.tag({ feature: 'costs' }),
+    )
 
-    l2CostPricesIndexer = new L2CostsPricesIndexer({
-      coingeckoQueryService,
-      db: peripherals.database,
-      parents: [hourlyIndexer],
-      indexerService,
-      minHeight: config.trackedTxsConfig.minTimestamp.toNumber(),
-      logger,
-    })
-
-    l2CostsAggregatorIndexer = new L2CostsAggregatorIndexer({
-      db: peripherals.database,
-      parents: [trackedTxsIndexer, l2CostPricesIndexer],
-      indexerService,
-      minHeight: config.trackedTxsConfig.minTimestamp.toNumber(),
-      logger,
-      projects: config.projects,
-    })
+    l2CostsAggregatorIndexer = new L2CostsAggregatorIndexer(
+      {
+        db,
+        parents: [trackedTxsIndexer, l2CostPricesIndexer],
+        indexerService,
+        minHeight: config.trackedTxsConfig.minTimestamp,
+        projects: config.trackedTxsConfig.projects,
+      },
+      logger.tag({ feature: 'costs' }),
+    )
   }
 
   let livenessAggregatingIndexer: LivenessAggregatingIndexer | undefined
   let anomaliesIndexer: AnomaliesIndexer | undefined
 
   if (config.trackedTxsConfig.uses.liveness) {
-    livenessAggregatingIndexer = new LivenessAggregatingIndexer({
-      db: peripherals.database,
-      projects: config.projects,
-      parents: [trackedTxsIndexer],
-      indexerService,
-      minHeight: config.trackedTxsConfig.minTimestamp.toNumber(),
-      logger,
-    })
+    livenessAggregatingIndexer = new LivenessAggregatingIndexer(
+      {
+        db,
+        projects: config.trackedTxsConfig.projects,
+        parents: [trackedTxsIndexer],
+        indexerService,
+        minHeight: config.trackedTxsConfig.minTimestamp,
+      },
+      logger.tag({ feature: 'liveness' }),
+    )
 
-    anomaliesIndexer = new AnomaliesIndexer({
-      db: peripherals.database,
-      projects: config.projects,
-      parents: [trackedTxsIndexer],
-      indexerService,
-      minHeight: config.trackedTxsConfig.minTimestamp.toNumber(),
-      logger,
-    })
+    anomaliesIndexer = new AnomaliesIndexer(
+      {
+        db,
+        projects: config.trackedTxsConfig.projects,
+        parents: [trackedTxsIndexer],
+        indexerService,
+        minHeight: config.trackedTxsConfig.minTimestamp,
+      },
+      logger.tag({ feature: 'liveness' }),
+    )
   }
 
   const start = async () => {
@@ -151,11 +180,10 @@ export function createTrackedTxsModule(
   }
 
   return {
+    trpc: {
+      namespace: 'trackedTxs',
+      trpcRouter,
+    },
     start,
-    routers: [
-      ...subModules.flatMap((m) => m?.routers ?? []),
-      createTrackedTxsStatusRouter({ clock, db: peripherals.database }),
-    ],
-    indexer: trackedTxsIndexer,
   }
 }

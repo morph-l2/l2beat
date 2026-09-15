@@ -1,9 +1,9 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { ChainSpecificAddress } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 import { EXEC_REVERT_MSG } from '../utils/callMethod'
+import { toFunctionFragment } from '../utils/toFunctionFragment'
 import { CallHandler } from './CallHandler'
 
 describe(CallHandler.name, () => {
@@ -17,7 +17,6 @@ describe(CallHandler.name, () => {
           args: [1, 2],
         },
         [],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.dependencies).toEqual([])
@@ -33,7 +32,6 @@ describe(CallHandler.name, () => {
           args: [1, '{{ foo }}', 2, '{{ bar }}'],
         },
         [],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.dependencies).toEqual(['foo', 'bar'])
@@ -50,10 +48,54 @@ describe(CallHandler.name, () => {
           address: '{{ quax }}',
         },
         [],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.dependencies).toEqual(['quax'])
+    })
+
+    // Only the base field is ever a field name, so only the base field can be
+    // scheduled. resolveReference walks the rest of the path at execute time.
+    it('detects the base field of a nested reference in args', () => {
+      const handler = new CallHandler(
+        'someName',
+        {
+          type: 'call',
+          method: 'function foo(uint a, uint b) view returns (uint)',
+          args: ['{{ constructorArgs._addressesRegistry }}', '{{ bar }}'],
+        },
+        [],
+      )
+
+      expect(handler.dependencies).toEqual(['constructorArgs', 'bar'])
+    })
+
+    it('detects the base field of a nested reference in inAddress', () => {
+      const handler = new CallHandler(
+        'someName',
+        {
+          type: 'call',
+          method: 'function foo(uint a, uint b) view returns (uint)',
+          args: [1, 2],
+          address: '{{ constructorArgs._addressesRegistry }}',
+        },
+        [],
+      )
+
+      expect(handler.dependencies).toEqual(['constructorArgs'])
+    })
+
+    it('detects the base field of a deeply nested reference', () => {
+      const handler = new CallHandler(
+        'someName',
+        {
+          type: 'call',
+          method: 'function foo(uint a) view returns (uint)',
+          args: ['{{ foo.bar.baz }}'],
+        },
+        [],
+      )
+
+      expect(handler.dependencies).toEqual(['foo'])
     })
   })
 
@@ -67,7 +109,6 @@ describe(CallHandler.name, () => {
           args: [1],
         },
         [],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.getMethod()).toEqual(
@@ -86,7 +127,6 @@ describe(CallHandler.name, () => {
               args: [1],
             },
             [],
-            DiscoveryLogger.SILENT,
           ),
       ).toThrow('Invalid method abi')
     })
@@ -102,23 +142,17 @@ describe(CallHandler.name, () => {
               args: [1, 2],
             },
             [],
-            DiscoveryLogger.SILENT,
           ),
       ).toThrow('Invalid method abi')
     })
 
     it('finds the method by field name', () => {
-      const handler = new CallHandler(
-        'someName',
-        { type: 'call', args: [] },
-        [
-          'function foo() view returns (uint256)',
-          'function someName(uint256 i) view returns (uint256)',
-          'function someName(uint256 a, uint256 b) view returns (uint256)',
-          'function someName() view returns (uint256)',
-        ],
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new CallHandler('someName', { type: 'call', args: [] }, [
+        'function foo() view returns (uint256)',
+        'function someName(uint256 i) view returns (uint256)',
+        'function someName(uint256 a, uint256 b) view returns (uint256)',
+        'function someName() view returns (uint256)',
+      ])
 
       expect(handler.getMethod()).toEqual(
         'function someName() view returns (uint256)',
@@ -135,7 +169,6 @@ describe(CallHandler.name, () => {
           'function someName(uint256 a, uint256 b) view returns (uint256)',
           'function someName() view returns (uint256)',
         ],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.getMethod()).toEqual(
@@ -146,16 +179,11 @@ describe(CallHandler.name, () => {
     it('throws if it cannot find the method by field name', () => {
       expect(
         () =>
-          new CallHandler(
-            'someName',
-            { type: 'call', args: [] },
-            [
-              'function foo(uint256 i) view returns (uint256)',
-              'function someName(uint256 i) view returns (uint256)',
-              'function someName(uint256 a, uint256 b) view returns (uint256)',
-            ],
-            DiscoveryLogger.SILENT,
-          ),
+          new CallHandler('someName', { type: 'call', args: [] }, [
+            'function foo(uint256 i) view returns (uint256)',
+            'function someName(uint256 i) view returns (uint256)',
+            'function someName(uint256 a, uint256 b) view returns (uint256)',
+          ]),
       ).toThrow('Cannot find a matching method for someName')
     })
 
@@ -172,7 +200,6 @@ describe(CallHandler.name, () => {
           'function bar(uint256 a, uint256 b) view returns (uint256)',
           'function bar() view returns (uint256)',
         ],
-        DiscoveryLogger.SILENT,
       )
 
       expect(handler.getMethod()).toEqual(
@@ -194,7 +221,6 @@ describe(CallHandler.name, () => {
               'function bar(uint256 i) view returns (uint256)',
               'function bar(uint256 a, uint256 b) view returns (uint256)',
             ],
-            DiscoveryLogger.SILENT,
           ),
       ).toThrow('Cannot find a matching method for bar')
     })
@@ -202,14 +228,15 @@ describe(CallHandler.name, () => {
 
   describe('execute', () => {
     const method = 'function add(uint256 a, uint256 b) view returns (uint256)'
-    const address = EthereumAddress.random()
+    const methodFragment = toFunctionFragment(method)
+    const address = ChainSpecificAddress.random()
 
     it('calls the method with the provided parameters', async () => {
       const provider = mockObject<IProvider>({
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -224,23 +251,23 @@ describe(CallHandler.name, () => {
         'add',
         { type: 'call', method, args: [1, 2] },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'add',
+        fragment: methodFragment,
         value: 3,
         ignoreRelative: undefined,
       })
     })
 
     it('calls the method with the provided parameters and address', async () => {
-      const inAddress = EthereumAddress.random()
+      const inAddress = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -260,11 +287,11 @@ describe(CallHandler.name, () => {
           address: inAddress.toString(),
         },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'add',
+        fragment: methodFragment,
         value: 3,
         ignoreRelative: undefined,
       })
@@ -275,7 +302,7 @@ describe(CallHandler.name, () => {
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -290,7 +317,6 @@ describe(CallHandler.name, () => {
         'add',
         { type: 'call', method, args: ['{{ foo }}', '{{ bar }}'] },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {
         foo: { field: 'foo', value: 1 },
@@ -298,18 +324,19 @@ describe(CallHandler.name, () => {
       })
       expect(result).toEqual({
         field: 'add',
+        fragment: methodFragment,
         value: 3,
         ignoreRelative: undefined,
       })
     })
 
     it('calls the method with the provided parameters and address as dependency', async () => {
-      const inAddress = EthereumAddress.random()
+      const inAddress = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
         blockNumber: 123,
         chain: 'foo',
         async callMethod<T>(
-          passedAddress: EthereumAddress,
+          passedAddress: ChainSpecificAddress,
           _abi: string,
           data: unknown[],
         ) {
@@ -329,7 +356,6 @@ describe(CallHandler.name, () => {
           address: '{{ someDependentAddress }}',
         },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {
         someDependentAddress: {
@@ -339,6 +365,93 @@ describe(CallHandler.name, () => {
       })
       expect(result).toEqual({
         field: 'add',
+        fragment: methodFragment,
+        value: 3,
+        ignoreRelative: undefined,
+      })
+    })
+
+    it('calls the method with parameters resolved from a nested reference', async () => {
+      const provider = mockObject<IProvider>({
+        blockNumber: 123,
+        chain: 'foo',
+        async callMethod<T>(
+          passedAddress: ChainSpecificAddress,
+          _abi: string,
+          data: unknown[],
+        ) {
+          expect(passedAddress).toEqual(address)
+          expect(data).toEqual([1, 2])
+
+          return 3 as T
+        },
+      })
+
+      const handler = new CallHandler(
+        'add',
+        {
+          type: 'call',
+          method,
+          args: ['{{ constructorArgs._a }}', '{{ constructorArgs._b }}'],
+        },
+        [],
+      )
+
+      expect(handler.dependencies).toEqual([
+        'constructorArgs',
+        'constructorArgs',
+      ])
+
+      const result = await handler.execute(provider, address, {
+        constructorArgs: {
+          field: 'constructorArgs',
+          value: { _a: 1, _b: 2 },
+        },
+      })
+      expect(result).toEqual({
+        field: 'add',
+        fragment: methodFragment,
+        value: 3,
+        ignoreRelative: undefined,
+      })
+    })
+
+    it('calls the address resolved from a nested reference', async () => {
+      const inAddress = ChainSpecificAddress.random()
+      const provider = mockObject<IProvider>({
+        blockNumber: 123,
+        chain: 'foo',
+        async callMethod<T>(
+          passedAddress: ChainSpecificAddress,
+          _abi: string,
+          data: unknown[],
+        ) {
+          expect(passedAddress).toEqual(inAddress)
+          expect(data).toEqual([1, 2])
+
+          return 3 as T
+        },
+      })
+
+      const handler = new CallHandler(
+        'add',
+        {
+          type: 'call',
+          method,
+          args: [1, 2],
+          address: '{{ constructorArgs._addressesRegistry }}',
+        },
+        [],
+      )
+      const result = await handler.execute(provider, address, {
+        constructorArgs: {
+          field: 'constructorArgs',
+          value: { _addressesRegistry: inAddress.toString() },
+        },
+      })
+      expect(result).toEqual({
+        field: 'add',
+        fragment: methodFragment,
         value: 3,
         ignoreRelative: undefined,
       })
@@ -357,11 +470,11 @@ describe(CallHandler.name, () => {
         'add',
         { type: 'call', method, args: [1, 2] },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'add',
+        fragment: methodFragment,
         error: 'oops',
         ignoreRelative: undefined,
       })
@@ -380,11 +493,11 @@ describe(CallHandler.name, () => {
         'add',
         { type: 'call', method, args: [1, 2], ignoreRelative: true },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'add',
+        fragment: methodFragment,
         value: 3,
         ignoreRelative: true,
       })
@@ -403,7 +516,6 @@ describe(CallHandler.name, () => {
         'add',
         { type: 'call', method, args: [1, 2], expectRevert: true },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
@@ -426,12 +538,12 @@ describe(CallHandler.name, () => {
         'add',
         { type: 'call', method, args: [1, 2], expectRevert: false },
         [],
-        DiscoveryLogger.SILENT,
       )
       const result = await handler.execute(provider, address, {})
       expect(result).toEqual({
         field: 'add',
         error: EXEC_REVERT_MSG,
+        fragment: methodFragment,
         ignoreRelative: undefined,
       })
     })

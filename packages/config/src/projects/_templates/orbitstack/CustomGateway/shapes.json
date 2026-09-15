@@ -1,0 +1,17 @@
+{
+  "L1CustomGateway": {
+    "hash": "0xbd18fb9954c1ed251b5c75e94e963af99e6dbd374c00385d7ef041211fb39245",
+    "address": "eth:0xC8D26aB9e132C79140b3376a0Ac7932E4680Aa45",
+    "blockNumber": 22188285
+  },
+  "L1CustomGateway_parallel": {
+    "hash": "0x72b234d766834ce04e248e42e8b5899fe3794753f48805ca4672f335a45fbc14",
+    "address": "eth:0xedB05ED1a37750833fBE85b808c872D841d00859",
+    "blockNumber": 22188285
+  },
+  "L1OrbitCustomGateway": {
+    "hash": "0x533d2e631d62dc72c526e13aab73ccd293f75cc4c136d14fbaefc29709305ad7",
+    "address": "eth:0x688c7b64776421668a91Ed4D23554d78626c8E69",
+    "blockNumber": 22188285
+  }
+}

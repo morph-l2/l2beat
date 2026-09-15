@@ -1,14 +1,13 @@
 import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
-import { expect, mockObject } from 'earl'
+import { expect, mockFn, mockObject } from 'earl'
 
-import { IProvider } from '../IProvider'
-import { MulticallClient } from './MulticallClient'
+import { type CallProvider, MulticallClient } from './MulticallClient'
 import {
   decodeMulticall3,
   encodeMulticall3,
   multicallInterface,
 } from './MulticallConfig'
-import { MulticallConfig } from './types'
+import type { MulticallConfig } from './types'
 
 describe(MulticallClient.name, () => {
   const ADDRESS_A = EthereumAddress('0x' + 'a'.repeat(40))
@@ -34,9 +33,9 @@ describe(MulticallClient.name, () => {
 
   it('falls back to individual requests for old block numbers', async () => {
     const calls: Call[] = []
-    const discoveryProvider = mockObject<IProvider>({
+    const discoveryProvider = mockObject<CallProvider>({
       async call(address, data) {
-        calls.push({ address, data })
+        calls.push({ address: address, data })
         return data
       },
     })
@@ -69,7 +68,7 @@ describe(MulticallClient.name, () => {
 
   it('uses multicall for new blocks', async () => {
     const calls: Call[] = []
-    const discoveryProvider = mockObject<IProvider>({
+    const discoveryProvider = mockObject<CallProvider>({
       async call(address, data) {
         calls.push({ address, data })
         return Bytes.fromHex(
@@ -117,7 +116,7 @@ describe(MulticallClient.name, () => {
 
   it('batches calls', async () => {
     const calls: number[] = []
-    const discoveryProvider = mockObject<IProvider>({
+    const discoveryProvider = mockObject<CallProvider>({
       async call(_, data) {
         const callCount: number = multicallInterface.decodeFunctionData(
           'tryAggregate',
@@ -150,7 +149,7 @@ describe(MulticallClient.name, () => {
   })
 
   it('offers a named interface', async () => {
-    const discoveryProvider = mockObject<IProvider>({
+    const discoveryProvider = mockObject<CallProvider>({
       async call() {
         return Bytes.fromHex(
           multicallInterface.encodeFunctionResult('tryAggregate', [
@@ -182,4 +181,41 @@ describe(MulticallClient.name, () => {
       bar: [{ success: false, data: Bytes.fromHex('0xdead') }],
     })
   })
+
+  const outOfGasMessage = [
+    'out of gas', // normal
+    'out of gas: out of gas', // whatever QuickNode is doing...
+  ]
+
+  for (const message of outOfGasMessage) {
+    it(`recalls everything individually if [${message}]`, async () => {
+      // NOTE(radomski): Amazing gambit ethers
+      const error = new Error('bad') as any
+      error['error'] = { error: { code: 123, message } }
+
+      const discoveryProvider = mockObject<CallProvider>({
+        call: mockFn().throwsOnce(error).returns(Bytes.fromHex('0x42ab')),
+      })
+
+      const multicallClient = new MulticallClient(
+        discoveryProvider,
+        TEST_MULTICALL_CONFIG,
+      )
+      const blockNumber = MULTICALL3_BLOCK + 1
+      const result = await multicallClient.multicall(
+        [
+          { address: ADDRESS_A, data: Bytes.fromHex('0x123456') },
+          { address: ADDRESS_B, data: Bytes.fromHex('0x') },
+          { address: ADDRESS_C, data: Bytes.fromHex('0xdeadbeef') },
+        ],
+        blockNumber,
+      )
+
+      expect(result).toEqual([
+        { success: true, data: Bytes.fromHex('0x42ab') },
+        { success: true, data: Bytes.fromHex('0x42ab') },
+        { success: true, data: Bytes.fromHex('0x42ab') },
+      ])
+    })
+  }
 })

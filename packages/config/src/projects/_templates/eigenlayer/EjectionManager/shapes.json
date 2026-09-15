@@ -1,0 +1,12 @@
+{
+  "EjectionManager": {
+    "hash": "0xeefbde46538c8adbfaa64d1df120c5739560f32efafc9ed70fd0f7b51d06a64f",
+    "address": "eth:0x33A517608999DF5CEfFa2b2EbA88B4461c26Af6f",
+    "blockNumber": 22188285
+  },
+  "EjectionManager_v2": {
+    "hash": "0x479a55e20f8ffd16dffa5952f97f6abd15293e57871ef06140a12860676d5327",
+    "address": "eth:0xC125fECDDabFe13f29EB287Bb8551892AEE7C98A",
+    "blockNumber": 22596592
+  }
+}

@@ -1,11 +1,9 @@
 import { EthereumAddress, UnixTime } from '@l2beat/shared-pure'
 import { expect } from 'earl'
-import { range } from 'lodash'
-
 import { getFunctionCallQuery } from './getFunctionCallQuery'
 
-const ADDRESS_1 = EthereumAddress.random()
-const ADDRESS_2 = EthereumAddress.random()
+const ADDRESS_1 = EthereumAddress('0x67e002f3a410029501eae397b63ec5f2b1f9fc96')
+const ADDRESS_2 = EthereumAddress('0xe82a80c31a78f25c5dbe7ad7d035801f518653e6')
 const SELECTOR_1 = '0x' + 'A'.repeat(8)
 const SELECTOR_2 = '0x' + 'B'.repeat(8)
 const FROM = UnixTime.fromDate(new Date('2021-01-01Z'))
@@ -15,103 +13,134 @@ const CONFIGURATIONS = [
   {
     address: ADDRESS_1,
     selector: SELECTOR_1,
-    getFullInput: false,
+    inputBytes: 4,
   },
   {
     address: ADDRESS_2,
     selector: SELECTOR_2,
-    getFullInput: true,
+    inputBytes: 'full' as const,
   },
 ]
 
+const EXPECTED_SQL = `
+    WITH
+      params AS (
+        SELECT
+          from_iso8601_timestamp('2021-01-01T00:00:00.000Z') AS t_start,
+          from_iso8601_timestamp('2021-01-02T00:00:00.000Z') AS t_end
+      ),
+      allowed_calls(to_addr, selector, input_bytes) AS (
+        VALUES
+          (0x67e002f3a410029501eae397b63ec5f2b1f9fc96, 0xaaaaaaaa, 4),(0xe82a80c31a78f25c5dbe7ad7d035801f518653e6, 0xbbbbbbbb, CAST(NULL AS bigint))
+      ),
+      traces_filtered AS (
+        SELECT
+          tr.tx_hash,
+          tr.to,
+          tr.block_time,
+          tr.input,
+          substr(tr.input, 1, 4) AS selector
+        FROM ethereum.traces tr
+        CROSS JOIN params p
+        WHERE tr.call_type = 'call'
+          AND tr.success = true
+          AND tr.block_time >= p.t_start
+          AND tr.block_time <=  p.t_end
+      ),
+      traces_allowed AS (
+        SELECT tr.*, ac.input_bytes
+        FROM traces_filtered tr
+        JOIN allowed_calls ac
+          ON tr.to = ac.to_addr
+        AND tr.selector = ac.selector
+      ),
+      txs_filtered AS (
+        SELECT
+          tx.hash,
+          tx.block_number,
+          tx.block_time,
+          tx.gas_used,
+          tx.gas_price,
+          tx.blob_versioned_hashes,
+          tx.data
+        FROM ethereum.transactions tx
+        CROSS JOIN params p
+        WHERE tx.block_time >= p.t_start
+          AND tx.block_time <=  p.t_end
+      )
+
+    SELECT DISTINCT
+      tx.hash,
+      tr.to,
+      tx.block_number,
+      tx.block_time,
+      tx.gas_used,
+      tx.gas_price,
+      tx.blob_versioned_hashes,
+      length(tx.data) AS data_length,
+      length(replace(regexp_replace(to_hex(tx.data), '([0-9A-Fa-f]{2})', '$1x'), '00x', '')) / 3 AS non_zero_bytes,
+      CASE
+        WHEN tr.input_bytes IS NULL THEN tr.input
+        ELSE substr(tr.input, 1, tr.input_bytes)
+      END AS input
+    FROM txs_filtered tx
+    JOIN traces_allowed tr
+      ON tx.hash = tr.tx_hash;
+  `
+
 describe(getFunctionCallQuery.name, () => {
   it('returns valid SQL', () => {
-    const { query, params, types, limitInGb } = getFunctionCallQuery(
-      CONFIGURATIONS,
+    const query = getFunctionCallQuery(CONFIGURATIONS, FROM, TO)
+    expect(query).toEqual(EXPECTED_SQL)
+  })
+
+  it('returns valid SQL with duplicate configurations', () => {
+    const query = getFunctionCallQuery(
+      [...CONFIGURATIONS, ...CONFIGURATIONS],
       FROM,
       TO,
     )
 
-    expect(query).toEqual(`
-    CREATE TEMP FUNCTION CalculateCalldataGasUsed(hexString STRING)
-    RETURNS INT64
-    LANGUAGE js AS """
-      var nonZeroBytes = 0;
-      var zeroBytes = 0;
+    expect(query).toEqual(EXPECTED_SQL)
+  })
 
-      for (var i = 2; i < hexString.length; i += 2) {
-        if(hexString.substr(i, 2)==='00') {
-          zeroBytes++;
-        } else {
-          nonZeroBytes++;
-        }
-      }
+  it('merges duplicates to the widest input request', () => {
+    const query = getFunctionCallQuery(
+      [
+        { address: ADDRESS_1, selector: SELECTOR_1, inputBytes: 4 },
+        { address: ADDRESS_1, selector: SELECTOR_1, inputBytes: 68 },
+        {
+          address: ADDRESS_2,
+          selector: SELECTOR_2,
+          inputBytes: 'full' as const,
+        },
+        { address: ADDRESS_2, selector: SELECTOR_2, inputBytes: 4 },
+      ],
+      FROM,
+      TO,
+    )
 
-      return 16 * nonZeroBytes + 4 * zeroBytes;
-    """;
+    expect(query).toEqual(
+      getFunctionCallQuery(
+        [
+          { address: ADDRESS_1, selector: SELECTOR_1, inputBytes: 68 },
+          {
+            address: ADDRESS_2,
+            selector: SELECTOR_2,
+            inputBytes: 'full' as const,
+          },
+        ],
+        FROM,
+        TO,
+      ),
+    )
+  })
 
-    SELECT DISTINCT
-      txs.hash,
-      traces.to_address,
-      txs.block_number,
-      txs.block_timestamp,
-      txs.receipt_gas_used,
-      txs.gas_price,
-      txs.receipt_blob_gas_used,
-      txs.receipt_blob_gas_price,
-      CalculateCalldataGasUsed(txs.input) AS calldata_gas_used,
-      (LENGTH(SUBSTR(txs.input, 3)) / 2) AS data_length,
-      CASE
-        WHEN traces.to_address IN UNNEST(?) THEN traces.input
-      ELSE
-      LEFT(traces.input, 10)
-    END
-      AS input,
-    FROM
-      bigquery-public-data.crypto_ethereum.transactions AS txs
-    JOIN
-      bigquery-public-data.crypto_ethereum.traces AS traces
-    ON
-      txs.hash = traces.transaction_hash
-      AND traces.call_type = 'call'
-      AND traces.status = 1
-      AND traces.block_timestamp >= TIMESTAMP(?)
-      AND traces.block_timestamp <= TIMESTAMP(?)
-      AND (
-        ${range(2)
-          .map(() => `(traces.to_address = ? AND traces.input LIKE ?)`)
-          .join(' OR ')}
-      )
-    WHERE
-      txs.block_timestamp >= TIMESTAMP(?)
-      AND txs.block_timestamp <= TIMESTAMP(?)
-  `)
+  it('handles empty helper tables', () => {
+    const query = getFunctionCallQuery([], FROM, TO)
 
-    expect(params).toEqual([
-      [ADDRESS_2.toLowerCase()],
-      FROM.toDate().toISOString(),
-      TO.toDate().toISOString(),
-      ADDRESS_1.toLowerCase(),
-      SELECTOR_1.toLowerCase() + '%',
-      ADDRESS_2.toLowerCase(),
-      SELECTOR_2.toLowerCase() + '%',
-      FROM.toDate().toISOString(),
-      TO.toDate().toISOString(),
-    ])
-
-    // @ts-expect-error BigQuery types are wrong
-    expect(types).toEqual([
-      ['STRING'],
-      'STRING',
-      'STRING',
-      'STRING',
-      'STRING',
-      'STRING',
-      'STRING',
-      'STRING',
-      'STRING',
-    ])
-
-    expect(limitInGb).toEqual(22)
+    expect(query).toInclude(
+      '(CAST(NULL AS varbinary), CAST(NULL AS varbinary), CAST(NULL AS bigint))',
+    )
   })
 })

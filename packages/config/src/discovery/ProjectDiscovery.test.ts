@@ -1,32 +1,21 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
-import { expect, mockObject } from 'earl'
-
 import {
-  ConfigReader,
-  DiscoveryConfig,
-  RawDiscoveryConfig,
+  type ConfigReader,
+  ConfigRegistry,
+  type DiscoveryConfig,
 } from '@l2beat/discovery'
-import {
-  contractStub,
-  discoveredJsonStub,
-  discoveredOpStackJsonStub,
-} from '../test/stubs/discoveredJson'
+import { assert, ChainSpecificAddress } from '@l2beat/shared-pure'
+import { expect, mockObject } from 'earl'
+import { contractStub, discoveredJsonStub } from '../test/stubs/discoveredJson'
 import { ProjectDiscovery } from './ProjectDiscovery'
 
 describe(ProjectDiscovery.name, () => {
   const projectName = 'ExampleProject'
   const configReader = mockObject<ConfigReader>({
-    readConfig: (projectName: string, chain: string) =>
-      mockConfig(projectName, chain),
-    readDiscovery: () => discoveredJsonStub,
+    readConfig: (projectName: string) => mockConfig(projectName),
+    readDiscoveryWithReferences: () => [discoveredJsonStub],
   })
 
-  const opConfigReader = mockObject<ConfigReader>({
-    readConfig: (projectName: string, chain: string) =>
-      mockConfig(projectName, chain),
-    readDiscovery: () => discoveredOpStackJsonStub,
-  })
-  const discovery = new ProjectDiscovery(projectName, 'ethereum', configReader)
+  const discovery = new ProjectDiscovery(projectName, configReader)
 
   describe(ProjectDiscovery.prototype.getContract.name, () => {
     it('should return contract for given address', () => {
@@ -36,7 +25,9 @@ describe(ProjectDiscovery.name, () => {
     })
 
     it('should throw an error if contract with given address does not exist', () => {
-      const nonExistingAddress = '0xF380166F8490F24AF32Bf47D1aA217FBA62B6575'
+      const nonExistingAddress = ChainSpecificAddress(
+        'eth:0xF380166F8490F24AF32Bf47D1aA217FBA62B6575',
+      )
 
       expect(() => discovery.getContract(nonExistingAddress)).toThrow(
         `Assertion Error: No contract of ${nonExistingAddress} address found (${projectName})`,
@@ -44,6 +35,7 @@ describe(ProjectDiscovery.name, () => {
     })
 
     it('should return contract for given name', () => {
+      assert(contractStub.name !== undefined)
       const contract = discovery.getContract(contractStub.name)
 
       expect(JSON.stringify(contract)).toEqual(JSON.stringify(contractStub))
@@ -68,6 +60,7 @@ describe(ProjectDiscovery.name, () => {
 
   describe(ProjectDiscovery.prototype.getContractValue.name, () => {
     it('should return given contract value', () => {
+      assert(contractStub.name !== undefined)
       const value = discovery.getContractValue(
         contractStub.name,
         'CHILD_BLOCK_INTERVAL',
@@ -76,206 +69,254 @@ describe(ProjectDiscovery.name, () => {
     })
 
     it('should throw an error if given contract value does not exist', () => {
+      assert(contractStub.name !== undefined)
+      const name = contractStub.name
       const key = 'randomValue'
-      expect(() => discovery.getContractValue(contractStub.name, key)).toThrow(
+      expect(() => discovery.getContractValue(name, key)).toThrow(
         `Assertion Error: Value of key ${key} does not exist in ${contractStub.name} contract (${projectName})`,
       )
     })
   })
 
-  describe(ProjectDiscovery.prototype.getOpStackContractDetails.name, () => {
-    const discovery = new ProjectDiscovery(
-      'ExampleProject',
-      'ethereum',
-      opConfigReader,
-    )
-
-    const upgradesProxy = {
-      upgradableBy: ['MockAdmin'],
-      upgradeDelay: 'No delay',
-    }
-
-    it('should return all op stack contracts with details and correct overrides', () => {
-      const contractDetails = discovery.getOpStackContractDetails(
-        upgradesProxy,
-        { OptimismPortal: 'MockPortal' },
-      )
-
-      expect(contractDetails).toEqual([
-        {
-          address: EthereumAddress(
-            '0x48d7A6bbc428bca019A560cF3e8EA5364395Aad3',
-          ),
-          description:
-            'The L2OutputOracle contract contains a list of proposed state roots which Proposers assert to be a result of block execution. Currently only the PROPOSER address can submit new state roots.',
-          name: 'L2OutputOracle',
-          chain: 'ethereum',
-          upgradableBy: ['MockAdmin'],
-          upgradeDelay: 'No delay',
-          upgradeability: {
-            admins: [
-              EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-            ],
-            implementations: [
-              EthereumAddress('0x29510c3ac0248bBE92FDb57bd2cBAF7216cC217a'),
-            ],
-            proxyType: 'EIP1967 proxy',
-          },
-        },
-        {
-          address: EthereumAddress(
-            '0x0a2CCDbBD00f61724C485518B940Ab25abe832aA',
-          ),
-          description:
-            'The MockPortal contract is the main entry point to deposit funds from L1 to L2. It also allows to prove and finalize withdrawals.',
-          name: 'MockPortal',
-          chain: 'ethereum',
-          upgradableBy: ['MockAdmin'],
-          upgradeDelay: 'No delay',
-          upgradeability: {
-            admins: [
-              EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-            ],
-            implementations: [
-              EthereumAddress('0x1b927019071A2a9C2b852Fd36f7238D2376B82FA'),
-            ],
-            proxyType: 'EIP1967 proxy',
-          },
-        },
-        {
-          address: EthereumAddress(
-            '0x6Dda3a70B9946fA8C015904d9E2BEC86ecE4E745',
-          ),
-          description:
-            'It contains configuration parameters such as the Sequencer address, the L2 gas limit and the unsafe block signer address.',
-          name: 'SystemConfig',
-          chain: 'ethereum',
-          upgradableBy: ['MockAdmin'],
-          upgradeDelay: 'No delay',
-          upgradeability: {
-            admins: [
-              EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-            ],
-            implementations: [
-              EthereumAddress('0xeba2dc4CC210e885F60b5feA41FDEab0C6527fdc'),
-            ],
-            proxyType: 'EIP1967 proxy',
-          },
-        },
-        {
-          address: EthereumAddress(
-            '0x17bFa0561d9Ae73e05EcEAEB6663aDc85fA1d3E2',
-          ),
-          description:
-            "The L1CrossDomainMessenger (L1xDM) contract sends messages from L1 to L2, and relays messages from L2 onto L1. In the event that a message sent from L1 to L2 is rejected for exceeding the L2 epoch gas limit, it can be resubmitted via this contract's replay function.",
-          name: 'L1CrossDomainMessenger',
-          chain: 'ethereum',
-          upgradableBy: ['MockAdmin'],
-          upgradeDelay: 'No delay',
-          upgradeability: {
-            admins: [],
-            implementations: [
-              EthereumAddress('0x2150Bc3c64cbfDDbaC9815EF615D6AB8671bfe43'),
-            ],
-            proxyType: 'resolved delegate proxy',
-          },
-        },
-        {
-          address: EthereumAddress(
-            '0xeBec795c9c8bBD61FFc14A6662944748F299cAcf',
-          ),
-          description:
-            'The L1StandardBridge contract is the main entry point to deposit ERC20 tokens from L1 to L2.',
-          name: 'L1StandardBridge',
-          chain: 'ethereum',
-          upgradableBy: ['MockAdmin'],
-          upgradeDelay: 'No delay',
-          upgradeability: {
-            proxyType: 'EIP1967 proxy',
-            implementations: [
-              EthereumAddress('0xC70dcb11c0673b0BBE2F415105fA2B15Ac58339f'),
-            ],
-            admins: [
-              EthereumAddress('0x543bA4AADBAb8f9025686Bd03993043599c6fB04'),
-            ],
-          },
-        },
-      ])
-    })
-  })
-
-  describe(ProjectDiscovery.prototype.getOpStackPermissions.name, () => {
-    const discovery = new ProjectDiscovery(
-      'ExampleProject',
-      'ethereum',
-      opConfigReader,
-    )
-
-    it('should return all op stack permissions with correct overrides', () => {
-      const permissions = discovery.getOpStackPermissions()
-
-      expect(permissions).toEqual([
-        {
-          accounts: [
-            {
-              address: EthereumAddress(
-                '0x543bA4AADBAb8f9025686Bd03993043599c6fB04',
-              ),
-              type: 'Contract',
-            },
-          ],
-          description:
-            'Admin of SystemConfig, L2OutputOracle, L1StandardBridge.',
-          name: 'ProxyAdmin',
-          chain: 'ethereum',
-        },
-      ])
-    })
-  })
-
   it('reads configurations for different chainIds', () => {
-    const discovery = new ProjectDiscovery(
-      'ExampleProject',
-      'arbitrum',
-      configReader,
-    )
+    const discovery = new ProjectDiscovery('ExampleProject', configReader)
     const contract = discovery.getContract(contractStub.address.toString())
 
     expect(JSON.stringify(contract)).toEqual(JSON.stringify(contractStub))
   })
 
-  describe(ProjectDiscovery.prototype.getPermissionsByRole.name, () => {
-    it('should find contracts and eoas by role', () => {
-      const discovery = new ProjectDiscovery(
-        'ExampleProject',
-        'ethereum',
-        configReader,
+  describe(ProjectDiscovery.prototype.replaceAddressesWithNames.name, () => {
+    it('should replace addresses with names', () => {
+      const replaced = discovery.replaceAddressesWithNames(
+        'Can be updated by eth:0x0D4C1222f5e839a911e2053860e45F18921D72ac, eth:0x787A0ACaB02437c60Aafb1a29167A3609801e320',
       )
-      const sequencers = discovery.getPermissionsByRole('Sequencer')
-      expect(sequencers).toEqual([
-        {
-          address: contractStub.address,
-          type: 'Contract',
-        },
-        {
-          address: EthereumAddress(
-            '0x000000000000000000000000000000000000Bb22',
-          ),
-          type: 'EOA',
-        },
-      ])
+      expect(replaced).toEqual(
+        'Can be updated by MockedContract, 0x787A0ACaB02437c60Aafb1a29167A3609801e320',
+      )
+    })
+  })
+
+  describe(ProjectDiscovery.prototype.getEoaActors.name, () => {
+    it('renders a shared EOA once using the base project name and permissions', () => {
+      const giver = ChainSpecificAddress.from('eth', '0x111')
+      const holder = ChainSpecificAddress.from('eth', '0x222')
+      const reader = mockObject<ConfigReader>({
+        readConfig: (name) => mockConfig(name),
+        readDiscoveryWithReferences: () => [
+          {
+            ...discoveredJsonStub,
+            entries: [
+              { type: 'Contract', address: giver, name: 'Giver' },
+              { type: 'EOA', address: holder, name: 'OwnName' },
+            ],
+            permissions: {
+              [holder]: {
+                receivedPermissions: [{ permission: 'upgrade', from: giver }],
+              },
+            },
+          },
+          {
+            ...discoveredJsonStub,
+            name: 'shared',
+            entries: [{ type: 'EOA', address: holder, name: 'ModuleName' }],
+          },
+        ],
+      })
+
+      const actors = new ProjectDiscovery(
+        'ExampleProject',
+        reader,
+      ).getEoaActors()
+
+      expect(actors.raw).toHaveLength(1)
+      expect(actors.linkable).toHaveLength(1)
+      expect(actors.linkable[0]?.name).toEqual('OwnName')
+    })
+
+    it('should return empty arrays when no EOAs have permissions', () => {
+      const configReaderEmpty = mockObject<ConfigReader>({
+        readConfig: (projectName: string) => mockConfig(projectName),
+        readDiscoveryWithReferences: () => [
+          {
+            ...discoveredJsonStub,
+            entries: discoveredJsonStub.entries.filter((e) => e.type !== 'EOA'),
+          },
+        ],
+      })
+      const discoveryEmpty = new ProjectDiscovery(
+        'EmptyProject',
+        configReaderEmpty,
+      )
+
+      const result = discoveryEmpty.getEoaActors()
+
+      expect(result).toEqual({
+        raw: [],
+        linkable: [],
+        grouped: [],
+      })
+    })
+
+    it('should handle single EOA with permissions', () => {
+      const configReaderSingle = mockObject<ConfigReader>({
+        readConfig: (projectName: string) => mockConfig(projectName),
+        readDiscoveryWithReferences: () => [
+          {
+            ...discoveredJsonStub,
+            entries: [
+              ...discoveredJsonStub.entries.filter((e) => e.type !== 'EOA'),
+              {
+                type: 'Contract',
+                name: 'TestContract',
+                address: ChainSpecificAddress(
+                  'eth:0x2222222222222222222222222222222222222222',
+                ),
+                category: { name: 'Test', priority: 1 },
+              },
+              {
+                type: 'EOA',
+                name: 'TestEOA',
+                address: ChainSpecificAddress(
+                  'eth:0x1111111111111111111111111111111111111111',
+                ),
+                receivedPermissions: [
+                  {
+                    permission: 'upgrade',
+                    from: ChainSpecificAddress(
+                      'eth:0x2222222222222222222222222222222222222222',
+                    ),
+                  },
+                ],
+                category: { name: 'Test', priority: 1 },
+              },
+            ],
+          },
+        ],
+      })
+      const discoverySingle = new ProjectDiscovery(
+        'SingleProject',
+        configReaderSingle,
+      )
+
+      const result = discoverySingle.getEoaActors()
+
+      expect(result.raw).toHaveLength(1)
+      expect(result.linkable).toHaveLength(1)
+      expect(result.grouped).toHaveLength(1)
+      expect(result.linkable[0].name).toEqual('TestEOA')
+      expect(result.grouped[0].name).toEqual('TestEOA')
+    })
+
+    it('should group EOAs with same description but different chains', () => {
+      const configReaderMultiChain = mockObject<ConfigReader>({
+        readConfig: (projectName: string) => mockConfig(projectName),
+        readDiscoveryWithReferences: () => [
+          {
+            ...discoveredJsonStub,
+            entries: [
+              ...discoveredJsonStub.entries.filter((e) => e.type !== 'EOA'),
+              {
+                type: 'Contract',
+                name: 'MultiSigContract',
+                address: ChainSpecificAddress(
+                  'eth:0x3333333333333333333333333333333333333333',
+                ),
+                category: { name: 'Test', priority: 1 },
+              },
+              {
+                type: 'Contract',
+                name: 'MultiSigContract',
+                address: ChainSpecificAddress(
+                  'arb1:0x3333333333333333333333333333333333333333',
+                ),
+                category: { name: 'Test', priority: 1 },
+              },
+              {
+                type: 'EOA',
+                name: 'MultiSigMember1',
+                address: ChainSpecificAddress(
+                  'eth:0x1111111111111111111111111111111111111111',
+                ),
+                receivedPermissions: [
+                  {
+                    permission: 'upgrade',
+                    from: ChainSpecificAddress(
+                      'eth:0x3333333333333333333333333333333333333333',
+                    ),
+                  },
+                ],
+                category: { name: 'Test', priority: 1 },
+              },
+              {
+                type: 'EOA',
+                name: 'MultiSigMember2',
+                address: ChainSpecificAddress(
+                  'arb1:0x2222222222222222222222222222222222222222',
+                ),
+                receivedPermissions: [
+                  {
+                    permission: 'upgrade',
+                    from: ChainSpecificAddress(
+                      'arb1:0x3333333333333333333333333333333333333333',
+                    ),
+                  },
+                ],
+                category: { name: 'Test', priority: 1 },
+              },
+              {
+                type: 'EOA',
+                name: 'MultiSigMember3',
+                address: ChainSpecificAddress(
+                  'eth:0x4444444444444444444444444444444444444444',
+                ),
+                receivedPermissions: [
+                  {
+                    permission: 'upgrade',
+                    from: ChainSpecificAddress(
+                      'eth:0x3333333333333333333333333333333333333333',
+                    ),
+                  },
+                ],
+                category: { name: 'Test', priority: 1 },
+              },
+            ],
+          },
+        ],
+      })
+      const discoveryMultiChain = new ProjectDiscovery(
+        'MultiChainProject',
+        configReaderMultiChain,
+      )
+
+      const result = discoveryMultiChain.getEoaActors()
+
+      expect(result.raw).toHaveLength(3)
+      expect(result.linkable).toHaveLength(3)
+
+      // Should have 2 grouped actors: one for eth chain (2 EOAs), one for arb1 chain (1 EOA)
+      expect(result.grouped).toHaveLength(2)
+
+      const ethGroup = result.grouped.find((g) => g.chain === 'ethereum')
+      const arbGroup = result.grouped.find((g) => g.chain === 'arbitrum')
+
+      expect(ethGroup).not.toEqual(undefined)
+      expect(arbGroup).not.toEqual(undefined)
+      expect(ethGroup?.accounts ?? []).toHaveLength(2)
+      expect(arbGroup?.accounts ?? []).toHaveLength(1)
+      expect(ethGroup?.name).toEqual('MultiSigMember1 and MultiSigMember3')
+      expect(ethGroup?.id).toEqual('MultiSigMember1-and-MultiSigMember3')
+      expect(arbGroup?.name).toEqual('MultiSigMember2')
+      expect(arbGroup?.id).toEqual('MultiSigMember2')
     })
   })
 })
 
 function mockConfig(
   name: string,
-  chain = 'ethereum',
-  innerConfig: Partial<RawDiscoveryConfig> = {},
-): DiscoveryConfig {
-  return new DiscoveryConfig({
+  innerConfig: Partial<DiscoveryConfig> = {},
+): ConfigRegistry {
+  return new ConfigRegistry({
     name,
-    chain,
     initialAddresses: [],
     ...innerConfig,
   })

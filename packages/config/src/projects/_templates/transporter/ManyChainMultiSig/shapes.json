@@ -1,0 +1,12 @@
+{
+  "ManyChainMultiSig": {
+    "hash": "0x0bfaa79275ffb76e161bfb96a564a2a4cd6e2ff1d915f2b667fb2698bce1cb80",
+    "address": "eth:0x117ec8aD107976e1dBCc21717ff78407Bc36aADc",
+    "blockNumber": 23195668
+  },
+  "ManyChainMultiSig_2": {
+    "hash": "0x625c5a942ae3dc2e829b38f52d2d20899bcbb177a8be3624ae47485ba139cfc5",
+    "address": "eth:0xD9757aA52907798d1aF2FDa7A6C0cC733E5aCf7e",
+    "blockNumber": 23195668
+  }
+}

@@ -1,25 +1,23 @@
-import { assert, Logger } from '@l2beat/backend-tools'
+import { Logger, RateLimiter } from '@l2beat/backend-tools'
+import type { HttpClient } from '@l2beat/shared'
 import {
+  assert,
   EthereumAddress,
   Hash256,
-  RateLimiter,
+  type json,
   UnixTime,
-  getErrorMessage,
 } from '@l2beat/shared-pure'
-
-import { ContractSource } from './IEtherscanClient'
-
 import {
   BlockscoutGetBlockNoByTime,
   ContractCreatorAndCreationTxHashResult,
   ContractSourceResult,
   OneTransactionListResult,
-  TwentyTransactionListResult,
-  UnverifiedContractSourceResult,
   parseBlockscoutResponse,
+  TransactionListResult,
+  UnverifiedContractSourceResult,
 } from './BlockscoutModels'
-import { HttpClient } from './HttpClient'
-import {
+import type {
+  ContractSource,
   EtherscanUnsupportedMethods,
   IEtherscanClient,
 } from './IEtherscanClient'
@@ -60,7 +58,7 @@ export class BlockscoutClient implements IEtherscanClient {
   }
 
   async getBlockNumberAtOrBefore(timestamp: UnixTime): Promise<number> {
-    let current = new UnixTime(timestamp.toNumber())
+    let current = UnixTime(timestamp)
 
     let counter = 1
     while (counter <= MAXIMUM_CALLS_FOR_BLOCK_TIMESTAMP) {
@@ -83,7 +81,7 @@ export class BlockscoutClient implements IEtherscanClient {
           throw new Error(errorObject.message)
         }
 
-        current = current.add(-1, 'minutes')
+        current = current - 1 * UnixTime.MINUTE
       }
 
       counter++
@@ -111,12 +109,14 @@ export class BlockscoutClient implements IEtherscanClient {
 
       return {
         name: '',
+        rootFile: undefined,
         isVerified: false,
         abi: [],
         solidityVersion: '',
         constructorArguments: '',
         remappings: [],
         files: {},
+        libraries: {},
       }
     }
 
@@ -124,7 +124,7 @@ export class BlockscoutClient implements IEtherscanClient {
     assert(result)
     const files: Record<string, string> = {}
     files[result.FileName] = result.SourceCode
-    for (const file of result.AdditionalSources) {
+    for (const file of result.AdditionalSources ?? []) {
       // NOTE(radomski): Blockscout API returns filenames with a leading
       // single quote. Potentially an error with string escaping on their
       // end.
@@ -136,12 +136,24 @@ export class BlockscoutClient implements IEtherscanClient {
 
     return {
       name: result.ContractName.trim(),
+      rootFile: result.FileName === '' ? undefined : result.FileName,
       isVerified: true,
       abi: jsonToHumanReadableAbi(result.ABI),
       solidityVersion: result.CompilerVersion,
       constructorArguments: '',
-      remappings: result.CompilerSettings.remappings ?? [],
+      remappings: result.CompilerSettings?.remappings ?? [],
       files,
+      libraries: {},
+      compilerSettings: {
+        optimizer: result.CompilerSettings?.optimizer ?? {
+          enabled: result.OptimizationUsed === '1',
+          runs: result.OptimizationRuns,
+        },
+        evmVersion: result.CompilerSettings?.evmVersion ?? result.EVMVersion,
+        viaIR: result.CompilerSettings?.viaIR,
+        metadata: result.CompilerSettings?.metadata,
+        debug: result.CompilerSettings?.debug,
+      },
     }
   }
 
@@ -181,10 +193,10 @@ export class BlockscoutClient implements IEtherscanClient {
     const resp = OneTransactionListResult.parse(response)[0]
     assert(resp)
 
-    return new UnixTime(parseInt(resp.timeStamp, 10))
+    return UnixTime(Number.parseInt(resp.timeStamp, 10))
   }
 
-  async getLast10OutgoingTxs(
+  async getAtMost10RecentOutgoingTxs(
     address: EthereumAddress,
     blockNumber: number,
   ): Promise<{ input: string; to: EthereumAddress; hash: Hash256 }[]> {
@@ -193,21 +205,14 @@ export class BlockscoutClient implements IEtherscanClient {
       startblock: '0',
       endblock: blockNumber.toString(),
       page: '1',
-      offset: '20',
+      offset: '50',
       sort: 'desc',
     })
 
-    const resp = TwentyTransactionListResult.parse(response)
-    assert(resp)
+    const resp = TransactionListResult.parse(response)
     const outgoingTxs = resp
       .filter((tx) => EthereumAddress(tx.from) === address)
       .slice(0, 10)
-
-    assert(
-      outgoingTxs.length === 10,
-      'Not enough outgoing transactions, expected 10, received ' +
-        outgoingTxs.length.toString(),
-    )
 
     return outgoingTxs.map((r) => ({
       input: r.input,
@@ -224,59 +229,28 @@ export class BlockscoutClient implements IEtherscanClient {
     })
     const url = `${this.url}?${query.toString()}`
 
-    const start = Date.now()
-    const { httpResponse, error } = await this.httpClient
-      .fetch(url, { timeout: this.timeoutMs })
-      .then(
-        (httpResponse) => ({ httpResponse, error: undefined }),
-        (error: unknown) => ({ httpResponse: undefined, error }),
-      )
-    const timeMs = Date.now() - start
+    const response = await this.httpClient.fetch(url, {
+      timeout: this.timeoutMs,
+    })
 
-    if (!httpResponse) {
-      const message = getErrorMessage(error)
-      this.recordError(module, action, timeMs, message)
-      throw error
-    }
-
-    const text = await httpResponse.text()
-    const blockscoutResponse = tryParseBlockscoutResponse(text)
-
-    if (!httpResponse.ok) {
-      this.recordError(module, action, timeMs, text)
-      throw new Error(
-        `Server responded with non-2XX result: ${httpResponse.status} ${httpResponse.statusText}`,
-      )
-    }
+    const blockscoutResponse = tryParseBlockscoutResponse(response)
 
     if (!blockscoutResponse) {
-      const message = `Invalid Blockscout response [${text}] for request [${url}].`
-      this.recordError(module, action, timeMs, message)
+      const message = `Invalid Blockscout response [${JSON.stringify(response)}] for request [${url}].`
       throw new TypeError(message)
     }
 
     if (blockscoutResponse.message !== 'OK') {
-      this.recordError(module, action, timeMs, blockscoutResponse.result)
       throw new BlockscoutError(blockscoutResponse.result)
     }
 
-    this.logger.debug({ type: 'success', timeMs, module, action })
     return blockscoutResponse.result
-  }
-
-  private recordError(
-    module: string,
-    action: string,
-    timeMs: number,
-    message: string,
-  ) {
-    this.logger.debug({ type: 'error', message, timeMs, module, action })
   }
 }
 
-function tryParseBlockscoutResponse(text: string) {
+function tryParseBlockscoutResponse(response: json) {
   try {
-    return parseBlockscoutResponse(text)
+    return parseBlockscoutResponse(response)
   } catch {
     return undefined
   }

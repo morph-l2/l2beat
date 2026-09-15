@@ -1,21 +1,23 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
-import { providers, utils } from 'ethers'
-import * as z from 'zod'
+import { ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import { type providers, utils } from 'ethers'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 import { FunctionSelectorDecoder } from '../../utils/FunctionSelectorDecoder'
-import { Handler, HandlerResult } from '../Handler'
+import type { Handler, HandlerResult } from '../Handler'
 
-export type ScrollAccessControlHandlerDefinition = z.infer<
+export type ScrollAccessControlHandlerDefinition = v.infer<
   typeof ScrollAccessControlHandlerDefinition
 >
-export const ScrollAccessControlHandlerDefinition = z.strictObject({
-  type: z.literal('scrollAccessControl'),
-  roleNames: z.optional(
-    z.record(z.string().regex(/^0x[a-f\d]{64}$/i), z.string()),
-  ),
-  ignoreRelative: z.optional(z.boolean()),
+export const ScrollAccessControlHandlerDefinition = v.strictObject({
+  type: v.literal('scrollAccessControl'),
+  roleNames: v
+    .record(
+      v.string().check((v) => /^0x[a-f\d]{64}$/i.test(v)),
+      v.string(),
+    )
+    .optional(),
+  ignoreRelative: v.boolean().optional(),
 })
 
 const abi = new utils.Interface([
@@ -34,7 +36,6 @@ export class ScrollAccessControlHandler implements Handler {
     readonly field: string,
     readonly definition: ScrollAccessControlHandlerDefinition,
     abi: string[],
-    readonly logger: DiscoveryLogger,
   ) {
     this.knownNames.set('0x' + '0'.repeat(64), 'DEFAULT_ADMIN_ROLE')
     for (const [hash, name] of Object.entries(definition.roleNames ?? {})) {
@@ -56,9 +57,8 @@ export class ScrollAccessControlHandler implements Handler {
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, ['Checking ScrollAccessControl'])
     const logs = await provider.getLogs(address, [
       [
         abi.getEventTopic('RoleGranted'),
@@ -73,7 +73,7 @@ export class ScrollAccessControlHandler implements Handler {
       string,
       {
         adminRole: string
-        members: Set<EthereumAddress>
+        members: Set<ChainSpecificAddress>
       }
     > = {}
     const targets: Record<string, Record<string, Set<string>>> = {}
@@ -82,7 +82,7 @@ export class ScrollAccessControlHandler implements Handler {
 
     function getRole(role: string): {
       adminRole: string
-      members: Set<EthereumAddress>
+      members: Set<ChainSpecificAddress>
     } {
       const value = roles[role] ?? {
         adminRole: 'DEFAULT_ADMIN_ROLE',
@@ -92,7 +92,9 @@ export class ScrollAccessControlHandler implements Handler {
       return value
     }
 
-    function getTarget(target: EthereumAddress): Record<string, Set<string>> {
+    function getTarget(
+      target: ChainSpecificAddress,
+    ): Record<string, Set<string>> {
       const value = targets[target.toString()] ?? {}
       targets[target.toString()] = value
       return value
@@ -108,12 +110,12 @@ export class ScrollAccessControlHandler implements Handler {
     }
 
     const accessChangeLogs = logs
-      .map(parseRoleLog)
+      .map((v) => parseRoleLog(provider.chain, v))
       .filter((parsed) =>
         ['GrantAccess', 'RevokeAccess'].includes(parsed.type),
       ) as AccessChangeLog[]
 
-    const contracts = new Set<EthereumAddress>(
+    const contracts = new Set<ChainSpecificAddress>(
       accessChangeLogs.map((parsed) => parsed.target),
     )
 
@@ -121,7 +123,7 @@ export class ScrollAccessControlHandler implements Handler {
     await decoder.fetchTargets([...contracts])
 
     for (const log of logs) {
-      const parsed = parseRoleLog(log)
+      const parsed = parseRoleLog(provider.chain, log)
       const role = getRole(this.getRoleName(parsed.role))
       if (parsed.type === 'RoleAdminChanged') {
         role.adminRole = this.getRoleName(parsed.adminRole)
@@ -191,7 +193,7 @@ export class ScrollAccessControlHandler implements Handler {
 interface RoleChangeLog {
   readonly type: 'RoleGranted' | 'RoleRevoked'
   readonly role: string
-  readonly account: EthereumAddress
+  readonly account: ChainSpecificAddress
   readonly adminRole?: undefined
 }
 interface RoleAdminChangeLog {
@@ -203,10 +205,11 @@ interface RoleAdminChangeLog {
 interface AccessChangeLog {
   readonly type: 'GrantAccess' | 'RevokeAccess'
   readonly role: string
-  readonly target: EthereumAddress
+  readonly target: ChainSpecificAddress
   readonly selectors: string[]
 }
 function parseRoleLog(
+  longChain: string,
   log: providers.Log,
 ): RoleChangeLog | RoleAdminChangeLog | AccessChangeLog {
   const event = abi.parseLog(log)
@@ -214,14 +217,20 @@ function parseRoleLog(
     return {
       type: event.name,
       role: event.args.role as string,
-      account: EthereumAddress(event.args.account as string),
+      account: ChainSpecificAddress.fromLong(
+        longChain,
+        event.args.account as string,
+      ),
     } as const
   }
   if (event.name === 'GrantAccess' || event.name === 'RevokeAccess') {
     return {
       type: event.name,
       role: event.args.role as string,
-      target: EthereumAddress(event.args.target as string),
+      target: ChainSpecificAddress.fromLong(
+        longChain,
+        event.args.target as string,
+      ),
       selectors: event.args.selectors as string[],
     } as const
   }

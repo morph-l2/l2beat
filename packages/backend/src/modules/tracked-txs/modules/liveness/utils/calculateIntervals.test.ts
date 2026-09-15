@@ -1,22 +1,22 @@
 import { UnixTime } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
-import { LivenessRecordWithConfig } from '../services/LivenessWithConfigService'
 import { calculateIntervals } from './calculateIntervals'
+import type { LivenessRecordWithConfig } from './mapToRecordWithConfig'
 
 describe(calculateIntervals.name, () => {
   const NOW = UnixTime.now()
   it('returns calculated intervals', () => {
     const records: LivenessRecordWithConfig[] = [
       mockObject<LivenessRecordWithConfig>({
-        timestamp: NOW.add(-1, 'hours'),
+        timestamp: NOW - 1 * UnixTime.HOUR,
         subtype: 'batchSubmissions',
       }),
       mockObject<LivenessRecordWithConfig>({
-        timestamp: NOW.add(-3, 'hours'),
+        timestamp: NOW - 3 * UnixTime.HOUR,
         subtype: 'batchSubmissions',
       }),
       mockObject<LivenessRecordWithConfig>({
-        timestamp: NOW.add(-7, 'hours'),
+        timestamp: NOW - 7 * UnixTime.HOUR,
         subtype: 'batchSubmissions',
       }),
     ]

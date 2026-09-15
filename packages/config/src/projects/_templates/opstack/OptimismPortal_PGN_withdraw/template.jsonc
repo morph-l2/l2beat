@@ -1,0 +1,34 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "displayName": "OptimismPortal",
+  "description": "The main entry point to deposit funds from host chain to this chain. It also allows to prove and finalize withdrawals.",
+  "ignoreMethods": ["isOutputFinalized", "balance"],
+  "ignoreInWatchMode": ["params"],
+  "fields": {
+    "guardian": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "Allowed to pause withdrawals. In op stack systems with a proof system, the Guardian can also blacklist dispute games and set the respected game type (permissioned / permissionless)."
+        }
+      ]
+    },
+    "GUARDIAN": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "Allowed to pause withdrawals. In op stack systems with a proof system, the Guardian can also blacklist dispute games and set the respected game type (permissioned / permissionless)."
+        }
+      ]
+    },
+    "BALANCE_CLAIMER": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "withdraw ETH escrowed in the OptimismPortal."
+        }
+      ]
+    }
+  },
+  "category": "core"
+}

@@ -1,90 +1,107 @@
-import { PoolConfig } from 'pg'
-import { BlockTransactionCountRepository } from './activity/activity-block/repository'
-import { StarkExTransactionCountRepository } from './activity/activity-starkex/repository'
-import { ActivityViewRepository } from './activity/activity-view/repository'
-import { ZkSyncTransactionRepository } from './activity/activity-zksync/repository'
-import { ActivityRepository } from './activity/activity/repository'
-import { CurrentPriceRepository } from './da-beat/current-price/repository'
-import { StakeRepository } from './da-beat/stake/repository'
-import { DailyDiscoveryRepository } from './discovery/daily-discovery/repository'
-import { DiscoveryCacheRepository } from './discovery/discovery-cache/repository'
-import { UpdateMonitorRepository } from './discovery/update-monitor/repository'
-import { UpdateNotifierRepository } from './discovery/update-notifier/repository'
+import type { LogConfig } from 'kysely'
+import type { PoolConfig } from 'pg'
 import { DatabaseClient } from './kysely'
-import { AggregatedL2CostRepository } from './other/aggregated-l2-cost/repository'
-import { AggregatedLivenessRepository } from './other/aggregated-liveness/repository'
-import { AnomaliesRepository } from './other/anomalies/repository'
-import { FinalityRepository } from './other/finality/repository'
-import { L2CostPriceRepository } from './other/l2-cost-price/repository'
-import { L2CostRepository } from './other/l2-cost/repository'
-import { LivenessRepository } from './other/liveness/repository'
-import { SequenceProcessorRepository } from './other/sequence-processor/repository'
-import { VerifierStatusRepository } from './other/verifier-status/repository'
-import { BridgeEscrowRepository } from './token-db/bridge-escrow/repository'
-import { CacheRepository } from './token-db/cache/repository'
-import { DeploymentRepository } from './token-db/deployment/repository'
-import { ExternalBridgeRepository } from './token-db/external-bridge/repository'
-import { NetworkExplorerRepository } from './token-db/network-explorer/repository'
-import { NetworkRpcRepository } from './token-db/network-rpc/repository'
-import { NetworkRepository } from './token-db/network/repository'
-import { TokenBridgeRepository } from './token-db/token-bridge/repository'
-import { TokenMetaRepository } from './token-db/token-meta/repository'
-import { TokenRepository } from './token-db/token/repository'
-import { AmountRepository } from './tvl/amount/repository'
-import { BlockTimestampRepository } from './tvl/block-timestamp/repository'
-import { PriceRepository } from './tvl/price/repository'
-import { TvlCleanerRepository } from './tvl/tvl-cleaner/repository'
-import { ValueRepository } from './tvl/value/repository'
-import { IndexerConfigurationRepository } from './uif/indexer-configuration/repository'
-import { IndexerStateRepository } from './uif/indexer-state/repository'
+import { ActivityRepository } from './repositories/ActivityRepository'
+import { AggregatedInteropDeployedTokenRepository } from './repositories/AggregatedInteropDeployedTokenRepository'
+import { AggregatedInteropTokenRepository } from './repositories/AggregatedInteropTokenRepository'
+import { AggregatedInteropTokensPairRepository } from './repositories/AggregatedInteropTokensPairRepository'
+import { AggregatedInteropTransferRepository } from './repositories/AggregatedInteropTransferRepository'
+import { AggregatedL2CostRepository } from './repositories/AggregatedL2CostRepository'
+import { AggregatedLivenessRepository } from './repositories/AggregatedLivenessRepository'
+import { AnomaliesRepository } from './repositories/AnomaliesRepository'
+import { AnomalyStatsRepository } from './repositories/AnomalyStatsRepository'
+import { AppStateRepository } from './repositories/AppStateRepository'
+import { BlobsRepository } from './repositories/BlobsRepository'
+import { CurrentPriceRepository } from './repositories/CurrentPriceRepository'
+import { DaBeatStatsRepository } from './repositories/DaBeatStatsRepository'
+import { DataAvailabilityRepository } from './repositories/DataAvailabilityRepository'
+import { DiscoveryCacheRepository } from './repositories/DiscoveryCacheRepository'
+import { EcosystemTokenRepository } from './repositories/EcosystemTokenRepository'
+import { FlatSourcesRepository } from './repositories/FlatSourcesRepository'
+import { IndexerConfigurationRepository } from './repositories/IndexerConfigurationRepository'
+import { IndexerStateRepository } from './repositories/IndexerStateRepository'
+import { InteropAggregateStatusRepository } from './repositories/InteropAggregateStatusRepository'
+import { InteropConfigRepository } from './repositories/InteropConfigRepository'
+import { InteropEventRepository } from './repositories/InteropEventRepository'
+import { InteropMessageRepository } from './repositories/InteropMessageRepository'
+import { InteropPluginSyncedRangeRepository } from './repositories/InteropPluginSyncedRangeRepository'
+import { InteropPluginSyncStateRepository } from './repositories/InteropPluginSyncStateRepository'
+import { InteropRecentPricesRepository } from './repositories/InteropRecentPricesRepository'
+import { InteropTransferRepository } from './repositories/InteropTransferRepository'
+import { L2CostPriceRepository } from './repositories/L2CostPriceRepository'
+import { L2CostRepository } from './repositories/L2CostRepository'
+import { LivenessRepository } from './repositories/LivenessRepository'
+import { NotificationsRepository } from './repositories/NotificationsRepository'
+import { PrivacyAnonymitySetEventRepository } from './repositories/PrivacyAnonymitySetEventRepository'
+import { PrivacyBlockTimestampRepository } from './repositories/PrivacyBlockTimestampRepository'
+import { PrivacyFlowEventRepository } from './repositories/PrivacyFlowEventRepository'
+import { PrivacyPriceRepository } from './repositories/PrivacyPriceRepository'
+import { PrivacyRelayerActivityRepository } from './repositories/PrivacyRelayerActivityRepository'
+import { PrivacyRelayerSampleRepository } from './repositories/PrivacyRelayerSampleRepository'
+import { RealTimeAnomaliesRepository } from './repositories/RealTimeAnomaliesRepository'
+import { RealTimeLivenessRepository } from './repositories/RealTimeLivenessRepository'
+import { SyncMetadataRepository } from './repositories/SyncMetadataRepository'
+import { TokenFactInputRepository } from './repositories/TokenFactInputRepository'
+import { TokenMetadataRepository } from './repositories/TokenMetadataRepository'
+import { TokenValueRepository } from './repositories/TokenValueRepository'
+import { TvsAmountRepository } from './repositories/TvsAmountRepository'
+import { TvsBlockTimestampRepository } from './repositories/TvsBlockTimestampRepository'
+import { TvsPriceRepository } from './repositories/TvsPriceRepository'
+import { UpdateDiffRepository } from './repositories/UpdateDiffRepository'
+import { UpdateMessageRepository } from './repositories/UpdateMessageRepository'
+import { UpdateMonitorRepository } from './repositories/UpdateMonitorRepository'
+import { UpdateNotifierRepository } from './repositories/UpdateNotifierRepository'
+import { getDatabaseStats } from './utils/getDatabaseStats'
 
 export type Database = ReturnType<typeof createDatabase>
-export function createDatabase(config?: PoolConfig) {
+export function createDatabase(
+  config: PoolConfig & { log?: LogConfig; connectionString: string },
+) {
   const db = new DatabaseClient({ ...config })
 
   return {
     transaction: db.transaction.bind(db),
     close: db.close.bind(db),
+    url: config.connectionString,
 
     // #region Activity
     activity: new ActivityRepository(db),
-    activityView: new ActivityViewRepository(db),
-    blockTransactionCount: new BlockTransactionCountRepository(db),
-    starkExTransactionCount: new StarkExTransactionCountRepository(db),
-    zkSyncTransactionCount: new ZkSyncTransactionRepository(db),
+    // #endregion
+
+    // #region Interop
+    interopConfig: new InteropConfigRepository(db),
+    interopEvent: new InteropEventRepository(db),
+    interopMessage: new InteropMessageRepository(db),
+    interopTransfer: new InteropTransferRepository(db),
+    aggregatedInteropTransfer: new AggregatedInteropTransferRepository(db),
+    interopAggregateStatus: new InteropAggregateStatusRepository(db),
+    aggregatedInteropToken: new AggregatedInteropTokenRepository(db),
+    aggregatedInteropDeployedToken:
+      new AggregatedInteropDeployedTokenRepository(db),
+    aggregatedInteropTokensPair: new AggregatedInteropTokensPairRepository(db),
+    interopRecentPrices: new InteropRecentPricesRepository(db),
+    interopPluginSyncState: new InteropPluginSyncStateRepository(db),
+    interopPluginSyncedRange: new InteropPluginSyncedRangeRepository(db),
     // #endregion
 
     // #region DA BEAT
     currentPrice: new CurrentPriceRepository(db),
-    stake: new StakeRepository(db),
+    daBeatStats: new DaBeatStatsRepository(db),
+    dataAvailability: new DataAvailabilityRepository(db),
+    blobs: new BlobsRepository(db),
     // #endregion
 
     // #region Discovery
-    dailyDiscovery: new DailyDiscoveryRepository(db),
     discoveryCache: new DiscoveryCacheRepository(db),
+    updateDiff: new UpdateDiffRepository(db),
     updateMonitor: new UpdateMonitorRepository(db),
     updateNotifier: new UpdateNotifierRepository(db),
+    updateMessage: new UpdateMessageRepository(db),
+    flatSources: new FlatSourcesRepository(db),
     // #endregion
 
-    // #region Token DB
-    bridgeEscrow: new BridgeEscrowRepository(db),
-    cache: new CacheRepository(db),
-    deployment: new DeploymentRepository(db),
-    externalBridge: new ExternalBridgeRepository(db),
-    networkExplorer: new NetworkExplorerRepository(db),
-    networkRpc: new NetworkRpcRepository(db),
-    networks: new NetworkRepository(db),
-    token: new TokenRepository(db),
-    tokenBridge: new TokenBridgeRepository(db),
-    tokenMeta: new TokenMetaRepository(db),
-    // #endregion
-
-    // #region TVL
-    amount: new AmountRepository(db),
-    blockTimestamp: new BlockTimestampRepository(db),
-    price: new PriceRepository(db),
-    tvlCleaner: new TvlCleanerRepository(db),
-    value: new ValueRepository(db),
+    // #region Ecosystems
+    ecosystemToken: new EcosystemTokenRepository(db),
     // #endregion
 
     // #region UIF
@@ -96,12 +113,40 @@ export function createDatabase(config?: PoolConfig) {
     aggregatedL2Cost: new AggregatedL2CostRepository(db),
     aggregatedLiveness: new AggregatedLivenessRepository(db),
     anomalies: new AnomaliesRepository(db),
-    finality: new FinalityRepository(db),
+    realTimeAnomalies: new RealTimeAnomaliesRepository(db),
+    anomalyStats: new AnomalyStatsRepository(db),
     l2Cost: new L2CostRepository(db),
     l2CostPrice: new L2CostPriceRepository(db),
     liveness: new LivenessRepository(db),
-    sequenceProcessor: new SequenceProcessorRepository(db),
-    verifierStatus: new VerifierStatusRepository(db),
+    realTimeLiveness: new RealTimeLivenessRepository(db),
+    syncMetadata: new SyncMetadataRepository(db),
+    notifications: new NotificationsRepository(db),
+    appState: new AppStateRepository(db),
+    // #endregion
+
+    // #region Privacy
+    privacyAnonymitySetEvent: new PrivacyAnonymitySetEventRepository(db),
+    privacyBlockTimestamp: new PrivacyBlockTimestampRepository(db),
+    privacyFlowEvent: new PrivacyFlowEventRepository(db),
+    privacyPrice: new PrivacyPriceRepository(db),
+    privacyRelayerActivity: new PrivacyRelayerActivityRepository(db),
+    privacyRelayerSample: new PrivacyRelayerSampleRepository(db),
+    // #endregion
+
+    // #region Token Knowledge
+    tokenFactInput: new TokenFactInputRepository(db),
+    // #endregion
+
+    // #region Tvs
+    tvsPrice: new TvsPriceRepository(db),
+    tvsAmount: new TvsAmountRepository(db),
+    tvsBlockTimestamp: new TvsBlockTimestampRepository(db),
+    tvsTokenValue: new TokenValueRepository(db),
+    tvsTokenMetadata: new TokenMetadataRepository(db),
+    // #endregion
+
+    // #region
+    stats: () => getDatabaseStats(db),
     // #endregion
   }
 }

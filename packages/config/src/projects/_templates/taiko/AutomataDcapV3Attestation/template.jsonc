@@ -1,0 +1,53 @@
+{
+  "description": "Contract managing SGX DCAP attestation policy, trusted measurements, and certificate revocation data.",
+  "fields": {
+    "proxiableUUID": {
+      "handler": {
+        "type": "call",
+        "method": "function proxiableUUID() view returns (bytes32)",
+        "args": [],
+        "expectRevert": true
+      }
+    },
+    "mrEnclaves": {
+      "description": "Trusted SGX enclave measurements accepted by attestation verification.",
+      "severity": "HIGH",
+      "handler": {
+        "type": "event",
+        "select": "mrEnclave",
+        "add": {
+          "event": "MrEnclaveUpdated",
+          "where": ["=", "#trusted", true]
+        },
+        "remove": {
+          "event": "MrEnclaveUpdated",
+          "where": ["!=", "#trusted", true]
+        }
+      }
+    },
+    "mrSigners": {
+      "description": "Trusted SGX signer measurements accepted by attestation verification.",
+      "severity": "HIGH",
+      "handler": {
+        "type": "event",
+        "select": "mrSigner",
+        "add": {
+          "event": "MrSignerUpdated",
+          "where": ["=", "#trusted", true]
+        },
+        "remove": {
+          "event": "MrSignerUpdated",
+          "where": ["!=", "#trusted", true]
+        }
+      }
+    },
+    "owner": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "manage trusted SGX measurements, revoked certificate serial numbers, TCB info, QE identity, and local report checks."
+        }
+      ]
+    }
+  }
+}

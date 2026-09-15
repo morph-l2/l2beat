@@ -1,0 +1,17 @@
+{
+  "OptimismMintableERC20Factory_v1_10_1beta_1": {
+    "hash": "0x106f86d507a55d0f26e3683c910a71a9804d75ced3a4bb374e6a78978462274b",
+    "address": "ink:0xc0D3c0d3C0d3c0d3c0D3c0d3c0D3c0D3c0D30012",
+    "blockNumber": 10183769
+  },
+  "OptimismMintableERC20Factory_v1_1_0": {
+    "hash": "0xb2fc6f2e6343ad65e6ad1c34dcc5eeb708cc17ebdaeba5635ee74568f976ad26",
+    "address": "oeth:0xc0D3c0d3C0d3c0d3c0D3c0d3c0D3c0D3c0D30012",
+    "blockNumber": 134041720
+  },
+  "OptimismMintableERC20Factory_v1_9_0": {
+    "hash": "0xee8e51fe818ec5a2ef914c7dfa2ca739f1197b202e9424a30c945892002ce7e8",
+    "address": "base:0x6922ac4DbDfEdEa3a1E5535f12c3171f2b964C91",
+    "blockNumber": 29605802
+  }
+}

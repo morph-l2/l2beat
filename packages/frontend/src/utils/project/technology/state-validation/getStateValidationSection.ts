@@ -1,0 +1,49 @@
+import type { Project } from '@l2beat/config'
+import type { StateValidationSectionProps } from '~/components/projects/sections/state-validation/StateValidationSection'
+import type { SevenDayTvsBreakdown } from '~/server/features/layer2s/tvs/get7dTvsBreakdown'
+import type { ContractUtils } from '../../contracts-and-permissions/getContractUtils'
+import { getProgramHashes } from '../../contracts-and-permissions/getProgramHashes'
+import { getDiagramParams } from '../../getDiagramParams'
+import type { ProjectWithPageMetadata } from '../../getProjectUrl'
+import { getProverInfos } from './getProverInfo'
+
+export function getStateValidationSection(
+  project: Project<
+    'scalingTechnology' | 'statuses' | 'scalingInfo',
+    'contracts'
+  >,
+  zkCatalogProjects: Project<'zkCatalogInfo'>[],
+  contractUtils: ContractUtils,
+  tvs: SevenDayTvsBreakdown,
+  allProjects: ProjectWithPageMetadata[],
+  allProjectsWithContracts: Project<'contracts'>[],
+):
+  | Omit<StateValidationSectionProps, 'id' | 'title' | 'sectionOrder'>
+  | undefined {
+  if (!project.scalingTechnology.stateValidation) return undefined
+
+  return {
+    stateValidation: project.scalingTechnology.stateValidation,
+    diagram: getDiagramParams(
+      'state-validation',
+      project.scalingTechnology.stateValidationImage ?? project.slug,
+    ),
+    isUnderReview:
+      !!project.statuses.reviewStatus ||
+      !!project.scalingTechnology.stateValidation.isUnderReview,
+    proverInfos: getProverInfos(
+      project,
+      zkCatalogProjects,
+      contractUtils,
+      tvs,
+      allProjects,
+    ),
+    programHashes: getProgramHashes(
+      project.contracts?.programHashes,
+      zkCatalogProjects,
+      allProjectsWithContracts,
+      tvs,
+    ),
+    programHashesDescription: project.contracts?.programHashesDescription,
+  }
+}

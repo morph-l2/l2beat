@@ -1,29 +1,31 @@
-import { ContractValue } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
-import { utils } from 'ethers'
-import * as z from 'zod'
-
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
 import {
-  ScopeVariables,
-  generateScopeVariables,
+  assert,
+  ChainSpecificAddress,
+  EthereumAddress,
+} from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import { utils } from 'ethers'
+import type { ContractValue } from '../../output/types'
+
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
+import {
+  generateReferenceInput,
   getReferencedName,
+  type ReferenceInput,
   resolveReference,
 } from '../reference'
-import { EXEC_REVERT_MSG, callMethod } from '../utils/callMethod'
+import { callMethod, EXEC_REVERT_MSG } from '../utils/callMethod'
 import { getFunctionFragment } from '../utils/getFunctionFragment'
 
-export type CallHandlerDefinition = z.infer<typeof CallHandlerDefinition>
-export const CallHandlerDefinition = z.strictObject({
-  type: z.literal('call'),
-  method: z.optional(z.string()),
-  args: z.array(z.union([z.string(), z.number()])),
-  ignoreRelative: z.optional(z.boolean()),
-  pickFields: z.optional(z.array(z.string())),
-  expectRevert: z.optional(z.boolean()),
-  address: z.optional(z.string()),
+export type CallHandlerDefinition = v.infer<typeof CallHandlerDefinition>
+export const CallHandlerDefinition = v.strictObject({
+  type: v.literal('call'),
+  method: v.string().optional(),
+  args: v.array(v.union([v.string(), v.number()])),
+  ignoreRelative: v.boolean().optional(),
+  expectRevert: v.boolean().optional(),
+  address: v.string().optional(),
 })
 
 export class CallHandler implements Handler {
@@ -34,7 +36,6 @@ export class CallHandler implements Handler {
     readonly field: string,
     private readonly definition: CallHandlerDefinition,
     abi: string[],
-    readonly logger: DiscoveryLogger,
   ) {
     for (const arg of this.definition.args) {
       const dependency = getReferencedName(arg)
@@ -60,30 +61,32 @@ export class CallHandler implements Handler {
 
   async execute(
     provider: IProvider,
-    currentContractAddress: EthereumAddress,
+    currentContractAddress: ChainSpecificAddress,
     previousResults: Record<string, HandlerResult | undefined>,
   ): Promise<HandlerResult> {
-    const scopeVariables = generateScopeVariables(
+    const referenceInput = generateReferenceInput(
+      previousResults,
       provider,
       currentContractAddress,
     )
     const resolved = resolveDependencies(
       this.definition,
-      previousResults,
-      scopeVariables,
+      referenceInput,
+      currentContractAddress,
     )
-    this.logger.logExecution(this.field, [
-      'Calling ',
-      `${this.fragment.name}(${resolved.args
-        .map((x) => x.toString())
-        .join(', ')})`,
-    ])
+    const targetAddress = resolved.address ?? currentContractAddress
+    if (isZeroAddress(targetAddress)) {
+      return {
+        field: this.field,
+        value: EthereumAddress.ZERO,
+        ignoreRelative: this.definition.ignoreRelative,
+      }
+    }
     const callResult = await callMethod(
       provider,
-      resolved.address ?? currentContractAddress,
+      targetAddress,
       this.fragment,
       resolved.args,
-      this.definition.pickFields,
     )
 
     if (this.definition.expectRevert && callResult.error === EXEC_REVERT_MSG) {
@@ -97,6 +100,7 @@ export class CallHandler implements Handler {
     return {
       field: this.field,
       ...callResult,
+      fragment: this.fragment,
       ignoreRelative: this.definition.ignoreRelative,
     }
   }
@@ -104,27 +108,45 @@ export class CallHandler implements Handler {
 
 function resolveDependencies(
   definition: CallHandlerDefinition,
-  previousResults: Record<string, HandlerResult | undefined>,
-  scopeVariables: ScopeVariables,
+  referenceInput: ReferenceInput,
+  currentContractAddress: ChainSpecificAddress,
 ): {
   method: string | undefined
   args: ContractValue[]
-  address: EthereumAddress | undefined
+  address: ChainSpecificAddress | undefined
 } {
-  const args = definition.args.map((x) =>
-    resolveReference(x, previousResults, scopeVariables),
+  const args = definition.args.map((x) => resolveReference(x, referenceInput))
+  const addressToCall = resolveReference(definition.address, referenceInput)
+
+  if (addressToCall === undefined) {
+    return { method: definition.method, args, address: undefined }
+  }
+
+  assert(
+    typeof addressToCall === 'string',
+    `Address to call must be a string - ${addressToCall} given`,
   )
-  const address = resolveReference(
-    definition.address,
-    previousResults,
-    scopeVariables,
-  )
+
+  // Handler results are raw addresses (no chain prefix).
+  // Derive the chain from the current contract's ChainSpecificAddress.
+  if (!ChainSpecificAddress.check(addressToCall)) {
+    const chain = ChainSpecificAddress.chain(currentContractAddress)
+    return {
+      method: definition.method,
+      args,
+      address: ChainSpecificAddress.from(chain, addressToCall),
+    }
+  }
+
   return {
     method: definition.method,
     args,
-    address:
-      address !== undefined ? EthereumAddress(address.toString()) : undefined,
+    address: ChainSpecificAddress(addressToCall),
   }
+}
+
+function isZeroAddress(address: ChainSpecificAddress): boolean {
+  return ChainSpecificAddress.address(address) === EthereumAddress.ZERO
 }
 
 function isViewFragment(fragment: utils.FunctionFragment): boolean {

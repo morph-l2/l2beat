@@ -1,8 +1,8 @@
-import { EthereumAddress, UnixTime } from '@l2beat/shared-pure'
+import { ChainSpecificAddress, UnixTime } from '@l2beat/shared-pure'
 import { expect } from 'earl'
-import { map } from 'lodash'
+import map from 'lodash/map'
 
-import { AnalyzedContract } from '../analysis/AddressAnalyzer'
+import type { AnalyzedContract } from '../analysis/AddressAnalyzer'
 import { EMPTY_ANALYZED_CONTRACT } from '../utils/testUtils'
 import { getSourceOutputPath } from './saveDiscoveryResult'
 
@@ -11,10 +11,9 @@ describe(getSourceOutputPath.name, () => {
     ...EMPTY_ANALYZED_CONTRACT,
     type: 'Contract' as const,
     name,
-    address: EthereumAddress.random(),
-    derivedName: undefined,
+    address: ChainSpecificAddress.random(),
     isVerified: true,
-    deploymentTimestamp: new UnixTime(1234),
+    deploymentTimestamp: UnixTime(1234),
     deploymentBlockNumber: 9876,
     proxyType: 'immutable',
   })
@@ -32,7 +31,7 @@ describe(getSourceOutputPath.name, () => {
       0,
       1,
       contractA.name,
-      contractA.address,
+      ChainSpecificAddress.address(contractA.address),
       root,
       allContractNames,
     )
@@ -41,7 +40,7 @@ describe(getSourceOutputPath.name, () => {
       0,
       1,
       contractB1.name,
-      contractB1.address,
+      ChainSpecificAddress.address(contractB1.address),
       root,
       allContractNames,
     )
@@ -50,14 +49,18 @@ describe(getSourceOutputPath.name, () => {
       0,
       1,
       contractB2.name,
-      contractB2.address,
+      ChainSpecificAddress.address(contractB2.address),
       root,
       allContractNames,
     )
 
     expect(pathA).toEqual(`${root}/A/a.sol`)
-    expect(pathB1).toEqual(`${root}/B-${contractB1.address.toString()}/b.sol`)
-    expect(pathB2).toEqual(`${root}/B-${contractB2.address.toString()}/b.sol`)
+    expect(pathB1).toEqual(
+      `${root}/B-${ChainSpecificAddress.address(contractB1.address).toString()}/b.sol`,
+    )
+    expect(pathB2).toEqual(
+      `${root}/B-${ChainSpecificAddress.address(contractB2.address).toString()}/b.sol`,
+    )
   })
 
   it('adds proxy/implementation suffixes', () => {
@@ -68,7 +71,7 @@ describe(getSourceOutputPath.name, () => {
       0,
       2,
       contractA.name,
-      contractA.address,
+      ChainSpecificAddress.address(contractA.address),
       root,
       allContractNames,
     )
@@ -77,7 +80,7 @@ describe(getSourceOutputPath.name, () => {
       1,
       2,
       contractA.name,
-      contractA.address,
+      ChainSpecificAddress.address(contractA.address),
       root,
       allContractNames,
     )
@@ -95,7 +98,7 @@ describe(getSourceOutputPath.name, () => {
       0,
       sourcesCount,
       contractA.name,
-      contractA.address,
+      ChainSpecificAddress.address(contractA.address),
       root,
       allContractNames,
     )
@@ -104,7 +107,7 @@ describe(getSourceOutputPath.name, () => {
       1,
       sourcesCount,
       contractA.name,
-      contractA.address,
+      ChainSpecificAddress.address(contractA.address),
       root,
       allContractNames,
     )
@@ -113,7 +116,7 @@ describe(getSourceOutputPath.name, () => {
       2,
       sourcesCount,
       contractA.name,
-      contractA.address,
+      ChainSpecificAddress.address(contractA.address),
       root,
       allContractNames,
     )
@@ -132,7 +135,7 @@ describe(getSourceOutputPath.name, () => {
       0,
       sourcesCount,
       contractB1.name,
-      contractB1.address,
+      ChainSpecificAddress.address(contractB1.address),
       root,
       allContractNames,
     )
@@ -141,7 +144,7 @@ describe(getSourceOutputPath.name, () => {
       1,
       sourcesCount,
       contractB1.name,
-      contractB1.address,
+      ChainSpecificAddress.address(contractB1.address),
       root,
       allContractNames,
     )
@@ -150,18 +153,18 @@ describe(getSourceOutputPath.name, () => {
       2,
       sourcesCount,
       contractB1.name,
-      contractB1.address,
+      ChainSpecificAddress.address(contractB1.address),
       root,
       allContractNames,
     )
     expect(pathB1_proxy).toEqual(
-      `${root}/B-${contractB1.address.toString()}/proxy/b11.sol`,
+      `${root}/B-${ChainSpecificAddress.address(contractB1.address).toString()}/proxy/b11.sol`,
     )
     expect(pathB1_impl1).toEqual(
-      `${root}/B-${contractB1.address.toString()}/implementation-1/b12.sol`,
+      `${root}/B-${ChainSpecificAddress.address(contractB1.address).toString()}/implementation-1/b12.sol`,
     )
     expect(pathB1_impl2).toEqual(
-      `${root}/B-${contractB1.address.toString()}/implementation-2/b13.sol`,
+      `${root}/B-${ChainSpecificAddress.address(contractB1.address).toString()}/implementation-2/b13.sol`,
     )
   })
 })

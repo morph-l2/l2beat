@@ -1,0 +1,65 @@
+name: Migrate DB
+on:
+  workflow_dispatch:
+    inputs:
+      perform_db_dump:
+        description: Perform database dump before migration (currently unsupported)
+        type: boolean
+        default: false
+        required: false
+  push:
+    paths:
+      - packages/database/prisma/migrations/**
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20 # DB backup can take some time
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+        with:
+          run_install: false
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install
+      - name: Apply migrations to STAGING
+        run: |
+          cd packages/database
+          pnpm prisma migrate deploy
+        env:
+          PRISMA_DB_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      - name: Apply migrations to PRODUCTION
+        run: |
+          cd packages/database
+          pnpm prisma migrate deploy
+        env:
+          PRISMA_DB_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      - name: Notify discord in case of failure
+        if: ${{ failure() }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_NOTIFICATION_WEBHOOK }}
+        run: |
+          curl -sS \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"DB Migration workflow failure at $GITHUB_REF_NAME! Defails: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\"}" \
+            "${DISCORD_WEBHOOK_URL}"
+      - name: Notify devs in case of failure
+        uses: dawidd6/action-send-mail@v17
+        if: ${{ failure() }}
+        with:
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_SENDER }}
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: 465
+          body: "DB Migration workflow failure at ${{ github.ref_name }}! Defails: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          subject: "[Action Required] Database migration failed in github workflows"

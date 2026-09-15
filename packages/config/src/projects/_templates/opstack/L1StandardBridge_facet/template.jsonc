@@ -1,0 +1,23 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "displayName": "L1ETHLockbox",
+  "description": "Deprecated entry point to deposit ERC20 tokens from host chain to this chain. Currently just holds ETH that the Facet multisig can withdraw.",
+  "ignoreRelatives": ["OTHER_BRIDGE", "otherBridge", "l2TokenBridge", "weth"],
+  "ignoreMethods": [
+    "systemConfig",
+    "messenger",
+    "MESSENGER",
+    "superchainConfig"
+  ],
+  "fields": {
+    "$admin": {
+      "permissions": [
+        {
+          "type": "upgrade",
+          "description": "upgrading the bridge implementation can give access to all funds escrowed therein."
+        }
+      ]
+    }
+  },
+  "category": "bridge-canonical"
+}

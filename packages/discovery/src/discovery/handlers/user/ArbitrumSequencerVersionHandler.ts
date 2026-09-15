@@ -1,18 +1,21 @@
-import { assert } from '@l2beat/backend-tools'
-import { Bytes, EthereumAddress, Hash256 } from '@l2beat/shared-pure'
-import { providers, utils } from 'ethers'
-import * as z from 'zod'
+import {
+  assert,
+  Bytes,
+  ChainSpecificAddress,
+  Hash256,
+} from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import { type providers, utils } from 'ethers'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 import { rpcWithRetries } from '../../provider/LowLevelProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { Handler, HandlerResult } from '../Handler'
 
-export type ArbitrumSequencerVersionDefinition = z.infer<
+export type ArbitrumSequencerVersionDefinition = v.infer<
   typeof ArbitrumSequencerVersionDefinition
 >
-export const ArbitrumSequencerVersionDefinition = z.strictObject({
-  type: z.literal('arbitrumSequencerVersion'),
+export const ArbitrumSequencerVersionDefinition = v.strictObject({
+  type: v.literal('arbitrumSequencerVersion'),
 })
 
 const DATA_LOCATION_IN_TX = 0
@@ -22,15 +25,25 @@ const addSequencerBatchV1 =
   'addSequencerL2BatchFromOrigin(uint256 sequenceNumber, bytes calldata data, uint256 afterDelayedMessagesRead, address gasRefunder)'
 const addSequencerBatchV2 =
   'addSequencerL2BatchFromOrigin(uint256 sequenceNumber, bytes calldata data, uint256 afterDelayedMessagesRead, address gasRefunder, uint256 prevMessageCount, uint256 newMessageCount)'
+const addSequencerBatchV3 =
+  'addSequencerL2BatchFromOriginDelayProof(uint256 sequenceNumber, bytes data, uint256 afterDelayedMessagesRead, address gasRefunder, uint256 prevMessageCount, uint256 newMessageCount, tuple(bytes32 beforeDelayedAcc, tuple(uint8 kind, address sender, uint64 blockNumber, uint64 timestamp, uint256 inboxSeqNum, uint256 baseFeeL1, bytes32 messageDataHash) delayedMessage) delayProof)'
+const addSequencerBatchEspresso =
+  'addSequencerL2BatchFromOrigin(uint256 sequenceNumber, bytes calldata data, uint256 afterDelayedMessagesRead, address gasRefunder, uint256 prevMessageCount, uint256 newMessageCount, bytes quote)'
 
 const abi = new utils.Interface([
   'event SequencerBatchDelivered(uint256 indexed batchSequenceNumber, bytes32 indexed beforeAcc, bytes32 indexed afterAcc, bytes32 delayedAcc, uint256 afterDelayedMessagesRead, tuple(uint64, uint64, uint64, uint64) timeBounds, uint8 dataLocation)',
   `function ${addSequencerBatchV1}`,
   `function ${addSequencerBatchV2}`,
+  `function ${addSequencerBatchV3}`,
+  `function ${addSequencerBatchEspresso}`,
 ])
 
 const addSequencerBatchV1SigHash = abi.getSighash(addSequencerBatchV1)
 const addSequencerBatchV2SigHash = abi.getSighash(addSequencerBatchV2)
+const addSequencerBatchV3SigHash = abi.getSighash(addSequencerBatchV3)
+const addSequencerBatchEspressoSigHash = abi.getSighash(
+  addSequencerBatchEspresso,
+)
 
 export class ArbitrumSequencerVersionHandler implements Handler {
   readonly dependencies: string[] = []
@@ -38,17 +51,12 @@ export class ArbitrumSequencerVersionHandler implements Handler {
   constructor(
     readonly field: string,
     readonly definition: ArbitrumSequencerVersionDefinition,
-    readonly logger: DiscoveryLogger,
   ) {}
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
-    this.logger.logExecution(this.field, [
-      'Checking Arbitrum Sequencer Version',
-    ])
-
     const lastEvent = await this.getLastEventWithTxInput(
       provider,
       address,
@@ -105,7 +113,7 @@ export class ArbitrumSequencerVersionHandler implements Handler {
     // integers (32 bytes) stored in big endian fashion. The first 32 bytes
     // are the first point. The first byte of every point is encoding data
     // from the end of the stream. This is Arbitrum specific! The following
-    // 31 bytes are sequentally encoding the stream. Taking the first point,
+    // 31 bytes are sequentially encoding the stream. Taking the first point,
     // dropping the first byte leaves us with 31 bytes from the begging of
     // the stream. Stream is RLP encoded. The first byte indicates that the
     // following data is a string with n-bytes following describing the length.
@@ -136,43 +144,60 @@ export class ArbitrumSequencerVersionHandler implements Handler {
   decodeCalldata(calldata: string): utils.Result {
     if (calldata.startsWith(addSequencerBatchV1SigHash)) {
       return abi.decodeFunctionData(addSequencerBatchV1, calldata)
-    } else if (calldata.startsWith(addSequencerBatchV2SigHash)) {
-      return abi.decodeFunctionData(addSequencerBatchV2, calldata)
-    } else {
-      throw new Error(`Unexpected function signature ${calldata.slice(0, 10)}}`)
     }
+    if (calldata.startsWith(addSequencerBatchV2SigHash)) {
+      return abi.decodeFunctionData(addSequencerBatchV2, calldata)
+    }
+    if (calldata.startsWith(addSequencerBatchV3SigHash)) {
+      return abi.decodeFunctionData(addSequencerBatchV3, calldata)
+    }
+    if (calldata.startsWith(addSequencerBatchEspressoSigHash)) {
+      return abi.decodeFunctionData(addSequencerBatchEspresso, calldata)
+    }
+    throw new Error(`Unexpected function signature ${calldata.slice(0, 10)}`)
   }
 
   async getLastEventWithTxInput(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
     blockNumber: number,
   ): Promise<providers.Log | undefined> {
+    const rawAddress = ChainSpecificAddress.address(address)
     let currentBlockNumber = blockNumber
     const blockStep = 1000
+    let multiplier = 1
     while (currentBlockNumber > 0) {
       const events = await provider.raw(
-        `arbitrum_sequencer_batches.${address}.${Math.max(
+        `arbitrum_sequencer_batches.${rawAddress}.${Math.max(
           0,
-          currentBlockNumber - blockStep,
+          currentBlockNumber - blockStep * multiplier,
         )}.${currentBlockNumber}`,
-        async ({ eventProvider }) => {
-          const fromBlock = Math.max(0, currentBlockNumber - blockStep)
+        async ({ eventProvider }, logger) => {
+          const fromBlock = Math.max(
+            0,
+            currentBlockNumber - blockStep * multiplier,
+          )
           return await rpcWithRetries(
             async () => {
               return await eventProvider.getLogs({
-                address: address.toString(),
+                address: rawAddress.toString(),
                 topics: [abi.getEventTopic('SequencerBatchDelivered')],
                 fromBlock,
                 toBlock: currentBlockNumber,
               })
             },
-            () =>
-              `getLogs ${address.toString()} ${fromBlock} - ${currentBlockNumber}`,
+            logger,
+            `getLogs ${rawAddress.toString()} ${fromBlock} - ${currentBlockNumber}`,
           )
         },
       )
-      currentBlockNumber -= blockStep
+
+      currentBlockNumber -= blockStep * multiplier
+      if (events.length === 0) {
+        multiplier += 1
+      } else {
+        multiplier = 1
+      }
 
       while (events.length > 0) {
         const last = events.pop()

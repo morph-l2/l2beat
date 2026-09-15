@@ -1,0 +1,12 @@
+{
+  "PredicateServiceManager": {
+    "hash": "0x95362e0f8c238015c489b61e090c05d499a158c33aa5151f3b871e862018d54a",
+    "address": "eth:0x1BafAF26d236FbEA3E86075370B554eC0477bFD0",
+    "blockNumber": 22872700
+  },
+  "ServiceManager.sol": {
+    "hash": "0xe58aa83dafa0e6dff193969939930317f9b3522d853cc539225ade1c46cbe271",
+    "address": "eth:0x7FC138988d13deD38FA22aBc4e15e855c92b092E",
+    "blockNumber": 23789926
+  }
+}

@@ -1,0 +1,351 @@
+import {
+  ChainSpecificAddress,
+  EthereumAddress,
+  formatNumber,
+  formatSeconds,
+  ProjectId,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import {
+  CONTRACTS,
+  DA_BRIDGES,
+  DA_MODES,
+  EXITS,
+  OPERATOR,
+  REASON_FOR_BEING_OTHER,
+} from '../../common'
+import { BADGES } from '../../common/badges'
+import { FORCE_TRANSACTIONS } from '../../common/forceTransactions'
+import { PROGRAM_HASHES } from '../../common/programHashes'
+import { RISK_VIEW } from '../../common/riskView'
+import { STATE_VALIDATION } from '../../common/stateValidation'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import type { ScalingProject } from '../../internalTypes'
+import {
+  generateDiscoveryDrivenContracts,
+  generateDiscoveryDrivenPermissions,
+} from '../../templates/generateDiscoveryDrivenSections'
+import { getDiscoveryInfo } from '../../templates/getDiscoveryInfo'
+import { readProjectMarkdown } from '../../utils/readMarkdown'
+import {
+  getAcceptedSHARPVerifierChain,
+  getSHARPBootloaderHashes,
+} from '../starknet/starknet'
+
+const discovery = new ProjectDiscovery('paradex')
+
+const privacyCouncil = {
+  membersCount: 3,
+  requiredSignatures: 3, // workaroud to say that it acts as a 1 of N model where any can disclose
+}
+
+const upgradeDelaySeconds = discovery.getContractValue<number>(
+  'Paradex',
+  'StarkWareProxy_upgradeDelay',
+)
+
+const escrowUSDCDelaySeconds = discovery.getContractValue<number>(
+  'USDC Bridge',
+  'StarkWareProxy_upgradeDelay',
+)
+
+const minDelay = Math.min(upgradeDelaySeconds, escrowUSDCDelaySeconds)
+const finalizationPeriod = 0
+
+function formatMaxTotalBalanceString(
+  ticker: string,
+  maxTotalBalance: number,
+  decimals: number,
+) {
+  return `The current bridge cap is ${formatNumber(
+    maxTotalBalance / 10 ** decimals,
+  )} ${ticker}.`
+}
+
+const escrowUSDCMaxTotalBalanceString = formatMaxTotalBalanceString(
+  'USDC',
+  discovery.getContractValue<number>('USDC Bridge', 'maxTotalBalance'),
+  6,
+)
+
+const paradexProgramHashes: string[] = []
+paradexProgramHashes.push(
+  discovery.getContractValue<string>('Paradex', 'programHash'),
+)
+paradexProgramHashes.push(
+  discovery.getContractValue<string>('Paradex', 'aggregatorProgramHash'),
+)
+paradexProgramHashes.push(...getSHARPBootloaderHashes())
+
+export const paradex: ScalingProject = {
+  type: 'layer2',
+  id: ProjectId('paradex'),
+  capability: 'universal',
+  addedAt: UnixTime(1698756386), // 2023-10-31T12:46:26Z
+  badges: [
+    BADGES.VM.CairoVM,
+    BADGES.DA.DAC,
+    BADGES.Stack.SNStack,
+    BADGES.Infra.SHARP,
+    BADGES.RaaS.Karnot,
+  ],
+  reasonsForBeingOther: [REASON_FOR_BEING_OTHER.SMALL_DAC],
+  display: {
+    name: 'Paradex',
+    slug: 'paradex',
+    stacks: ['SN Stack'],
+    description:
+      'Paradex is a high-performance crypto-derivatives exchange offering zero fee and private perpetuals.',
+    purposes: ['Universal', 'Exchange'],
+    links: {
+      websites: ['https://paradex.trade/'],
+      bridges: ['https://app.paradex.trade', 'https://paradex.trade/stats'],
+      documentation: ['https://docs.paradex.trade/'],
+      repositories: ['https://github.com/tradeparadex'],
+      explorers: ['https://voyager.prod.paradex.trade'],
+      socialMedia: [
+        'https://twitter.com/paradex',
+        'https://discord.com/invite/paradex',
+      ],
+    },
+    liveness: {
+      explanation:
+        'Paradex is a ZK rollup that posts state diffs to the L1. For a transaction to be considered final, the state diffs have to be submitted and validity proof should be generated, submitted, and verified. Proofs are aggregated with other projects using SHARP and state updates have to refer to proved claims.',
+      overwrites: {
+        proofSubmissions: 'no-data',
+      },
+    },
+  },
+  proofSystem: {
+    type: 'Validity',
+    zkCatalogIds: [ProjectId('stwo')],
+  },
+  chainConfig: {
+    name: 'paradex',
+    chainId: undefined,
+    gasTokens: ['ETH'],
+    apis: [
+      {
+        type: 'starknet',
+        url: 'https://rpc.api.prod.paradex.trade/rpc/v0_9',
+        callsPerMinute: 120,
+      },
+    ],
+  },
+  config: {
+    activityConfig: {
+      type: 'block',
+    },
+    escrows: [
+      discovery.getEscrowDetails({
+        address: ChainSpecificAddress(
+          'eth:0xE3cbE3A636AB6A754e9e41B12b09d09Ce9E53Db3',
+        ),
+        tokens: ['USDC'],
+        upgradableBy: [
+          {
+            name: 'USDC Escrow owner',
+            delay: formatSeconds(escrowUSDCDelaySeconds),
+          },
+        ],
+        description:
+          'Paradex USDC Escrow.' + ' ' + escrowUSDCMaxTotalBalanceString,
+      }),
+    ],
+    // paradex is prividium-like but posts encrypted data to ethereum
+    daTracking: [
+      {
+        type: 'ethereum',
+        daLayer: ProjectId('ethereum'),
+        sinceBlock: 0, // Edge Case: config added @ DA Module start
+        inbox: EthereumAddress('0xF338cad020D506e8e3d9B4854986E0EcE6C23640'),
+        sequencers: [
+          EthereumAddress('0xC70ae19B5FeAA5c19f576e621d2bad9771864fe2'),
+        ],
+      },
+    ],
+    trackedTxs: [
+      {
+        uses: [{ type: 'liveness', subtype: 'stateUpdates' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xF338cad020D506e8e3d9B4854986E0EcE6C23640',
+          ),
+          selector: '0x77552641',
+          functionSignature:
+            'function updateState(uint256[] programOutput, uint256 onchainDataHash, uint256 onchainDataSize)',
+          sinceTimestamp: UnixTime(1689850631),
+          untilTimestamp: UnixTime(1710428663), // last call: https://etherscan.io/tx/0x3230dafe64b826cfddf3ad1326effc46324c092e5c04a69b06d859cb6a5ecec3
+        },
+      },
+      {
+        uses: [{ type: 'liveness', subtype: 'stateUpdates' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xF338cad020D506e8e3d9B4854986E0EcE6C23640',
+          ),
+          selector: '0xb72d42a1',
+          functionSignature:
+            'function updateStateKzgDA(uint256[] programOutput, bytes kzgProof)',
+          sinceTimestamp: UnixTime(1710346919),
+          untilTimestamp: UnixTime(1725811535),
+        },
+      },
+      {
+        uses: [{ type: 'liveness', subtype: 'stateUpdates' }],
+        query: {
+          formula: 'functionCall',
+          address: EthereumAddress(
+            '0xF338cad020D506e8e3d9B4854986E0EcE6C23640',
+          ),
+          selector: '0x507ee528',
+          functionSignature:
+            'function updateStateKzgDA(uint256[] programOutput, bytes[] kzgProofs)',
+          sinceTimestamp: UnixTime(1725811667),
+        },
+      },
+    ],
+  },
+  dataAvailability: {
+    layer: {
+      value: 'Privacy council',
+      sentiment: 'warning',
+      description: `Encrypted data is posted on Ethereum as blobs, and a privacy council of ${privacyCouncil.membersCount} members holds the decryption keys. Users are not able to independetly reconstruct the L2 state without relying on the council members.`,
+    },
+    bridge: DA_BRIDGES.DAC_MEMBERS({
+      membersCount: privacyCouncil.membersCount,
+      requiredSignatures: privacyCouncil.requiredSignatures,
+    }),
+    mode: DA_MODES.STATE_DIFFS,
+  },
+  riskView: {
+    stateValidation: {
+      ...RISK_VIEW.STATE_ZKP_ST,
+      executionDelay: finalizationPeriod,
+    },
+    // dataAvailability: RISK_VIEW.DATA_ON_CHAIN_STATE_DIFFS,
+    dataAvailability: {
+      value: 'External',
+      description: `Encrypted data is posted on Ethereum as blobs, and a privacy council of ${privacyCouncil.membersCount} members holds the decryption keys. Users are not able to independetly reconstruct the L2 state without relying on the council members.`,
+      sentiment: 'bad',
+      orderHint:
+        privacyCouncil.requiredSignatures / privacyCouncil.membersCount,
+    },
+    exitWindow: RISK_VIEW.EXIT_WINDOW(minDelay, 0),
+    sequencerFailure: RISK_VIEW.SEQUENCER_NO_MECHANISM(),
+    proposerFailure: RISK_VIEW.PROPOSER_CANNOT_WITHDRAW,
+  },
+  stage: {
+    stage: 'NotApplicable',
+  },
+  stateDerivation: {
+    nodeSoftware:
+      'SN stack-compatible node software can be used, please find the Paradex-specific node setup guide [in their docs](https://docs.paradex.trade/documentation/paradex-chain/node-setup).The [Juno](https://github.com/NethermindEth/juno) node software can be used to reconstruct the L2 state entirely from L1. The feature has not been released yet, but can be found in this [PR](https://github.com/NethermindEth/juno/pull/1335).',
+    compressionScheme:
+      'Paradex uses [stateful compression since v0.13.4](https://docs.starknet.io/architecture/data-availability/#v0_13_4).',
+    genesisState: 'There is no non-empty genesis state.',
+    dataFormat:
+      'The data format has been updated with different versions, and the full specification can be found [here](https://docs.starknet.io/architecture/data-availability/).',
+  },
+  stateValidation: {
+    categories: [STATE_VALIDATION.VALIDITY_PROOFS],
+  },
+  technology: {
+    dataAvailability: {
+      name: 'Encrypted blobs via privacy council',
+      description: readProjectMarkdown(
+        'paradex',
+        'technologyDataAvailability',
+        { membersCount: privacyCouncil.membersCount },
+      ),
+      risks: [
+        {
+          category: 'Funds can be frozen if',
+          text: 'no privacy council member discloses the decryption keys.',
+        },
+      ],
+      references: [
+        {
+          title: 'Privacy Perps - Paradex docs',
+          url: 'https://docs.paradex.trade/trading/privacy',
+        },
+      ],
+    },
+    operator: OPERATOR.CENTRALIZED_OPERATOR,
+    forceTransactions: {
+      ...FORCE_TRANSACTIONS.SEQUENCER_NO_MECHANISM,
+      references: [
+        {
+          title: 'Censorship resistance of Starknet - Forum Discussion',
+          url: 'https://community.starknet.io/t/censorship-resistance/196',
+        },
+      ],
+    },
+    exitMechanisms: EXITS.STARKNET,
+  },
+  contracts: {
+    addresses: generateDiscoveryDrivenContracts([discovery]),
+    risks: [CONTRACTS.UPGRADE_WITH_DELAY_SECONDS_RISK(minDelay)],
+    programHashes: paradexProgramHashes.map((el) => PROGRAM_HASHES(el)),
+    // stwo verifier address, could be deduced from analyzing trx traces
+    zkVerifiers: getAcceptedSHARPVerifierChain().factRegistries,
+  },
+  permissions: generateDiscoveryDrivenPermissions([discovery]),
+  milestones: [
+    {
+      title: 'Perpetual Options Launch',
+      url: 'https://x.com/tradeparadex/status/1907041207177613610',
+      date: '2025-04-01T00:00:00Z',
+      description: 'Paradex opens perpetual options trading to all users.',
+      type: 'general',
+    },
+    {
+      title: 'Vaults Launched',
+      url: 'https://x.com/tradeparadex/status/1843550172443512998',
+      date: '2024-10-08T00:00:00Z',
+      description:
+        'Paradex launches Vaults, the future of on-chain investment management.',
+      type: 'general',
+    },
+    {
+      title: 'Paradex exits Open Beta',
+      url: 'https://x.com/tradeparadex/status/1854537396714651707',
+      date: '2024-11-07T00:00:00Z',
+      description: 'Paradex launches XP Warzone Season 1 and exits Open Beta.',
+      type: 'general',
+    },
+    {
+      title: 'Paradex starts using blobs',
+      url: 'https://twitter.com/tradeparadex/status/1768306190596153799',
+      date: '2024-03-26T00:00:00Z',
+      description: 'Paradex starts publishing data to blobs.',
+      type: 'general',
+    },
+    {
+      title: 'Open Beta Mainnet Launch',
+      url: 'https://twitter.com/tradeparadex',
+      date: '2023-10-01T00:00:00.00Z',
+      description: 'Paradex launches Open Beta on Mainnet.',
+      type: 'general',
+    },
+    {
+      title: 'Paradex migrates to Stwo prover',
+      url: 'https://etherscan.io/tx/0xec6c80207374c54d755f96ff0f89372425ab4fa9bb3286cbc2109b4652b00079',
+      date: '2025-11-25T00:00:00.00Z',
+      description:
+        'Paradex switches from Stone zk prover to Stwo to prove its blocks.',
+      type: 'general',
+    },
+    {
+      title: 'Paradex introduces privacy perps',
+      url: 'https://x.com/paradex/status/2000680628329812320',
+      date: '2025-12-15T00:00:00Z',
+      description:
+        'Paradex introduces a privacy council to manage decryption keys for encrypted data availability.',
+      type: 'general',
+    },
+  ],
+  discoveryInfo: getDiscoveryInfo([discovery]),
+}

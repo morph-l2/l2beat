@@ -1,0 +1,392 @@
+import {
+  SHARP_SUBMISSION_ADDRESS,
+  SHARP_SUBMISSION_SELECTOR,
+  type TrackedTxConfigEntryWithoutId,
+  type TrackedTxFunctionCallConfig,
+  type TrackedTxSharedBridgeConfig,
+  type TrackedTxSharpSubmissionConfig,
+  type TrackedTxTransferConfig,
+} from '@l2beat/shared'
+import { assert, ProjectId } from '@l2beat/shared-pure'
+import { existsSync, readFileSync } from 'fs'
+import { join } from 'path'
+import { badgesCompareFn } from '../common/badges'
+import {
+  formatChallengeAndExecutionDelay,
+  formatChallengePeriod,
+  formatExecutionDelay,
+} from '../common/formatDelays'
+import { loadDiscoveryUpdates } from '../discovery/loadDiscoveryUpdates'
+import type {
+  Bridge,
+  Layer2TxConfig,
+  ProjectScalingRiskView,
+  ScalingProject,
+} from '../internalTypes'
+import { asArray, emptyArrayToUndefined } from '../templates/utils'
+import {
+  type BaseProject,
+  type ProjectCostsInfo,
+  type ProjectDiscoveryInfo,
+  type ProjectLivenessInfo,
+  type ProjectRiskView,
+  type ProjectScalingCategory,
+  ProjectTvsConfigSchema,
+  type TvsToken,
+} from '../types'
+import {
+  areContractsDiscoveryDriven,
+  arePermissionsDiscoveryDriven,
+} from '../utils/discoveryDriven'
+import { runConfigAdjustments } from './adjustments'
+import { ecosystems } from './ecosystems'
+import { getEoaUpgradeRedWarning } from './getEoaRedWarning'
+import { getProjectUnverifiedContracts } from './getUnverifiedContracts'
+import { layer2s } from './layer2s'
+import { layer3s } from './layer3s'
+import { refactored } from './refactored'
+import { getHostChain } from './utils/getHostChain'
+import { getInfrastructure } from './utils/getInfrastructure'
+import { getRaas } from './utils/getRaas'
+import { getStage } from './utils/getStage'
+import { getVM } from './utils/getVM'
+
+const daBridges = refactored.filter((p) => p.daBridge)
+export function getProjects(): BaseProject[] {
+  runConfigAdjustments()
+
+  return refactored
+    .map((p): BaseProject => ({ ...p, tvsConfig: getTvsConfig(p) }))
+    .concat(layer2s.map(layer2Or3ToProject))
+    .concat(layer3s.map(layer2Or3ToProject))
+    .concat(ecosystems)
+    .map(withDiscoveryUpdates)
+}
+
+function withDiscoveryUpdates(project: BaseProject): BaseProject {
+  const discoveryUpdates = loadDiscoveryUpdates(project.id)
+  return discoveryUpdates ? { ...project, discoveryUpdates } : project
+}
+
+function layer2Or3ToProject(p: ScalingProject): BaseProject {
+  const tvsConfig = getTvsConfig(p)
+
+  const associatedTokens = p.config.associatedTokens?.map((associated) => ({
+    symbol: associated,
+    icon: tvsConfig?.find((t) => t.symbol === associated)?.iconUrl,
+  }))
+
+  const hostChain = layer2s.find((x) => x.id === p.hostChain)
+
+  return {
+    id: p.id,
+    name: p.display.name,
+    shortName: p.display.shortName,
+    aliases: p.display.aliases,
+    slug: p.display.slug,
+    addedAt: p.addedAt,
+
+    // data
+    colors: p.colors,
+    ecosystemColors: ecosystems.find((e) => e.id === p.ecosystemInfo?.id)
+      ?.colors,
+    statuses: {
+      yellowWarning: p.display.headerWarning,
+      redWarning: getEoaUpgradeRedWarning(p.id, p.display.redWarning),
+      emergencyWarning: p.display.emergencyWarning,
+      reviewStatus: p.reviewStatus,
+      unverifiedContracts: getProjectUnverifiedContracts(p, daBridges),
+    },
+    display: {
+      description: p.display.description,
+      links: p.display.links,
+      badges: (p.badges ?? []).sort(badgesCompareFn),
+    },
+    contracts: p.contracts,
+    permissions: p.permissions,
+    discoveryInfo: adjustDiscoveryInfo(p),
+    scalingInfo: {
+      layer: p.type,
+      type: getType(p),
+      capability: p.capability,
+      hostChain: getHostChain(p.hostChain ?? ProjectId.ETHEREUM),
+      reasonsForBeingOther: p.reasonsForBeingOther,
+      stacks: p.display.stacks,
+      raas: getRaas(p.badges),
+      infrastructure: getInfrastructure(p.badges),
+      vm: getVM(p.badges),
+      daLayer: emptyArrayToUndefined(
+        asArray(p.dataAvailability).map((d) => d.layer.value),
+      ),
+      stage: getStage(p.stage),
+      purposes: p.display.purposes,
+      scopeOfAssessment: p.scopeOfAssessment,
+      proofSystem: p.proofSystem,
+    },
+    scalingStage: p.stage,
+    scalingRisks: {
+      self: getProcessedRiskView(p.riskView),
+      host:
+        p.type === 'layer3' && hostChain
+          ? getProcessedRiskView(hostChain.riskView)
+          : undefined,
+      stacked:
+        p.type === 'layer3' && p.stackedRiskView
+          ? getProcessedRiskView(p.stackedRiskView)
+          : undefined,
+    },
+    scalingDa: emptyArrayToUndefined(asArray(p.dataAvailability)),
+    scalingTechnology: {
+      warning: p.display.warning,
+      detailedDescription: p.display.detailedDescription,
+      architectureImage: p.display.architectureImage,
+      ...p.technology,
+      dataAvailability: emptyArrayToUndefined(
+        asArray(p.technology?.dataAvailability),
+      ),
+      sequencingImage: p.display.sequencingImage,
+      stateDerivation: p.stateDerivation,
+      stateValidation: p.stateValidation,
+      stateValidationImage: p.display.stateValidationImage,
+      upgradesAndGovernance:
+        p.type === 'layer2' ? p.upgradesAndGovernance : undefined,
+    },
+    customDa: p.customDa,
+    privacyInfo: p.privacyInfo,
+    tvsInfo: {
+      associatedTokens: associatedTokens ?? [],
+      warnings: [p.display.tvsWarning].filter((x) => x !== undefined),
+    },
+    tvsConfig,
+    activityConfig: p.config.activityConfig,
+    livenessInfo: getLivenessInfo(p),
+    livenessConfig: p.type === 'layer2' ? p.config.liveness : undefined,
+    costsInfo: getCostsInfo(p),
+    trackedTxsConfig: toBackendTrackedTxsConfig(
+      p.id,
+      p.type === 'layer2' ? p.config.trackedTxs : undefined,
+    ),
+    chainConfig: p.chainConfig,
+    milestones: p.milestones,
+    daTrackingConfig: p.config.daTracking,
+    ecosystemInfo: p.ecosystemInfo,
+    interopConfig: p.interopConfig,
+    crops: p.crops,
+    // tags
+    archivedAt: p.archivedAt,
+    hasTestnet: p.hasTestnet,
+    escrows: p.config.escrows,
+  }
+}
+
+function getType(p: ScalingProject): ProjectScalingCategory | undefined {
+  if (p.reasonsForBeingOther && p.reasonsForBeingOther.length > 0)
+    return 'Other'
+
+  const typesPerDA = new Set(
+    asArray(p.dataAvailability).map((da) => {
+      // If there's a bridge in DA
+      if (da.bridge.value === 'Plasma') return 'Plasma'
+
+      if (!p.proofSystem || !p.dataAvailability) return undefined
+
+      const isEthereumBridge =
+        da.bridge.value === 'Enshrined' || da.bridge.value === 'Self-attested' // Intmax case
+      const proofType = p.proofSystem?.type
+
+      // If there's
+      if (proofType === 'Optimistic') {
+        return isEthereumBridge ? 'Optimistic Rollup' : 'Optimium'
+      }
+
+      if (proofType === 'Validity') {
+        return isEthereumBridge ? 'ZK Rollup' : 'Validium'
+      }
+    }),
+  )
+
+  if (typesPerDA.size > 1) {
+    throw new Error(
+      `Multiple DAs assigned to project ${p.id} lead to different scaling types. Update the logic to support this case.`,
+    )
+  }
+  return Array.from(typesPerDA)[0]
+}
+
+function getProcessedRiskView(
+  riskView: ProjectScalingRiskView,
+): ProjectRiskView {
+  const {
+    stateValidation: { challengeDelay, executionDelay },
+  } = riskView
+
+  let secondLine: string | undefined
+  if (challengeDelay !== undefined && executionDelay !== undefined) {
+    secondLine = formatChallengeAndExecutionDelay(
+      challengeDelay,
+      executionDelay,
+    )
+  } else if (challengeDelay !== undefined) {
+    secondLine = formatChallengePeriod(challengeDelay)
+  } else if (executionDelay !== undefined) {
+    secondLine = formatExecutionDelay(executionDelay)
+  }
+
+  return {
+    ...riskView,
+    stateValidation: {
+      ...riskView.stateValidation,
+      secondLine,
+    },
+  }
+}
+
+function getLivenessInfo(p: ScalingProject): ProjectLivenessInfo | undefined {
+  if (p.type === 'layer2' && p.config.trackedTxs !== undefined) {
+    return p.display.liveness ?? {}
+  }
+}
+
+function getCostsInfo(p: ScalingProject): ProjectCostsInfo | undefined {
+  if (p.type === 'layer2' && p.config.trackedTxs !== undefined) {
+    return {
+      warning: p.display.costsWarning,
+    }
+  }
+}
+
+function toBackendTrackedTxsConfig(
+  projectId: ProjectId,
+  configs: Layer2TxConfig[] | undefined,
+): TrackedTxConfigEntryWithoutId[] | undefined {
+  if (configs === undefined) return
+
+  return configs.flatMap((config) => {
+    const common = {
+      projectId,
+      sinceTimestamp: config.query.sinceTimestamp,
+      untilTimestamp: config.query.untilTimestamp,
+    }
+    const params = toBackendTrackedTxParams(config)
+
+    return config.uses.map((use): TrackedTxConfigEntryWithoutId => {
+      if (use.type === 'l2costs') {
+        return {
+          ...common,
+          ...use,
+          costMultiplier: config._hackCostMultiplier,
+          params,
+        }
+      }
+
+      if (use.groupBy !== undefined) {
+        assert(
+          params.formula === 'functionCall',
+          'Liveness grouping is only supported for function calls',
+        )
+        const { topics, ...groupableParams } = params
+        assert(
+          topics === undefined,
+          'Liveness grouping is not supported for topic-matched function calls',
+        )
+        return {
+          ...common,
+          type: use.type,
+          subtype: use.subtype,
+          groupBy: use.groupBy,
+          params: groupableParams,
+        }
+      }
+
+      return {
+        ...common,
+        type: use.type,
+        subtype: use.subtype,
+        params,
+      }
+    })
+  })
+}
+
+type BackendTrackedTxParams =
+  | TrackedTxFunctionCallConfig
+  | TrackedTxTransferConfig
+  | TrackedTxSharpSubmissionConfig
+  | TrackedTxSharedBridgeConfig
+
+function toBackendTrackedTxParams(
+  config: Layer2TxConfig,
+): BackendTrackedTxParams {
+  switch (config.query.formula) {
+    case 'functionCall':
+      return {
+        formula: 'functionCall',
+        address: config.query.address,
+        selector: config.query.selector,
+        signature: config.query.functionSignature,
+        topics: config.query.topics,
+      }
+    case 'transfer':
+      return {
+        formula: 'transfer',
+        from: config.query.from,
+        to: config.query.to,
+      }
+    case 'sharpSubmission':
+      return {
+        formula: 'sharpSubmission',
+        address: SHARP_SUBMISSION_ADDRESS,
+        selector: SHARP_SUBMISSION_SELECTOR,
+        programHashes: config.query.programHashes,
+      }
+    case 'sharedBridge':
+      return {
+        formula: 'sharedBridge',
+        address: config.query.address,
+        signature: config.query.functionSignature,
+        selector: config.query.selector,
+        firstParameter: config.query.firstParameter,
+      }
+  }
+}
+
+export function adjustDiscoveryInfo(
+  project: ScalingProject | Bridge,
+): ProjectDiscoveryInfo {
+  const contractsDiscoDriven = areContractsDiscoveryDriven(project.contracts)
+  const permissionsDiscoDriven = arePermissionsDiscoveryDriven(
+    project.permissions,
+  )
+
+  return {
+    contractsDiscoDriven,
+    permissionsDiscoDriven,
+    isDiscoDriven: contractsDiscoDriven && permissionsDiscoDriven,
+    baseTimestamp: project.discoveryInfo.baseTimestamp,
+    // This is implicit assumption that if there are timestamps per chain, then
+    // the project has disco ui. It's cause if there are some keys it means
+    // that the project has discovered.json file.
+    hasDiscoUi: project.discoveryInfo.baseTimestamp !== undefined,
+  }
+}
+
+function getTvsConfig(project: { id: ProjectId }): TvsToken[] | undefined {
+  const projectPath = project.id.replace('=', '').replace(';', '')
+  const filePath = join(__dirname, `../../src/projects/${projectPath}/tvs.json`)
+
+  if (!existsSync(filePath)) {
+    return undefined
+  }
+
+  const result = ProjectTvsConfigSchema.safeParse(
+    JSON.parse(readFileSync(filePath, 'utf8')),
+  )
+
+  if (!result.success) {
+    throw new Error(
+      `Invalid TVS config for project ${project.id}: ${result.path} : ${result.message}`,
+    )
+  }
+
+  return result.data.tokens
+}

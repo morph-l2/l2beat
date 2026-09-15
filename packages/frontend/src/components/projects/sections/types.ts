@@ -1,0 +1,346 @@
+import type { ActivitySectionProps } from './ActivitySection'
+import type { ContractsSectionProps } from './contracts/ContractsSection'
+import type { CostsSectionProps } from './costs/CostsSection'
+import type { DaRiskSummarySectionProps } from './DaRiskSummarySection'
+import type { DetailedDescriptionSectionProps } from './DetailedDescriptionSection'
+import type { DataPostedSectionProps } from './data-posted/DataPostedSection'
+import type { ExternalDependenciesSectionProps } from './ExternalDependenciesSection'
+import type { GardenCropsSectionProps } from './GardenCropsSection'
+import type { GrissiniRiskAnalysisSectionProps } from './GrissiniRiskAnalysisSection'
+import type { GroupSectionProps } from './GroupSection'
+import type { InteropFlowsSectionProps } from './interop/InteropFlowsSection'
+import type { InteropTokenProtocolsSectionProps } from './interop/InteropTokenProtocolsSection'
+import type { InteropTokensSectionProps } from './interop/InteropTokensSection'
+import type { InteropTokenTransfersSectionProps } from './interop/InteropTokenTransfersSection'
+import type { InteropTokenVolumeSectionProps } from './interop/InteropTokenVolumeSection'
+import type { InteropTransfersSectionProps } from './interop/InteropTransfersSection'
+import type { InteropVolumeSectionProps } from './interop/InteropVolumeSection'
+import type { InteropTokenOnchainDeploymentsSectionProps } from './interop/onchain-deployments/InteropTokenOnchainDeploymentsSection'
+import type { L3RiskAnalysisSectionProps } from './L3RiskAnalysisSection'
+import type { LivenessSectionProps } from './liveness/LivenessSection'
+import type { MarkdownSectionProps } from './MarkdownSection'
+import type { MilestonesAndIncidentsSectionProps } from './MilestonesAndIncidentsSection'
+import type { ExtendedProjectSectionProps } from './ProjectSection'
+import type { PermissionsSectionProps } from './permissions/PermissionsSection'
+import type { PrivacyAssetsBreakdownSectionProps } from './privacy/PrivacyAssetsBreakdownSection'
+import type { PrivacyFlowsSectionProps } from './privacy/PrivacyFlowsSection'
+import type { ProgramHashesSectionProps } from './program-hashes/ProgramHashesSection'
+import type { RiskAnalysisSectionProps } from './RiskAnalysisSection'
+import type { RiskSummarySectionProps } from './RiskSummarySection'
+import type { SequencingSectionProps } from './SequencingSection'
+import type { StageSectionProps } from './StageSection'
+import type { StateDerivationSectionProps } from './StateDerivationSection'
+import type { StateValidationSectionProps } from './state-validation/StateValidationSection'
+import type { TechnologyChoicesSectionProps } from './TechnologyChoicesSection'
+import type { TrustedSetupSectionProps } from './TrustedSetupsSection'
+import type { ThroughputSectionProps } from './throughput/ThroughputSection'
+import type { L2TvsSectionProps } from './tvs/L2TvsSection'
+import type { TvsValueSectionProps } from './tvs/TvsValueSection'
+import type { ZkCatalogTvsSectionProps } from './tvs/ZkCatalogTvsSection'
+import type { UpdatesSectionProps } from './UpdatesSection'
+import type { UpgradesAndGovernanceSectionProps } from './UpgradesAndGovernanceSection'
+import type { VerifiersSectionProps } from './verifiers/VerifiersSection'
+
+type SectionId =
+  | 'tvs'
+  | 'activity'
+  | 'onchain-costs'
+  | 'liveness'
+  | 'detailed-description'
+  | 'milestones-and-incidents'
+  | 'risk-summary'
+  | 'risk-analysis'
+  | 'l3-risk-analysis'
+  | 'stage'
+  | 'technology'
+  | 'operator'
+  | 'withdrawals'
+  | 'other-considerations'
+  | 'state-derivation'
+  | 'state-validation'
+  | 'upgrades-and-governance'
+  | 'updates'
+  | 'permissions'
+  | 'contracts'
+  | 'sequencing'
+  | 'throughput'
+  | 'data-posted'
+  | 'proof-system'
+  | 'trusted-setups'
+  | 'verifiers'
+  | 'program-hashes'
+  | 'interop-volume'
+  | 'interop-flows'
+  | 'interop-transfers'
+  | 'interop-tokens'
+  | 'interop-protocols'
+  | 'onchain-deployments'
+  | 'privacy-tvl'
+  | 'privacy-flows'
+  | 'privacy-assets-breakdown'
+  | 'external-dependencies'
+  | 'note-discovery'
+  | 'crops'
+
+type GroupId = 'da-layer' | 'da-bridge'
+
+export type ProjectSectionId = SectionId | GroupId | `${GroupId}-${SectionId}`
+
+export type ProjectSectionProps = Omit<
+  ExtendedProjectSectionProps,
+  'className' | 'children'
+>
+
+type ProjectDetailsProps<T> = Omit<T, 'sectionOrder'>
+
+interface ProjectDetailsCostsSection {
+  type: 'CostsSection'
+  props: ProjectDetailsProps<CostsSectionProps>
+}
+
+interface ProjectDetailsLivenessSection {
+  type: 'LivenessSection'
+  props: ProjectDetailsProps<LivenessSectionProps>
+}
+
+interface ProjectDetailsThroughputSection {
+  type: 'ThroughputSection'
+  props: ProjectDetailsProps<ThroughputSectionProps>
+}
+
+interface ProjectDetailsL2TvsSection {
+  type: 'L2TvsSection'
+  props: ProjectDetailsProps<L2TvsSectionProps>
+}
+
+interface ProjectDetailsActivitySection {
+  type: 'ActivitySection'
+  props: ProjectDetailsProps<ActivitySectionProps>
+}
+
+interface ProjectDetailsDetailedDescriptionSection {
+  type: 'DetailedDescriptionSection'
+  props: ProjectDetailsProps<DetailedDescriptionSectionProps>
+}
+
+interface ProjectDetailsMilestonesAndIncidentsSection {
+  type: 'MilestonesAndIncidentsSection'
+  props: ProjectDetailsProps<MilestonesAndIncidentsSectionProps>
+}
+
+interface ProjectDetailsRiskSummarySection {
+  type: 'RiskSummarySection'
+  props: ProjectDetailsProps<RiskSummarySectionProps>
+}
+
+interface ProjectDetailsDaRiskSummarySection {
+  type: 'DaRiskSummarySection'
+  props: ProjectDetailsProps<DaRiskSummarySectionProps>
+}
+
+interface ProjectDetailsRiskAnalysisSection {
+  type: 'RiskAnalysisSection'
+  props: ProjectDetailsProps<RiskAnalysisSectionProps>
+}
+
+interface ProjectDetailsTrustedSetupSection {
+  type: 'TrustedSetupSection'
+  props: ProjectDetailsProps<TrustedSetupSectionProps>
+}
+
+interface ProjectDetailsVerifiersSection {
+  type: 'VerifiersSection'
+  props: ProjectDetailsProps<VerifiersSectionProps>
+}
+
+interface ProjectDetailsProgramHashesSection {
+  type: 'ProgramHashesSection'
+  props: ProjectDetailsProps<ProgramHashesSectionProps>
+}
+
+interface L3ProjectDetailsRiskAnalysisSection {
+  type: 'L3RiskAnalysisSection'
+  props: ProjectDetailsProps<L3RiskAnalysisSectionProps>
+}
+
+interface ProjectDetailsStageSection {
+  type: 'StageSection'
+  props: ProjectDetailsProps<StageSectionProps>
+}
+
+interface ProjectDetailsTechnologyChoicesSection {
+  type: 'TechnologyChoicesSection'
+  props: ProjectDetailsProps<TechnologyChoicesSectionProps>
+}
+
+interface ProjectDetailsStateDerivationSection {
+  type: 'StateDerivationSection'
+  props: ProjectDetailsProps<StateDerivationSectionProps>
+}
+
+interface ProjectDetailsStateValidationSection {
+  type: 'StateValidationSection'
+  props: ProjectDetailsProps<StateValidationSectionProps>
+}
+
+interface ProjectDetailsMarkdownSection {
+  type: 'MarkdownSection'
+  props: ProjectDetailsProps<MarkdownSectionProps>
+}
+
+interface ProjectDetailsSequencingSection {
+  type: 'SequencingSection'
+  props: ProjectDetailsProps<SequencingSectionProps>
+}
+
+interface ProjectDetailsPermissionsSection {
+  type: 'PermissionsSection'
+  props: ProjectDetailsProps<PermissionsSectionProps>
+}
+
+interface ProjectDetailsContractsSection {
+  type: 'ContractsSection'
+  props: ProjectDetailsProps<ContractsSectionProps>
+}
+
+interface ProjectDetailsDataPostedSection {
+  type: 'DataPostedSection'
+  props: ProjectDetailsProps<DataPostedSectionProps>
+}
+
+interface ProjectDetailsInteropVolumeSection {
+  type: 'InteropVolumeSection'
+  props: ProjectDetailsProps<InteropVolumeSectionProps>
+}
+
+interface ProjectDetailsInteropFlowsSection {
+  type: 'InteropFlowsSection'
+  props: ProjectDetailsProps<InteropFlowsSectionProps>
+}
+
+interface ProjectDetailsInteropTransfersSection {
+  type: 'InteropTransfersSection'
+  props: ProjectDetailsProps<InteropTransfersSectionProps>
+}
+
+interface ProjectDetailsInteropTokensSection {
+  type: 'InteropTokensSection'
+  props: ProjectDetailsProps<InteropTokensSectionProps>
+}
+
+interface ProjectDetailsInteropTokenVolumeSection {
+  type: 'InteropTokenVolumeSection'
+  props: ProjectDetailsProps<InteropTokenVolumeSectionProps>
+}
+
+interface ProjectDetailsInteropTokenProtocolsSection {
+  type: 'InteropTokenProtocolsSection'
+  props: ProjectDetailsProps<InteropTokenProtocolsSectionProps>
+}
+
+interface ProjectDetailsInteropTokenOnchainDeploymentsSection {
+  type: 'InteropTokenOnchainDeploymentsSection'
+  props: ProjectDetailsProps<InteropTokenOnchainDeploymentsSectionProps>
+}
+
+interface ProjectDetailsInteropTokenTransfersSection {
+  type: 'InteropTokenTransfersSection'
+  props: ProjectDetailsProps<InteropTokenTransfersSectionProps>
+}
+
+interface ProjectDetailsGroup {
+  type: 'Group'
+  props: ProjectDetailsProps<GroupSectionProps>
+}
+
+interface ProjectDetailsGardenCropsSection {
+  type: 'GardenCropsSection'
+  props: ProjectDetailsProps<GardenCropsSectionProps>
+}
+
+interface ProjectDetailsGrissiniRiskAnalysisSection {
+  type: 'GrissiniRiskAnalysisSection'
+  props: ProjectDetailsProps<GrissiniRiskAnalysisSectionProps>
+}
+
+interface ProjectDetailsZkCatalogTvsSection {
+  type: 'ZkCatalogTvsSection'
+  props: ProjectDetailsProps<ZkCatalogTvsSectionProps>
+}
+
+interface ProjectDetailsUpgradesAndGovernanceSection {
+  type: 'UpgradesAndGovernanceSection'
+  props: ProjectDetailsProps<UpgradesAndGovernanceSectionProps>
+}
+
+interface ProjectDetailsUpdatesSection {
+  type: 'UpdatesSection'
+  props: ProjectDetailsProps<UpdatesSectionProps>
+}
+
+interface ProjectDetailsTvsValueSection {
+  type: 'TvsValueSection'
+  props: ProjectDetailsProps<TvsValueSectionProps>
+}
+
+interface ProjectDetailsPrivacyFlowsSection {
+  type: 'PrivacyFlowsSection'
+  props: ProjectDetailsProps<PrivacyFlowsSectionProps>
+}
+
+interface ProjectDetailsPrivacyAssetsBreakdownSection {
+  type: 'PrivacyAssetsBreakdownSection'
+  props: ProjectDetailsProps<PrivacyAssetsBreakdownSectionProps>
+}
+
+interface ProjectDetailsExternalDependenciesSection {
+  type: 'ExternalDependenciesSection'
+  props: ProjectDetailsProps<ExternalDependenciesSectionProps>
+}
+
+export type ProjectDetailsSection = {
+  excludeFromNavigation?: boolean
+  sideNavTitle?: string
+} & (
+  | ProjectDetailsCostsSection
+  | ProjectDetailsLivenessSection
+  | ProjectDetailsDetailedDescriptionSection
+  | ProjectDetailsMilestonesAndIncidentsSection
+  | ProjectDetailsRiskSummarySection
+  | ProjectDetailsDaRiskSummarySection
+  | ProjectDetailsRiskAnalysisSection
+  | L3ProjectDetailsRiskAnalysisSection
+  | ProjectDetailsStageSection
+  | ProjectDetailsTechnologyChoicesSection
+  | ProjectDetailsStateDerivationSection
+  | ProjectDetailsStateValidationSection
+  | ProjectDetailsMarkdownSection
+  | ProjectDetailsSequencingSection
+  | ProjectDetailsPermissionsSection
+  | ProjectDetailsContractsSection
+  | ProjectDetailsDataPostedSection
+  | ProjectDetailsGroup
+  | ProjectDetailsGardenCropsSection
+  | ProjectDetailsGrissiniRiskAnalysisSection
+  | ProjectDetailsThroughputSection
+  | ProjectDetailsL2TvsSection
+  | ProjectDetailsActivitySection
+  | ProjectDetailsTrustedSetupSection
+  | ProjectDetailsVerifiersSection
+  | ProjectDetailsProgramHashesSection
+  | ProjectDetailsZkCatalogTvsSection
+  | ProjectDetailsInteropVolumeSection
+  | ProjectDetailsInteropFlowsSection
+  | ProjectDetailsInteropTransfersSection
+  | ProjectDetailsInteropTokensSection
+  | ProjectDetailsInteropTokenVolumeSection
+  | ProjectDetailsInteropTokenProtocolsSection
+  | ProjectDetailsInteropTokenOnchainDeploymentsSection
+  | ProjectDetailsInteropTokenTransfersSection
+  | ProjectDetailsUpgradesAndGovernanceSection
+  | ProjectDetailsUpdatesSection
+  | ProjectDetailsTvsValueSection
+  | ProjectDetailsPrivacyFlowsSection
+  | ProjectDetailsPrivacyAssetsBreakdownSection
+  | ProjectDetailsExternalDependenciesSection
+)

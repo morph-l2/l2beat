@@ -1,4 +1,5 @@
-import { Database, L2CostPriceRecord } from '@l2beat/database'
+import type { Logger } from '@l2beat/backend-tools'
+import type { Database, L2CostPriceRecord } from '@l2beat/database'
 import { CoingeckoQueryService } from '@l2beat/shared'
 import { CoingeckoId, UnixTime } from '@l2beat/shared-pure'
 import {
@@ -15,15 +16,21 @@ export interface L2CostsPricesIndexerDeps
 export const ETHEREUM_COINGECKO_ID = CoingeckoId('ethereum')
 
 export class L2CostsPricesIndexer extends ManagedChildIndexer {
-  constructor(private readonly $: L2CostsPricesIndexerDeps) {
-    super({ ...$, name: 'l2_costs_prices' })
+  constructor(
+    private readonly $: L2CostsPricesIndexerDeps,
+    logger: Logger,
+  ) {
+    super({ ...$, name: 'l2_costs_prices' }, logger)
   }
 
   override async update(from: number, to: number): Promise<number> {
-    const unixFrom = new UnixTime(from)
-    const unixTo = new UnixTime(to)
+    const unixFrom = UnixTime(from)
+    const unixTo = UnixTime(to)
 
-    const shiftedTo = CoingeckoQueryService.getAdjustedTo(unixFrom, unixTo)
+    const shiftedTo = CoingeckoQueryService.calculateAdjustedTo(
+      unixFrom,
+      unixTo,
+    )
 
     this.logger.info('Time range shifted', {
       shiftedTo,
@@ -42,7 +49,7 @@ export class L2CostsPricesIndexer extends ManagedChildIndexer {
       prices: prices.length,
     })
 
-    return shiftedTo.toNumber()
+    return shiftedTo
   }
 
   async fetchPrices(
@@ -53,7 +60,6 @@ export class L2CostsPricesIndexer extends ManagedChildIndexer {
       ETHEREUM_COINGECKO_ID,
       from,
       to,
-      undefined,
     )
 
     return prices.map((p) => ({
@@ -63,7 +69,7 @@ export class L2CostsPricesIndexer extends ManagedChildIndexer {
   }
 
   override async invalidate(targetHeight: number): Promise<number> {
-    const unixTargetHeight = new UnixTime(targetHeight)
+    const unixTargetHeight = UnixTime(targetHeight)
     await this.$.db.l2CostPrice.deleteAfter(unixTargetHeight)
 
     return targetHeight

@@ -1,18 +1,19 @@
-import { BackendProject } from '@l2beat/config'
-import {
+import type { Logger } from '@l2beat/backend-tools'
+import type {
   AggregatedL2CostRecord,
   Database,
   L2CostPriceRecord,
   L2CostRecord,
 } from '@l2beat/database'
-import { TrackedTxCostsConfig, TrackedTxId } from '@l2beat/shared'
+import type { TrackedTxCostsConfig, TrackedTxId } from '@l2beat/shared'
 import {
   assert,
-  ProjectId,
-  UnixTime,
   clampRangeToDay,
+  type ProjectId,
+  UnixTime,
 } from '@l2beat/shared-pure'
-import { uniq } from 'lodash'
+import uniq from 'lodash/uniq'
+import type { TrackedTxProject } from '../../../../../config/Config'
 import {
   ManagedChildIndexer,
   type ManagedChildIndexerOptions,
@@ -28,7 +29,7 @@ export interface ProjectL2Cost extends L2CostRecord {
 export interface L2CostsAggregatorIndexerDeps
   extends Omit<ManagedChildIndexerOptions, 'name'> {
   db: Database
-  projects: BackendProject[]
+  projects: TrackedTxProject[]
 }
 
 export interface TrackedTxMultiplier {
@@ -37,14 +38,17 @@ export interface TrackedTxMultiplier {
 }
 
 export class L2CostsAggregatorIndexer extends ManagedChildIndexer {
-  constructor(private readonly $: L2CostsAggregatorIndexerDeps) {
-    super({ ...$, name: 'l2_costs_aggregator' })
+  constructor(
+    private readonly $: L2CostsAggregatorIndexerDeps,
+    logger: Logger,
+  ) {
+    super({ ...$, name: 'l2_costs_aggregator' }, logger)
   }
 
   override async update(from: number, to: number): Promise<number> {
     const [shiftedFrom, shiftedTo] = this.shift(from, to)
 
-    if (shiftedFrom.equals(shiftedTo)) {
+    if (shiftedFrom === shiftedTo) {
       // there's nothing to sync
       return to
     }
@@ -60,12 +64,13 @@ export class L2CostsAggregatorIndexer extends ManagedChildIndexer {
     )
 
     const aggregated = this.aggregate(costs, ethPrices)
+
     await this.$.db.aggregatedL2Cost.upsertMany(aggregated)
     this.logger.info('Aggregated L2 costs', {
       count: aggregated.length,
     })
 
-    return shiftedTo.add(1, 'seconds').toNumber()
+    return shiftedTo + 1
   }
 
   override async invalidate(targetHeight: number): Promise<number> {
@@ -80,19 +85,19 @@ export class L2CostsAggregatorIndexer extends ManagedChildIndexer {
 
     // start from a beginning of an hour
     // 13:00:01 => 13:00:00
-    const shiftedUnixFrom = unixFrom.toStartOf('hour')
+    const shiftedUnixFrom = UnixTime.toStartOf(unixFrom, 'hour')
 
     // end on last full hour
     // 13:45:51 => 13:00:00
-    let shiftedUnixTo = unixTo.toStartOf('hour')
+    let shiftedUnixTo = UnixTime.toStartOf(unixTo, 'hour')
 
-    if (shiftedUnixFrom.equals(shiftedUnixTo)) {
+    if (shiftedUnixFrom === shiftedUnixTo) {
       return [shiftedUnixFrom, shiftedUnixTo]
     }
 
     // do not include ending hour
     // 13:00:00 => 12:59:59
-    shiftedUnixTo = shiftedUnixTo.add(-1, 'seconds')
+    shiftedUnixTo = shiftedUnixTo - 1
 
     this.logger.info('Time range shifted', {
       shiftedFrom: shiftedUnixFrom,
@@ -139,15 +144,13 @@ export class L2CostsAggregatorIndexer extends ManagedChildIndexer {
     const map = new Map<string, AggregatedL2CostRecord>()
 
     for (const record of records) {
-      const timestamp = record.timestamp.toStartOf('hour')
+      const timestamp = UnixTime.toStartOf(record.timestamp, 'hour')
       const key = `${record.projectId}:${timestamp.toString()}`
 
-      const ethUsdPrice = ethPrices.find((p) => p.timestamp.equals(timestamp))
+      const ethUsdPrice = ethPrices.find((p) => p.timestamp === timestamp)
       assert(
         ethUsdPrice,
-        `[${
-          L2CostsAggregatorIndexer.name
-        }]: ETH price not found: ${timestamp.toNumber()}`,
+        `[${L2CostsAggregatorIndexer.name}]: ETH price not found: ${timestamp}`,
       )
 
       const multiplier = multipliers.find(
@@ -277,11 +280,7 @@ export class L2CostsAggregatorIndexer extends ManagedChildIndexer {
     const multipliers: TrackedTxMultiplier[] = []
 
     for (const project of this.$.projects) {
-      if (!project.trackedTxsConfig) {
-        continue
-      }
-
-      const projectMultipliers = project.trackedTxsConfig
+      const projectMultipliers = project.configurations
         .filter((u): u is TrackedTxCostsConfig => u.type === 'l2costs')
         .map((e) => {
           return {

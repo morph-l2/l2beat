@@ -1,0 +1,223 @@
+import {
+  ChainSpecificAddress,
+  EthereumAddress,
+  formatSeconds,
+  ProjectId,
+  UnixTime,
+} from '@l2beat/shared-pure'
+import {
+  DA_LAYERS,
+  DaCommitteeSecurityRisk,
+  DaEconomicSecurityRisk,
+  DaFraudDetectionRisk,
+  DaRelayerFailureRisk,
+  DaUpgradeabilityRisk,
+  REASON_FOR_BEING_OTHER,
+} from '../../common'
+import { BADGES } from '../../common/badges'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import type { ScalingProject } from '../../internalTypes'
+import { DACHALLENGES_DA_PROVIDER, opStackL2 } from '../../templates/opStack'
+import { readProjectMarkdown } from '../../utils/readMarkdown'
+
+const discovery = new ProjectDiscovery('cyber')
+const genesisTimestamp = UnixTime(1713428569)
+const disputeGameFactory = discovery.getContract('DisputeGameFactory')
+const sequencerInbox = ChainSpecificAddress.address(
+  discovery.getContractValue<ChainSpecificAddress>(
+    'SystemConfig',
+    'sequencerInbox',
+  ),
+)
+const sequencerAddress = ChainSpecificAddress.address(
+  discovery.getContractValue<ChainSpecificAddress>(
+    'SystemConfig',
+    'batcherHash',
+  ),
+)
+
+const daChallengeWindow = formatSeconds(
+  discovery.getContractValue<number>(
+    'DataAvailabilityChallenge',
+    'challengeWindow',
+  ) * 12, // in blocks, to seconds
+)
+
+const daResolveWindow = formatSeconds(
+  discovery.getContractValue<number>(
+    'DataAvailabilityChallenge',
+    'resolveWindow',
+  ) * 12, // in blocks, to seconds
+)
+
+export const cyber: ScalingProject = opStackL2({
+  ecosystemInfo: {
+    id: ProjectId('superchain'),
+    isPartOfSuperchain: false,
+  },
+  addedAt: UnixTime(1713364684), // 2024-04-17T14:38:04Z
+  associatedTokens: ['CYBER'],
+  discovery,
+  additionalBadges: [BADGES.RaaS.AltLayer],
+  additionalPurposes: ['Social'],
+  reasonsForBeingOther: [
+    REASON_FOR_BEING_OTHER.NO_PROOFS,
+    REASON_FOR_BEING_OTHER.NO_DA_ORACLE,
+  ],
+  display: {
+    name: 'Cyber',
+    warning:
+      'The fault proof system is deployed but is not functional. The dispute game commits to the placeholder absolute prestate from the OP Stack deployment template rather than to a reproducible op-program build for this chain. Security relies entirely on the permissioned proposer and challengers.',
+    slug: 'cyber',
+    architectureImage: 'opstack-rollup-superchain-opfp-preu16',
+    description:
+      'Cyber is a chain designed for social applications using an implementation of OP Plasma with DA challenges.',
+    links: {
+      websites: ['https://cyber.co/'],
+      bridges: [
+        'https://cyber-bridge.alt.technology/',
+        'https://cyber.co/stake',
+        'https://wallet.cyber.co/',
+      ],
+      documentation: ['https://docs.cyber.co/'],
+      explorers: ['https://cyberscan.co/'],
+      repositories: ['https://github.com/cyberconnecthq'],
+      socialMedia: [
+        'https://twitter.com/cyberconnecthq',
+        'https://discord.com/invite/cUc8VRGmPs',
+        'https://cyber.co/blog',
+      ],
+    },
+  },
+  daProvider: DACHALLENGES_DA_PROVIDER(
+    daChallengeWindow,
+    daResolveWindow,
+    'https://github.com/ethereum-optimism/optimism/releases/tag/v1.9.4',
+    DA_LAYERS.OP_ALT_DA,
+  ), // source: altlayer on telegram
+  chainConfig: {
+    name: 'cyber',
+    chainId: 7560,
+    explorerUrl: 'https://cyberscan.co',
+    coingeckoPlatform: 'cyber',
+    sinceTimestamp: UnixTime(1713428569), // block 1 ts
+    multicallContracts: [
+      {
+        sinceBlock: 1,
+        batchSize: 150,
+        address: EthereumAddress('0xcA11bde05977b3631167028862bE2a173976CA11'),
+        version: '3',
+      },
+    ],
+    apis: [
+      {
+        type: 'rpc',
+        url: 'https://rpc.cyber.co',
+        callsPerMinute: 200,
+      },
+      {
+        type: 'routescan',
+        url: 'https://api.routescan.io/v2/network/mainnet/evm/7560/etherscan/api',
+      },
+    ],
+  },
+  genesisTimestamp,
+  isNodeAvailable: 'UnderReview',
+  nonTemplateTrackedTxs: [
+    {
+      uses: [
+        { type: 'liveness', subtype: 'batchSubmissions' },
+        { type: 'l2costs', subtype: 'batchSubmissions' },
+      ],
+      query: {
+        formula: 'transfer',
+        from: EthereumAddress('0xf0748C52EDC23135d9845CDFB91279Cf61ee14b4'), // old sequencer
+        to: sequencerInbox,
+        sinceTimestamp: genesisTimestamp,
+        untilTimestamp: UnixTime(1743843035),
+      },
+    },
+    {
+      uses: [
+        { type: 'liveness', subtype: 'batchSubmissions' },
+        { type: 'l2costs', subtype: 'batchSubmissions' },
+      ],
+      query: {
+        formula: 'transfer',
+        from: sequencerAddress,
+        to: sequencerInbox,
+        sinceTimestamp: UnixTime(1743843035),
+      },
+    },
+    {
+      uses: [
+        { type: 'liveness', subtype: 'stateUpdates' },
+        { type: 'l2costs', subtype: 'stateUpdates' },
+      ],
+      query: {
+        formula: 'functionCall',
+        address: EthereumAddress('0xa669A743b065828682eE16109273F5CFeF5e676d'), // old L2OutputOracle
+        selector: '0x9aaab648',
+        functionSignature:
+          'function proposeL2Output(bytes32 _outputRoot, uint256 _l2BlockNumber, bytes32 _l1Blockhash, uint256 _l1BlockNumber)',
+        sinceTimestamp: genesisTimestamp,
+        untilTimestamp: UnixTime(1763438927), // upgrade to DisputeGameFactory
+      },
+    },
+    {
+      uses: [
+        { type: 'liveness', subtype: 'stateUpdates' },
+        { type: 'l2costs', subtype: 'stateUpdates' },
+      ],
+      query: {
+        formula: 'functionCall',
+        address: ChainSpecificAddress.address(disputeGameFactory.address),
+        selector: '0x82ecf2f6',
+        functionSignature:
+          'function create(uint32 _gameType, bytes32 _rootClaim, bytes _extraData) payable returns (address proxy_)',
+        sinceTimestamp: UnixTime(1763438927),
+      },
+    },
+  ],
+  customDa: {
+    type: 'DA Challenges',
+    name: 'CyberDA',
+    description:
+      'CyberDA is a data availability solution using data availability challenges (DA Challenges).',
+    fallback: DA_LAYERS.ETH_CALLDATA,
+    challengeMechanism: 'DA Challenges',
+    technology: {
+      description: readProjectMarkdown('cyber', 'customDaTechnology', {
+        daChallengeWindow,
+        daResolveWindow,
+      }),
+      references: [
+        {
+          title: 'Alt-DA Specification',
+          url: 'https://github.com/ethereum-optimism/specs/blob/main/specs/experimental/alt-da.md',
+        },
+        {
+          title: 'Security Considerations - Ethresear.ch ',
+          url: 'https://ethresear.ch/t/universal-plasma-and-da-challenges/18629',
+        },
+      ],
+      risks: [
+        {
+          category: 'Funds can be lost if',
+          text: 'the sequencer posts an invalid data availability commitment and there are no challengers.',
+        },
+        {
+          category: 'Funds can be lost if',
+          text: 'the sequencer posts an invalid data availability commitment, and they are able to outspend the challengers.',
+        },
+      ],
+    },
+    risks: {
+      economicSecurity: DaEconomicSecurityRisk.DAChallengesNoFunds,
+      fraudDetection: DaFraudDetectionRisk.NoFraudDetection,
+      committeeSecurity: DaCommitteeSecurityRisk.NoCommitteeSecurity(),
+      upgradeability: DaUpgradeabilityRisk.LowOrNoDelay(), // no delay
+      relayerFailure: DaRelayerFailureRisk.NoMechanism,
+    },
+  },
+})

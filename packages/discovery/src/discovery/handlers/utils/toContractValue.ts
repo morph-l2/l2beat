@@ -1,5 +1,5 @@
-import { ContractValue } from '@l2beat/discovery-types'
 import { BigNumber } from 'ethers'
+import type { ContractValue } from '../../output/types'
 
 export function toContractValue(value: unknown): ContractValue {
   if (Array.isArray(value)) {
@@ -18,9 +18,8 @@ export function toContractValue(value: unknown): ContractValue {
       value.lt(Number.MIN_SAFE_INTEGER.toString())
     ) {
       return value.toString()
-    } else {
-      return value.toNumber()
     }
+    return value.toNumber()
   }
   return `${value}`
 }

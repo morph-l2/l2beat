@@ -1,7 +1,7 @@
-import { Logger } from '@l2beat/backend-tools'
-import { Database } from '@l2beat/database'
-import { Indexer, IndexerOptions, RetryStrategy } from '@l2beat/uif'
-import { IndexerService } from '../IndexerService'
+import type { Database } from '@l2beat/database'
+import type { Indexer, IndexerOptions, RetryStrategy } from '@l2beat/uif'
+import type { IndexerService } from '../IndexerService'
+import type { IndexerTags } from '../types'
 
 export interface Configuration<T> {
   id: string
@@ -16,12 +16,14 @@ export interface SavedConfiguration<T> extends Configuration<T> {
   currentHeight: number | null
 }
 
-export interface RemovalConfiguration {
+export type TrimRemovalConfiguration = {
   id: string
-  /** Inclusive */
-  from: number
-  /** Inclusive */
-  to: number
+  /** Inclusive range */
+  range: [number, number]
+}
+
+export type WipeRemovalConfiguration = {
+  id: string
 }
 
 export interface ConfigurationRange<T> {
@@ -35,12 +37,11 @@ export interface ConfigurationRange<T> {
 export interface ManagedMultiIndexerOptions<T> extends IndexerOptions {
   parents: Indexer[]
   name: string
-  tag?: string
   indexerService: IndexerService
   configurations: Configuration<T>[]
-  serializeConfiguration: (value: T) => string
-  logger: Logger
-  updateRetryStrategy?: RetryStrategy
-  /** Used for saving data in transaction */
+  serializeConfiguration?: (value: T) => string
   db: Database
+  // Optionals
+  tags?: IndexerTags
+  updateRetryStrategy?: RetryStrategy
 }

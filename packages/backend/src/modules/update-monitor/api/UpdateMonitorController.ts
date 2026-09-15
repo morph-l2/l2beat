@@ -1,78 +1,110 @@
+import { type Project, ProjectService } from '@l2beat/config'
+import type { Database } from '@l2beat/database'
+import type { ConfigReader, ConfigRegistry } from '@l2beat/discovery'
 import {
-  ConfigReader,
-  DiscoveryChainConfig,
-  DiscoveryConfig,
-  DiscoveryDiff,
-} from '@l2beat/discovery'
-import { ChainConverter } from '@l2beat/shared-pure'
-
-import { BackendProject } from '@l2beat/config'
-import { Database } from '@l2beat/database'
-import { getDashboardContracts } from './props/getDashboardContracts'
-import {
-  DashboardProject,
+  type DashboardProject,
   getDashboardProjects,
 } from './props/getDashboardProjects'
-import { getDiff } from './props/utils/getDiff'
-import { renderDashboardPage } from './view/DashboardPage'
-import { renderDashboardProjectPage } from './view/DashboardProjectPage'
+import {
+  renderDashboardMarkdown,
+  renderProjectMarkdown,
+} from './view/DashboardMarkdown'
+import {
+  type DashboardDeployment,
+  renderDashboardPage,
+} from './view/DashboardPage'
 
 export class UpdateMonitorController {
-  private readonly onDiskConfigs: Record<string, DiscoveryConfig[]> = {}
+  private readonly onDiskConfigs: ConfigRegistry[] = []
+  private projectConfigs:
+    | Project<never, 'scalingInfo' | 'daLayer'>[]
+    | undefined
 
   constructor(
     private readonly db: Database,
-    private readonly projects: BackendProject[],
-    private readonly chains: DiscoveryChainConfig[],
     private readonly configReader: ConfigReader,
-    private readonly chainConverter: ChainConverter,
+    private readonly projectService: ProjectService,
+    deployment: DashboardDeployment,
   ) {
-    for (const chain of chains) {
-      this.onDiskConfigs[chain.name] = this.configReader.readAllConfigsForChain(
-        chain.name,
-      )
-    }
+    this.deployment = deployment
+    this.onDiskConfigs = this.configReader
+      .readAllDiscoveredProjects()
+      .map((project) => this.configReader.readConfig(project))
   }
 
-  async getDiscoveryDashboard(): Promise<string> {
-    console.log(this.chains.map((c) => c.name))
+  private readonly deployment: DashboardDeployment
 
-    const projects: Record<string, DashboardProject[]> = {}
-    for (const chain of this.chains) {
-      const projectsToFill = chain.name === 'ethereum' ? this.projects : []
-      projects[chain.name] = await getDashboardProjects(
-        projectsToFill,
-        this.onDiskConfigs[chain.name],
-        this.configReader,
-        this.db,
-        chain.name,
-        this.chainConverter.toChainId(chain.name),
-      )
-    }
-
-    return renderDashboardPage({ projects })
+  async getDiscoveryDashboard(selectedEmoji?: string): Promise<string> {
+    const { projects, projectConfigs, projectsWithHighSeverityChanges } =
+      await this.getDiscoveryDashboardData()
+    return renderDashboardPage(
+      projects,
+      projectConfigs,
+      projectsWithHighSeverityChanges,
+      this.deployment,
+      selectedEmoji,
+    )
   }
 
-  async getDiscoveryDashboardProject(
-    project: string,
-    chain: string,
-  ): Promise<string> {
-    const discovery = this.configReader.readDiscovery(project, chain)
-    const config = this.configReader.readConfig(project, chain)
-    const contracts = getDashboardContracts(discovery, config)
+  async getDiscoveryDashboardMarkdown(selectedEmoji?: string): Promise<string> {
+    const { projects, projectConfigs, projectsWithHighSeverityChanges } =
+      await this.getDiscoveryDashboardData()
+    return renderDashboardMarkdown(
+      projects,
+      projectConfigs,
+      projectsWithHighSeverityChanges,
+      selectedEmoji,
+    )
+  }
 
-    const diff: DiscoveryDiff[] = await getDiff(
+  async getProjectMarkdown(projectName: string): Promise<string | null> {
+    const { projects, projectsWithHighSeverityChanges } =
+      await this.getDiscoveryDashboardData()
+    const project = projects.find((p) => p.name === projectName)
+    if (!project) {
+      return null
+    }
+    const hasHighSeverity = projectsWithHighSeverityChanges.has(project.name)
+    return renderProjectMarkdown(project, hasHighSeverity)
+  }
+
+  async getUpdates() {
+    const entries = await this.db.updateMessage.getAll()
+
+    return entries.map((entry) => ({
+      ...entry,
+      timestamp: entry.timestamp,
+    }))
+  }
+
+  private async getProjectConfigs() {
+    if (this.projectConfigs) return this.projectConfigs
+
+    const ps = new ProjectService()
+    this.projectConfigs = await ps.getProjects({
+      optional: ['scalingInfo', 'daLayer'],
+    })
+
+    return this.projectConfigs
+  }
+
+  private async getDiscoveryDashboardData(): Promise<{
+    projects: DashboardProject[]
+    projectConfigs: Project<never, 'scalingInfo' | 'daLayer'>[]
+    projectsWithHighSeverityChanges: Set<string>
+  }> {
+    const projects: DashboardProject[] = await getDashboardProjects(
+      this.onDiskConfigs.filter((config) => !config.archived),
+      this.configReader,
       this.db,
-      discovery,
-      this.chainConverter.toChainId(chain),
+      this.projectService,
     )
 
-    return renderDashboardProjectPage({
-      chain,
-      projectName: project,
-      contracts,
-      diff,
-      config,
-    })
+    const projectConfigs = await this.getProjectConfigs()
+    const projectsWithHighSeverityChanges = new Set(
+      (await this.db.updateDiff.getAll()).map((diff) => diff.projectId),
+    )
+
+    return { projects, projectConfigs, projectsWithHighSeverityChanges }
   }
 }

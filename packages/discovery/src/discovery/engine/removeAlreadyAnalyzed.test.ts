@@ -1,51 +1,51 @@
-import { EthereumAddress, Hash256 } from '@l2beat/shared-pure'
+import { ChainSpecificAddress, Hash256 } from '@l2beat/shared-pure'
 import { expect } from 'earl'
 
-import {
+import type {
   AddressesWithTemplates,
   Analysis,
   AnalyzedContract,
   ExtendedTemplate,
 } from '../analysis/AddressAnalyzer'
-import { EMPTY_ANALYZED_CONTRACT } from '../utils/testUtils'
+import { EMPTY_ANALYZED_CONTRACT, EMPTY_ANALYZED_EOA } from '../utils/testUtils'
 import { removeAlreadyAnalyzed } from './removeAlreadyAnalyzed'
 
 describe(removeAlreadyAnalyzed.name, () => {
-  const A = EthereumAddress.from('0xA')
-  const B = EthereumAddress.from('0xB')
-  const C = EthereumAddress.from('0xC')
-  const D = EthereumAddress.from('0xD')
-  const E = EthereumAddress.from('0xE')
-  const F = EthereumAddress.from('0xF')
-  const G = EthereumAddress.from('0x1')
-  const H = EthereumAddress.from('0x2')
+  const A = ChainSpecificAddress.random()
+  const B = ChainSpecificAddress.random()
+  const C = ChainSpecificAddress.random()
+  const D = ChainSpecificAddress.random()
+  const E = ChainSpecificAddress.random()
+  const F = ChainSpecificAddress.random()
+  const G = ChainSpecificAddress.random()
+  const H = ChainSpecificAddress.random()
 
   it('handles combined case', async () => {
     const resolved: Analysis[] = [
-      generateFakeAnalysis(A),
-      generateFakeAnalysis(B, {
+      mockContract(A),
+      mockContract(B, {
         template: 'templateForB',
         reason: 'byExtends',
         templateHash: Hash256(
           '0x000000000000000000000000000000000000000000000000000000000000000b',
         ),
       }),
-      generateFakeAnalysis(C, {
+      mockContract(C, {
         template: 'templateForC',
         reason: 'byReferrer',
         templateHash: Hash256(
           '0x000000000000000000000000000000000000000000000000000000000000000c',
         ),
       }),
-      { address: D, type: 'EOA' },
-      generateFakeAnalysis(E, {
+      { ...EMPTY_ANALYZED_EOA, address: D, type: 'EOA' },
+      mockContract(E, {
         template: 'templateForE',
         reason: 'byReferrer',
         templateHash: Hash256(
           '0x000000000000000000000000000000000000000000000000000000000000000e',
         ),
       }),
-      generateFakeAnalysis(F, {
+      mockContract(F, {
         template: 'templateForF',
         reason: 'byReferrer',
         templateHash: Hash256(
@@ -70,15 +70,15 @@ describe(removeAlreadyAnalyzed.name, () => {
       [H.toString()]: new Set([]),
     })
     expect(resolved).toEqual([
-      generateFakeAnalysis(A),
-      generateFakeAnalysis(B, {
+      mockContract(A),
+      mockContract(B, {
         template: 'templateForB',
         reason: 'byExtends',
         templateHash: Hash256(
           '0x000000000000000000000000000000000000000000000000000000000000000b',
         ),
       }),
-      generateFakeAnalysis(
+      mockContract(
         C,
         {
           template: 'templateForC',
@@ -91,8 +91,8 @@ describe(removeAlreadyAnalyzed.name, () => {
           '@template': 'Conflicting templates: newTemplateForC',
         },
       ),
-      { address: D, type: 'EOA' },
-      generateFakeAnalysis(
+      { ...EMPTY_ANALYZED_EOA, address: D, type: 'EOA' },
+      mockContract(
         E,
         {
           template: 'templateForE',
@@ -106,7 +106,7 @@ describe(removeAlreadyAnalyzed.name, () => {
             'Conflicting templates: newTemplateForE1, newTemplateForE2',
         },
       ),
-      generateFakeAnalysis(F, {
+      mockContract(F, {
         template: 'templateForF',
         reason: 'byReferrer',
         templateHash: Hash256(
@@ -117,8 +117,8 @@ describe(removeAlreadyAnalyzed.name, () => {
   })
 })
 
-const generateFakeAnalysis = (
-  address: EthereumAddress,
+const mockContract = (
+  address: ChainSpecificAddress,
   extendedTemplate?: ExtendedTemplate,
   errors?: Record<string, string>,
 ): AnalyzedContract => {
@@ -126,7 +126,6 @@ const generateFakeAnalysis = (
     ...EMPTY_ANALYZED_CONTRACT,
     address,
     name: `NameOf${address.toString()}`,
-    derivedName: undefined,
     isVerified: true,
     values: { a: 1 },
     errors: errors ?? {},

@@ -1,3 +1,5 @@
+import type { Logger } from '@l2beat/backend-tools'
+import type { DiscoveryPaths } from '@l2beat/discovery'
 import { computeComparisonBetweenProjects } from './common'
 import { printComparisonBetweenProjects } from './output'
 
@@ -5,7 +7,8 @@ export interface CompareProjectsCommand {
   firstProjectPath: string
   secondProjectPath: string
   forceTable: boolean
-  discoveryPath: string
+  paths: DiscoveryPaths
+  logger: Logger
 }
 
 export async function executeCompareProjects(
@@ -13,12 +16,19 @@ export async function executeCompareProjects(
 ): Promise<void> {
   const { matrix, firstProject, secondProject } =
     await computeComparisonBetweenProjects(
+      command.logger,
       command.firstProjectPath,
       command.secondProjectPath,
-      command.discoveryPath,
+      command.paths,
     )
 
-  printComparisonBetweenProjects(matrix, firstProject, secondProject, {
-    forceTable: command.forceTable,
-  })
+  printComparisonBetweenProjects(
+    command.logger,
+    matrix,
+    firstProject,
+    secondProject,
+    {
+      forceTable: command.forceTable,
+    },
+  )
 }

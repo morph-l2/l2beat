@@ -1,0 +1,103 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "displayName": "SHARPVerifierCallProxy",
+  "description": "Upgradeable call router through which Starknet and other applications access SHARP fact registries. It uses `call`, not `delegatecall`, so facts and immutable verifier configuration remain at each target registry. The explicit `isValid` entry point always queries the default target. Other calls handled by the fallback, principally proof submissions, can be routed per caller to a still-active registry in the default target's reference chain. The default target can be replaced by {{$admin}} after {{upgradeActivationDelayFmt}}.",
+  "category": "shared",
+  "fields": {
+    "$admin": {
+      "description": "Can upgrade the proxy logic and replace the default SHARP fact registry after the configured delay. A malicious target can make arbitrary facts valid for callers routed to it.",
+      "severity": "HIGH",
+      "permissions": [
+        {
+          "type": "upgrade",
+          "delay": "{{getUpgradeActivationDelay}}"
+        }
+      ]
+    },
+    "upgradeActivationDelayFmt": {
+      "handler": {
+        "type": "call",
+        "method": "getUpgradeActivationDelay",
+        "args": []
+      },
+      "edit": ["format", "FormatSeconds"]
+    },
+    "accessControl": {
+      "handler": {
+        "type": "accessControl",
+        "roleNames": {
+          "0x00d2ead78c620e94b02d0a996e99298c59ddccfa1d8a0149080ac3a20de06068": "APP_GOVERNOR",
+          "0x03e615638e0b79444a70f8c695bf8f2a47033bf1cf95691ec3130f64939cee99": "APP_ROLE_ADMIN",
+          "0x03711c9d994faf6055172091cb841fd4831aa743e6f3315163b06a122c841846": "GOVERNANCE_ADMIN",
+          "0x023edb77f7c8cc9e38e8afe78954f703aeeda7fffe014eeb6e56ea84e62f6da7": "OPERATOR",
+          "0x026bd110619d11cfdfc28e281df893bc24828e89177318e9dbd860cdaedeb6b3": "SECURITY_ADMIN",
+          "0x037693ba312785932d430dccf0f56ffedd0aa7c0f8b6da2cc4530c2717689b96": "SECURITY_AGENT",
+          "0x0128d63adbf6b09002c26caf55c47e2f26635807e3ef1b027218aa74c8d61a3e": "TOKEN_ADMIN",
+          "0x0251e864ca2a080f55bce5da2452e8cfcafdbc951a3e7fff5023d558452ec228": "UPGRADE_GOVERNOR"
+        }
+      }
+    },
+    "governanceAdminAC": {
+      "handler": {
+        "type": "accessControl",
+        "roleNames": {
+          "0x03711c9d994faf6055172091cb841fd4831aa743e6f3315163b06a122c841846": "GOVERNANCE_ADMIN"
+        },
+        "pickRoleMembers": "GOVERNANCE_ADMIN"
+      },
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "Administer the CallProxy's `GOVERNANCE_ADMIN` and role-admin hierarchy. This AccessControl role is separate from the outer proxy governor that schedules implementation upgrades."
+        }
+      ]
+    },
+    "appRoleAdminAC": {
+      "handler": {
+        "type": "accessControl",
+        "roleNames": {
+          "0x03e615638e0b79444a70f8c695bf8f2a47033bf1cf95691ec3130f64939cee99": "APP_ROLE_ADMIN"
+        },
+        "pickRoleMembers": "APP_ROLE_ADMIN"
+      },
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "Grant and revoke application roles, including the `APP_GOVERNOR` role that controls caller-specific fallback routes."
+        }
+      ]
+    },
+    "appGovernorAC": {
+      "handler": {
+        "type": "accessControl",
+        "roleNames": {
+          "0x00d2ead78c620e94b02d0a996e99298c59ddccfa1d8a0149080ac3a20de06068": "APP_GOVERNOR"
+        },
+        "pickRoleMembers": "APP_GOVERNOR"
+      },
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "Route fallback calls from specific callers to a still-active registry in the default verifier's reference chain. This principally determines which verifier and bootloader configuration processes their proof submissions; the proxy's explicit `isValid` entry point always queries the default target."
+        }
+      ]
+    },
+    "callProxyImplementation": {
+      "description": "Default SHARP fact registry called by the proxy and the only registry queried directly by its explicit `isValid` entry point. Replacing it changes the complete proof-verification trust chain: outer bootloader, bootloader commitments, recursive verifier allowlist, Solidity CPU verifiers, and temporary reference registries.",
+      "severity": "HIGH",
+      "type": "CODE_CHANGE"
+    },
+    "customFactRegistryRoutes": {
+      "description": "Latest nonzero caller-to-registry fallback routes reconstructed from events. These are `call` targets, not delegatecall implementations. The stored route is usable only while the target is in the default registry's unexpired reference chain; otherwise the caller's fallback call reverts. This affects proof submissions but not the proxy's explicit `isValid`, which always queries the default target.",
+      "severity": "HIGH",
+      "handler": {
+        "type": "event",
+        "select": ["operator", "customReference"],
+        "dedupBy": "operator",
+        "add": { "event": "CustomReferenceSet" },
+        "remove": { "event": "CustomReferenceCleared" },
+        "ignoreRelative": true
+      }
+    }
+  }
+}

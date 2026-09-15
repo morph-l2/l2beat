@@ -1,20 +1,23 @@
-import React from 'react'
-
+import type { Sentiment } from '@l2beat/config'
+import { assertUnreachable } from '@l2beat/shared-pure'
 import { cva } from 'class-variance-authority'
-import { cn } from '../utils/cn'
+import type { FC } from 'react'
+import { CustomLinkIcon } from '~/icons/Outlink'
+import { ShieldIcon } from '~/icons/Shield'
+import { cn } from '~/utils/cn'
 import { Callout } from './Callout'
-import { Markdown } from './Markdown'
+import { Markdown } from './markdown/Markdown'
 import { PlainLink } from './PlainLink'
-import { OutLinkIcon, ShieldIcon } from './icons'
 
-export interface WarningBarProps {
+interface WarningBarProps {
   color: 'red' | 'yellow' | 'gray'
   text: string
   href?: string
-  icon?: (props: { className?: string }) => JSX.Element
+  icon?: FC<{ className?: string }>
   isCritical?: boolean
   className?: string
   ignoreMarkdown?: boolean
+  iconClassName?: string
 }
 
 const iconVariants = cva('size-5', {
@@ -35,6 +38,7 @@ export function WarningBar({
   isCritical,
   className,
   ignoreMarkdown,
+  iconClassName,
 }: WarningBarProps) {
   const textElement = ignoreMarkdown ? (
     <>
@@ -56,11 +60,11 @@ export function WarningBar({
         <Callout
           className={cn('p-4', className)}
           color={color}
-          icon={<Icon className={iconVariants({ color })} />}
+          icon={<Icon className={cn(iconVariants({ color }), iconClassName)} />}
           body={
             <div className="flex items-center gap-1">
               {textElement}
-              <OutLinkIcon className="shrink-0" />
+              <CustomLinkIcon className="shrink-0" />
             </div>
           }
         />
@@ -72,8 +76,23 @@ export function WarningBar({
     <Callout
       className={cn('p-4', className)}
       color={color}
-      icon={<Icon className={iconVariants({ color })} />}
+      icon={<Icon className={cn(iconVariants({ color }), iconClassName)} />}
       body={textElement}
     />
   )
+}
+
+export function sentimentToWarningBarColor(
+  sentiment: Exclude<Sentiment, 'good' | 'UnderReview'>,
+): WarningBarProps['color'] {
+  switch (sentiment) {
+    case 'bad':
+      return 'red'
+    case 'warning':
+      return 'yellow'
+    case 'neutral':
+      return 'gray'
+    default:
+      assertUnreachable(sentiment)
+  }
 }

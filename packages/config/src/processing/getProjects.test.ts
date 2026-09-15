@@ -1,0 +1,977 @@
+import {
+  createTrackedTxId,
+  type TrackedTxConfigEntry,
+  type TrackedTxFunctionCallConfig,
+  type TrackedTxTransferConfig,
+} from '@l2beat/shared'
+import {
+  assert,
+  type ChainSpecificAddress,
+  EthereumAddress,
+  notUndefined,
+  type ProjectId,
+} from '@l2beat/shared-pure'
+import chalk from 'chalk'
+import { expect } from 'earl'
+import { existsSync } from 'fs'
+import uniq from 'lodash/uniq'
+import { asArray } from '../templates/utils'
+import { NON_DISCOVERY_DRIVEN_PROJECTS } from '../test/constants'
+import { checkRisk } from '../test/helpers'
+import type { BaseProject } from '../types'
+import {
+  areContractsDiscoveryDriven,
+  arePermissionsDiscoveryDriven,
+} from '../utils/discoveryDriven'
+import { getProjects } from './getProjects'
+import { layer2s } from './layer2s'
+import { layer3s } from './layer3s'
+
+describe('getProjects', () => {
+  const projects = getProjects()
+  const projectsById = new Map(projects.map((p) => [p.id, p]))
+
+  describe('every project has a unique and valid id and slug', () => {
+    const ids = new Set<ProjectId>()
+    const slugs = new Set<string>()
+    for (const project of projects) {
+      it(`${project.name} id: ${project.id}, slug: ${project.slug}`, () => {
+        expect(project.slug).toMatchRegex(/^[a-z\-\d]+$/)
+        expect(ids.has(project.id)).toEqual(false)
+        ids.add(project.id)
+        if (project.slug === 'near') {
+          // This project is an exception.
+          // It should most likely be merged with its duplicate
+          // Right now it only works because refactored projects are resolved
+          // first when querying by slug
+          return
+        }
+
+        expect(slugs.has(project.slug)).toEqual(false)
+        slugs.add(project.slug)
+
+        const dir = `./src/projects/${project.id}/${project.id}.ts`
+        expect(existsSync(dir)).toEqual(true)
+      })
+    }
+  })
+
+  describe('every project has statuses and display (except ecosystems and interop protocols)', () => {
+    for (const project of projects) {
+      if (
+        (project.ecosystemConfig || project.interopConfig) &&
+        (!project.statuses || !project.display)
+      ) {
+        continue
+      }
+      it(project.name, () => {
+        expect(project.statuses).not.toEqual(undefined)
+        expect(project.display).not.toEqual(undefined)
+      })
+    }
+  })
+
+  it('every project can be serialized', () => {
+    function findNonSerializable(
+      value: unknown,
+      path: string[],
+    ): string[] | undefined {
+      if (
+        typeof value === 'boolean' ||
+        typeof value === 'number' ||
+        typeof value === 'string' ||
+        value === undefined
+      ) {
+        return undefined
+      }
+      if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+          const res = findNonSerializable(value[i], [...path, i.toString()])
+          if (res) {
+            return res
+          }
+        }
+        return undefined
+      }
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        Object.getPrototypeOf(value) === Object.prototype
+      ) {
+        for (const key in value) {
+          const res = findNonSerializable(Reflect.get(value, key), [
+            ...path,
+            key,
+          ])
+          if (res) {
+            return res
+          }
+        }
+        return undefined
+      }
+      return path
+    }
+
+    for (const project of projects) {
+      const path = findNonSerializable(project, [])
+      if (path) {
+        throw new Error(
+          `Project ${project.id} cannot be serialized. Path: ${path.join('.')}`,
+        )
+      }
+    }
+  })
+
+  describe('display.description ends with a dot', () => {
+    for (const project of projects) {
+      if (project.display) {
+        it(project.name, () => {
+          expect(project.display?.description.endsWith('.')).toEqual(true)
+        })
+      }
+    }
+  })
+
+  describe('synchronization with scaling projects - layer2s and layer3s', () => {
+    it('each scaling project should have a corresponding entry in the DA-BEAT', () => {
+      const daLayers = projects.filter((x) => x.daLayer !== undefined)
+      const daBridges = projects.filter((x) => x.daBridge !== undefined)
+
+      // It can be squashed, but it's more readable this way
+      const target = [...layer2s, ...layer3s].filter(
+        (project) =>
+          !project.reviewStatus &&
+          !project.archivedAt &&
+          // It makes no sense to list them on the DA-BEAT
+          project.dataAvailability &&
+          asArray(project.dataAvailability).some(
+            (da) => da.layer.value !== 'None',
+          ) &&
+          asArray(project.dataAvailability).some(
+            (da) => da.bridge.projectId !== undefined,
+          ) &&
+          asArray(project.dataAvailability).every((da) => {
+            const bridgeProjId = da.bridge.projectId
+            if (bridgeProjId === undefined) return true
+            return daBridges.map((x) => x.id).includes(bridgeProjId)
+          }) &&
+          // an L2 can be the DA layer of an L3, and scaling projects are not
+          // listed on the DA-BEAT
+          asArray(project.dataAvailability).every((da) => {
+            const layerProjId = da.layer.projectId
+            if (layerProjId === undefined) return true
+            return daLayers.map((x) => x.id).includes(layerProjId)
+          }) &&
+          // Will be listed on the DA-BEAT automatically
+          !project.customDa,
+      )
+
+      const daBeatProjectIds = daLayers
+        .flatMap((project) => project.daLayer?.usedWithoutBridgeIn ?? [])
+        .concat(daBridges.flatMap((bridge) => bridge.daBridge?.usedIn ?? []))
+        .map((usedIn) => usedIn.id)
+
+      const scalingProjectIds = target.map((project) => project.id)
+
+      const projectsWithoutDaBeatEntry = scalingProjectIds.filter(
+        (project) => !daBeatProjectIds.includes(project),
+      )
+
+      // Array comparison to have a better error message with actual names
+      expect(projectsWithoutDaBeatEntry).toEqual([])
+    })
+
+    it('each referenced DA bridge project exists', () => {
+      const daBridgeIds = projects
+        .filter((x) => x.daBridge !== undefined)
+        .map((x) => x.id)
+
+      const dangling = [...layer2s, ...layer3s].flatMap((project) =>
+        asArray(project.dataAvailability)
+          .map((da) => da.bridge.projectId)
+          .filter(notUndefined)
+          .filter((bridgeProjId) => !daBridgeIds.includes(bridgeProjId))
+          .map((bridgeProjId) => `${project.id} -> ${bridgeProjId}`),
+      )
+
+      expect(dangling).toEqual([])
+    })
+  })
+
+  describe('daLayer', () => {
+    const SUPPORTED_ECONOMIC_SECURITY_PROJECTS = [
+      'ethereum',
+      'celestia',
+      'avail',
+      'near-da',
+      'espresso',
+    ]
+
+    for (const project of projects) {
+      if (project.daLayer?.economicSecurity) {
+        it(`${project.id} economicSecurity is supported in BE code`, () => {
+          expect(
+            SUPPORTED_ECONOMIC_SECURITY_PROJECTS.includes(project.id),
+          ).toEqual(true)
+        })
+      }
+    }
+
+    const SUPPORTED_DYNAMIC_VALIDATORS_PROJECTS = [
+      'ethereum',
+      'celestia',
+      'avail',
+      'near-da',
+      'espresso',
+    ]
+
+    for (const project of projects) {
+      if (project.daLayer?.validators?.type === 'dynamic') {
+        it(`${project.id} dynamic type validators is supported in BE code`, () => {
+          expect(
+            SUPPORTED_DYNAMIC_VALIDATORS_PROJECTS.includes(project.id),
+          ).toEqual(true)
+        })
+      }
+    }
+  })
+
+  describe('zk catalog', async () => {
+    const usageMap = getUsageMap(projects)
+    const currentZkCatalogsByTvsProject = new Map<ProjectId, ProjectId[]>()
+
+    for (const project of projects) {
+      if (!project.zkCatalogInfo) continue
+
+      for (const tvsProject of project.zkCatalogInfo.projectsForTvs ?? []) {
+        if (tvsProject.untilTimestamp) continue
+
+        const zkCatalogs = currentZkCatalogsByTvsProject.get(
+          tvsProject.projectId,
+        )
+        if (zkCatalogs) {
+          zkCatalogs.push(project.id)
+        } else {
+          currentZkCatalogsByTvsProject.set(tvsProject.projectId, [project.id])
+        }
+      }
+    }
+
+    for (const project of projects) {
+      describe(project.id, () => {
+        if (!project.zkCatalogInfo) return
+        const liveTvsProjects = new Set(
+          project.zkCatalogInfo.projectsForTvs
+            ?.filter((p) => !p.untilTimestamp)
+            .map((p) => p.projectId),
+        )
+
+        const usedInVerifiers = uniq(
+          project.zkCatalogInfo.verifierHashes.flatMap((v) =>
+            v.knownDeployments.flatMap(
+              (d) => d.overrideUsedIn ?? usageMap.get(`${d.address}`),
+            ),
+          ),
+        ).filter((p): p is ProjectId => {
+          if (p === undefined) return false
+
+          // Archived projects can keep historical verifier deployments, but
+          // they do not have to be listed as current TVS projects. Shared
+          // verifier deployments can also be attributed to another current
+          // zk catalog entry.
+          if (projectsById.get(p)?.archivedAt !== undefined) return false
+
+          const currentZkCatalogs = currentZkCatalogsByTvsProject.get(p)
+          return (
+            currentZkCatalogs === undefined ||
+            currentZkCatalogs.includes(project.id)
+          )
+        })
+        const usedInVerifiersSet = new Set(usedInVerifiers)
+
+        for (const usedIn of usedInVerifiers) {
+          it(`${usedIn} is configured in ${project.id} TVS projects`, () => {
+            expect(liveTvsProjects.has(usedIn)).toEqual(true)
+          })
+        }
+
+        const currentProjectsForTvsSection = new Set(
+          [...liveTvsProjects].flatMap((tvsProject) => {
+            const tvsProjectConfig = projectsById.get(tvsProject)
+            if (!tvsProjectConfig || tvsProjectConfig.archivedAt) {
+              return []
+            }
+
+            if (tvsProjectConfig.daBridge) return []
+
+            return [tvsProject]
+          }),
+        )
+
+        for (const tvsProject of currentProjectsForTvsSection) {
+          it(`TVS project ${tvsProject} is detected in verifier usage`, () => {
+            expect(usedInVerifiersSet.has(tvsProject)).toEqual(true)
+          })
+        }
+      })
+    }
+  })
+
+  describe('every proofSystem zkCatalogIds entry references a zk catalog project', () => {
+    for (const project of projects) {
+      const zkCatalogIds = project.scalingInfo?.proofSystem?.zkCatalogIds
+      if (!zkCatalogIds || zkCatalogIds.length === 0) continue
+
+      it(project.id, () => {
+        assert(
+          new Set(zkCatalogIds).size === zkCatalogIds.length,
+          `${project.id} proofSystem.zkCatalogIds has duplicates`,
+        )
+        for (const zkCatalogId of zkCatalogIds) {
+          assert(
+            projectsById.get(zkCatalogId)?.zkCatalogInfo !== undefined,
+            `${project.id} proofSystem references unknown zk catalog project: ${zkCatalogId}`,
+          )
+        }
+      })
+    }
+  })
+
+  describe('scaling project zkVerifiers are configured in zk catalog', () => {
+    const zkCatalogAddresses = new Set<ChainSpecificAddress>()
+    for (const project of projects) {
+      if (!project.zkCatalogInfo) continue
+      for (const verifierHash of project.zkCatalogInfo.verifierHashes) {
+        for (const deployment of verifierHash.knownDeployments) {
+          zkCatalogAddresses.add(deployment.address)
+        }
+      }
+    }
+
+    for (const project of projects) {
+      if (!project.scalingInfo || !project.contracts?.zkVerifiers) continue
+      for (const verifier of project.contracts.zkVerifiers) {
+        it(`${project.id} verifier ${verifier} is in at least one zk catalog project`, () => {
+          expect(zkCatalogAddresses.has(verifier)).toEqual(true)
+        })
+      }
+    }
+  })
+
+  describe('zk catalog projects are archived when all their projects are archived', () => {
+    for (const project of projects) {
+      if (!project.zkCatalogInfo) continue
+
+      const tvsProjects = project.zkCatalogInfo.projectsForTvs ?? []
+      if (tvsProjects.length === 0) continue
+
+      const allTvsProjectsArchived = tvsProjects.every((tvsProject) => {
+        const tvsProjectConfig = projectsById.get(tvsProject.projectId)
+        return tvsProjectConfig?.archivedAt !== undefined
+      })
+
+      if (!allTvsProjectsArchived) continue
+
+      it(`${project.id} should be archived because all projects using it are archived`, () => {
+        expect(project.archivedAt).not.toEqual(undefined)
+      })
+    }
+  })
+
+  describe('externalDependencies', () => {
+    for (const project of projects) {
+      if (!project.externalDependencies) continue
+
+      for (const dependency of project.externalDependencies) {
+        if (dependency.type !== 'tracked') continue
+
+        it(`${project.id} tracked dependency ${dependency.projectId} exists`, () => {
+          expect(projectsById.has(dependency.projectId)).toEqual(true)
+        })
+      }
+    }
+  })
+
+  describe('privacy projects', () => {
+    for (const project of projects) {
+      if (!project.privacyInfo) continue
+
+      it(`${project.id} has at most one zk catalog trusted setup entry`, () => {
+        expect(
+          project.zkCatalogInfo?.trustedSetups.length ?? 0,
+        ).toBeLessThanOrEqual(1)
+      })
+
+      it(`${project.id} has valid anonymity-set configuration`, () => {
+        const state = project.privacyInfo?.anonymitySet
+        const trackedBucketIds = new Set<string>()
+        const seriesIds = new Set<string>()
+        let configuredBuckets = 0
+
+        for (const token of project.privacyInfo?.tokens ?? []) {
+          for (const bucket of token.buckets) {
+            const amounts = bucket.anonymitySet?.minimumAmounts
+            if (amounts === undefined) continue
+
+            expect(amounts.length).toBeGreaterThan(0)
+            expect(trackedBucketIds.has(bucket.id)).toEqual(false)
+            trackedBucketIds.add(bucket.id)
+
+            configuredBuckets++
+            for (const amount of amounts) {
+              expect(amount).toMatchRegex(/^[1-9]\d*$/)
+              const seriesId = `${bucket.id}:${amount}`
+              expect(seriesIds.has(seriesId)).toEqual(false)
+              seriesIds.add(seriesId)
+            }
+          }
+        }
+
+        if (state?.type === 'not-applicable') {
+          expect(configuredBuckets).toEqual(0)
+        }
+      })
+    }
+  })
+
+  describe('contracts', () => {
+    for (const project of projects) {
+      describe(project.id, () => {
+        const permissions = Object.values(project.permissions ?? {})
+        const all = [
+          ...permissions.flatMap((p) => p.roles ?? []),
+          ...permissions.flatMap((p) => p.actors ?? []),
+        ]
+
+        const contracts = project.contracts?.addresses ?? {}
+        for (const [chain, perChain] of Object.entries(contracts)) {
+          for (const contract of perChain) {
+            it(`contract [${chain}:${contract.address}] name isn't empty`, () => {
+              assert(
+                contract.name.trim().length > 0,
+                [
+                  `contract [${chain}:${contract.address}] name is empty`,
+                  `this is most likely because it's unverified and the name needs to be assigned manually`,
+                ].join('\n'),
+              )
+            })
+
+            const upgradableBy = contract.upgradableBy
+            const actorIds = all.map((a) => a.id)
+
+            if (upgradableBy) {
+              it('contracts.upgradableBy is valid', () => {
+                for (const actor of upgradableBy) {
+                  const expected = actor.id ?? actor.name
+
+                  if (actorIds.includes(expected)) {
+                    const reachableActorMarkedUnreachableMessage = [
+                      '',
+                      chalk.red('ERROR:'),
+                      `Contract ${contract.name} (${contract.address}) in project ${chalk.blue(project.id)} has upgrader ${chalk.magenta(expected)} marked as unreachable.`,
+                      'Reachable upgraders should not have unreachable: true.',
+                      '',
+                      `${chalk.green('POSSIBLE FIX')}: remove unreachable: true for reachable upgraders`,
+                    ].join('\n')
+                    assert(
+                      actor.unreachable !== true,
+                      reachableActorMarkedUnreachableMessage,
+                    )
+                    continue
+                  }
+
+                  const missingActorMessage = [
+                    '',
+                    chalk.red('ERROR:'),
+                    `Contract ${contract.name} (${contract.address}) in project ${chalk.blue(project.id)} is marked as upgradable by an actor named ${chalk.magenta(expected)}.`,
+                    `But the actor ${chalk.magenta(expected)} does not exist in the list of actors!`,
+                    '',
+                    `${chalk.cyan('Current actors')}: ${all.map((a) => a.name).join(', ')}`,
+                    '',
+                    `${chalk.green('POSSIBLE FIX')}: check if the actor should be marked with unreachable: true`,
+                  ].join('\n')
+
+                  assert(actor.unreachable === true, missingActorMessage)
+
+                  const unreachableActorWithIdMessage = [
+                    '',
+                    chalk.red('ERROR:'),
+                    `Contract ${contract.name} (${contract.address}) in project ${chalk.blue(project.id)} has unreachable upgrader ${chalk.magenta(actor.name)}.`,
+                    'Unreachable upgraders cannot be linked to a permission actor id.',
+                    '',
+                    `${chalk.green('POSSIBLE FIX')}: remove the id field for unreachable upgraders`,
+                  ].join('\n')
+
+                  assert(actor.id === undefined, unreachableActorWithIdMessage)
+                }
+              })
+            }
+          }
+        }
+
+        for (const [i, risk] of project.contracts?.risks.entries() ?? []) {
+          checkRisk(risk, `contracts.risks[${i}]`)
+        }
+      })
+    }
+  })
+
+  describe('chain config', () => {
+    const chains = projects
+      .map((x) =>
+        x.chainConfig
+          ? {
+              projectId: x.id,
+              ...x.chainConfig,
+            }
+          : undefined,
+      )
+      .filter((x) => x !== undefined)
+
+    it('every name is lowercase a-z0-9 <20 characters', () => {
+      for (const chain of chains) {
+        expect(chain.name).toMatchRegex(/^[a-z0-9]{1,20}$/)
+      }
+    })
+
+    it('every name is unique', () => {
+      const encountered = new Set()
+      for (const chain of chains) {
+        expect(encountered.has(chain.name)).toEqual(false)
+        encountered.add(chain.name)
+      }
+    })
+
+    it('every name is equal to projectId', () => {
+      // in many places chain name and project id are used interchangeably so we need them to be the same
+      // do not add new projects here!
+      const KNOWN_EXCEPTIONS = ['polygonpos', 'g7', 'apexomni', 'apexpro']
+
+      for (const chain of chains) {
+        if (KNOWN_EXCEPTIONS.includes(chain.name)) continue
+        expect(chain.name).toEqual(chain.projectId)
+      }
+    })
+
+    it('every chainId is unique', () => {
+      const encountered = new Set()
+      for (const chain of chains) {
+        if (encountered.has(chain.chainId)) {
+          expect(chain.chainId).toEqual(undefined)
+        }
+        encountered.add(chain.chainId)
+      }
+    })
+
+    it('every explorerUrl does not end with /', () => {
+      for (const chain of chains) {
+        if (chain.explorerUrl) {
+          expect(chain.explorerUrl).toMatchRegex(/\w$/)
+        }
+      }
+    })
+
+    it('every api url uses https', () => {
+      for (const chain of chains) {
+        for (const api of chain.apis) {
+          if ('url' in api) {
+            expect(api.url).toMatchRegex(/^https:\/\//)
+          }
+        }
+      }
+    })
+
+    describe('every multicall3 contract has the same address', () => {
+      const address = EthereumAddress(
+        '0xcA11bde05977b3631167028862bE2a173976CA11',
+      )
+
+      const contracts = chains
+        .filter(
+          (c) =>
+            c.name !== 'zksync2' &&
+            c.name !== 'kinto' &&
+            c.name !== 'degen' &&
+            c.name !== 'abstract',
+        ) // we are omitting zksync2, degen and kinto as they use different addresses
+        .flatMap(
+          (x) => x.multicallContracts?.map((y) => [x.name, y] as const) ?? [],
+        )
+        .filter(([_, y]) => y.version === '3')
+
+      for (const [chain, contract] of contracts) {
+        it(`multicall3 on ${chain}`, () => {
+          expect(contract.address).toEqual(address)
+        })
+      }
+    })
+
+    describe('multicall contracts are sorted by sinceBlock', () => {
+      for (const chain of chains) {
+        const contracts = chain.multicallContracts?.map((x) => x.sinceBlock)
+        if (!contracts || contracts.length === 0) {
+          continue
+        }
+        it(chain.name, () => {
+          expect(contracts).toEqual(contracts.slice().sort((a, b) => b - a))
+        })
+      }
+    })
+  })
+
+  describe('Tracked transactions', () => {
+    it('every TrackedTxId is unique', () => {
+      const ids = new Set<string>()
+      for (const project of projects) {
+        const trackedTxsIds =
+          project.trackedTxsConfig?.map((entry) => createTrackedTxId(entry)) ??
+          []
+        for (const id of trackedTxsIds) {
+          assert(!ids.has(id), `Duplicate TrackedTxsId in ${project.id}`)
+          ids.add(id)
+        }
+      }
+    })
+
+    describe('every untilTimestamp (if present) is greater than sinceTimestamp', () => {
+      for (const project of projects) {
+        const trackedTxsConfig = project.trackedTxsConfig
+        if (!trackedTxsConfig) continue
+
+        it(project.id, () => {
+          for (const config of trackedTxsConfig) {
+            if (config.untilTimestamp) {
+              expect(config.untilTimestamp).toBeGreaterThan(
+                config.sinceTimestamp,
+              )
+            }
+          }
+        })
+      }
+    })
+
+    describe('transfers', () => {
+      it('every configuration points to unique transfer params', () => {
+        const transfers = new Set<string>()
+        for (const project of projects) {
+          const transferConfigs = project.trackedTxsConfig?.filter(
+            (
+              e,
+            ): e is TrackedTxConfigEntry & {
+              params: TrackedTxTransferConfig
+            } => e.params.formula === 'transfer',
+          )
+          for (const config of transferConfigs ?? []) {
+            const key =
+              (config.params.from ? `${config.params.from.toString()}-` : '') +
+              `${config.params.to.toString()}-${config.type}`
+            assert(
+              !transfers.has(key),
+              `Duplicate transfer config in ${project.id}`,
+            )
+            transfers.add(key)
+          }
+        }
+      })
+    })
+    describe('function calls', () => {
+      it('every configuration points to unique function call params', () => {
+        const functionCalls = new Set<string>()
+        for (const project of projects) {
+          const functionCallConfigs = project.trackedTxsConfig?.filter(
+            (
+              e,
+            ): e is TrackedTxConfigEntry & {
+              params: TrackedTxFunctionCallConfig
+            } => e.params.formula === 'functionCall',
+          )
+          for (const config of functionCallConfigs ?? []) {
+            const key = `${config.params.address.toString()}-${
+              config.params.selector
+            }-${config.untilTimestamp?.toString()}-${config.type}-${config.subtype}`
+            assert(
+              !functionCalls.has(key),
+              `Duplicate function call config in ${project.id}`,
+            )
+            functionCalls.add(key)
+          }
+        }
+      })
+    })
+  })
+
+  describe('links', () => {
+    describe('every project has at least one website link', () => {
+      for (const project of projects) {
+        if (project.display?.links.websites) {
+          it(project.name, () => {
+            expect(
+              project.display?.links.websites?.length ?? 0,
+            ).toBeGreaterThan(0)
+          })
+        }
+      }
+    })
+
+    describe('every link is https', () => {
+      const links = projects.flatMap((x) =>
+        (Object.values(x.display?.links ?? {}) as string[]).flat(),
+      )
+      for (const link of links) {
+        it(link, () => {
+          expect(link).toMatchRegex(/^https:\/\//)
+        })
+      }
+    })
+
+    describe('social media links are properly formatted', () => {
+      const links = projects.flatMap((x) => x.display?.links.socialMedia ?? [])
+      for (const link of links) {
+        it(link, () => {
+          if (link.includes('discord')) {
+            expect(link).toMatchRegex(
+              /^https:\/\/discord\.(gg|com\/invite)\/[\w-]+$/,
+            )
+          } else if (link.includes('t.me')) {
+            expect(link).toMatchRegex(
+              /^https:\/\/t\.me\/(joinchat\/)?[\w\-+]+$/,
+            )
+          } else if (link.includes('medium')) {
+            expect(link).toMatchRegex(
+              /^https:\/\/([\w-]+\.)?medium\.com\/[@\w-]*$/,
+            )
+          } else if (link.includes('twitter')) {
+            expect(link).toMatchRegex(/^https:\/\/twitter\.com\/[\w-]+$/)
+          } else if (link.includes('reddit')) {
+            expect(link).toMatchRegex(/^https:\/\/reddit\.com\/r\/[\w-]+\/$/)
+          } else if (link.includes('youtube')) {
+            if (!link.includes('playlist')) {
+              expect(link).toMatchRegex(
+                /^https:\/\/youtube\.com\/((c|channel)\/|@)[\w-]+$/,
+              )
+            }
+          } else if (link.includes('twitch')) {
+            expect(link).toMatchRegex(/^https:\/\/twitch\.tv\/[\w-]+$/)
+          } else if (link.includes('gitter')) {
+            expect(link).toMatchRegex(/^https:\/\/gitter\.im\/[\w-/]+$/)
+          } else if (link.includes('instagram')) {
+            expect(link).toMatchRegex(/^https:\/\/instagram\.com\/[\w-./]+$/)
+          }
+        })
+      }
+    })
+  })
+
+  // TODO: refactor config so there are no more zeroes, resync data
+  describe('daTracking', () => {
+    // Some of the projects have sinceBlock set to zero because they were added at DA Module start
+    const excluded = new Set([
+      'aevo',
+      'ancient',
+      'arbitrum',
+      'base',
+      'bob',
+      'fuel',
+      'hypr',
+      'ink',
+      'karak',
+      'kinto',
+      'kroma',
+      'linea',
+      'loopring',
+      'lyra',
+      'eclipse',
+      'mantapacific',
+      'mint',
+      'morph',
+      'optimism',
+      'orderly',
+      'paradex',
+      'polynomial',
+      'scroll',
+      'sophon',
+      'starknet',
+      'superlumio',
+      'taiko',
+      'b3',
+      'deri',
+      'ham',
+      'rari',
+      'stack',
+    ])
+
+    // All new projects should have non-zero sinceBlock/sinceTimestamp - it will make sync more efficient
+    describe('every project has non-zero sinceBlock/sinceTimestamp', () => {
+      for (const project of projects) {
+        if (project.daTrackingConfig) {
+          if (!excluded.has(project.id)) {
+            it(project.id, () => {
+              assert(project.daTrackingConfig) // type issue
+              for (const config of project.daTrackingConfig) {
+                if (
+                  config.type === 'ethereum' ||
+                  config.type === 'avail' ||
+                  config.type === 'celestia'
+                ) {
+                  expect(config.sinceBlock).toBeGreaterThan(0)
+                } else {
+                  expect(config.sinceTimestamp).toBeGreaterThan(0)
+                }
+              }
+            })
+          }
+        }
+      }
+    })
+
+    // The backend compares these raw strings against tx to/from addresses,
+    // so a chain-prefixed address (e.g. 'eth:0x...') silently matches nothing
+    describe('every ethereum inbox and sequencer is a plain unprefixed address', () => {
+      for (const project of projects) {
+        if (project.daTrackingConfig) {
+          it(project.id, () => {
+            assert(project.daTrackingConfig) // type issue
+            for (const config of project.daTrackingConfig) {
+              if (config.type === 'ethereum') {
+                expect(() => EthereumAddress(config.inbox)).not.toThrow()
+                for (const sequencer of config.sequencers ?? []) {
+                  expect(() => EthereumAddress(sequencer)).not.toThrow()
+                }
+              }
+            }
+          })
+        }
+      }
+    })
+
+    describe('every appId is unique for Avail projects', () => {
+      const appIds = new Map<string, string>()
+      for (const project of projects) {
+        const trackingConfig = project.daTrackingConfig
+        if (trackingConfig) {
+          it(project.id, () => {
+            for (const config of trackingConfig) {
+              if (config.type === 'avail') {
+                for (const appId of config.appIds) {
+                  assert(
+                    !appIds.has(appId),
+                    `Duplicate appId (${appId}) detected [${project.id}, ${appIds.get(appId)}]`,
+                  )
+                  appIds.set(appId, project.id)
+                }
+              }
+            }
+          })
+        }
+      }
+    })
+
+    describe('every namespace is unique for Celestia projects', () => {
+      const namespaces = new Map<string, string>()
+      for (const project of projects) {
+        if (project.daTrackingConfig) {
+          it(project.id, () => {
+            assert(project.daTrackingConfig) // type issue
+            for (const config of project.daTrackingConfig) {
+              if (config.type === 'celestia') {
+                assert(
+                  !namespaces.has(config.namespace),
+                  `Duplicate namespace (${config.namespace}) detected [${project.id}, ${namespaces.get(config.namespace)}]`,
+                )
+                namespaces.set(config.namespace, project.id)
+              }
+            }
+          })
+        }
+      }
+    })
+  })
+
+  describe('all new projects are discovery driven', () => {
+    const isNormalProject = (p: BaseProject) => {
+      return p.scalingInfo && p.archivedAt === undefined
+    }
+
+    const filteredProjects = projects.filter(
+      (p) =>
+        isNormalProject(p) &&
+        !NON_DISCOVERY_DRIVEN_PROJECTS.includes(p.id.toString()),
+    )
+
+    for (const p of filteredProjects) {
+      it(`${p.id.toString()} is discovery driven`, () => {
+        assert(
+          arePermissionsDiscoveryDriven(p.permissions) &&
+            areContractsDiscoveryDriven(p.contracts),
+          'New projects are expected to be discovery driven. Read the comment in constants.ts',
+        )
+      })
+    }
+  })
+
+  describe('badges', () => {
+    const singularBadges = ['Infra', 'RaaS', 'Stack', 'Fork', 'L3ParentChain']
+
+    for (const badge of singularBadges) {
+      it(`has maximum one ${badge} badge`, () => {
+        for (const project of projects) {
+          const badges = project.display?.badges?.filter(
+            (b) => b.type === badge,
+          )
+          if (badges) {
+            expect(badges.length).toBeLessThanOrEqual(1)
+          }
+        }
+      })
+    }
+  })
+
+  describe('associated tokens can only have category other', () => {
+    for (const project of projects) {
+      if (!project.tvsConfig) {
+        continue
+      }
+      const associated = project.tvsConfig?.filter((t) => t.isAssociated)
+      for (const a of associated) {
+        it(`${project.name}: ${a.id}`, () => {
+          expect(a.category).toEqual('other')
+        })
+      }
+    }
+  })
+})
+
+// This is simpler version of getContractUtils that we have in FE. It's used only for testing.
+function getUsageMap(projects: BaseProject[]) {
+  const usageMap = new Map<`${ChainSpecificAddress}`, ProjectId[]>()
+
+  function addUsage(address: ChainSpecificAddress, usage: ProjectId) {
+    const key = `${address}` as const
+    const uses = usageMap.get(key)
+    if (!uses) {
+      usageMap.set(key, [usage])
+      return
+    }
+    if (!uses.includes(usage)) {
+      uses.push(usage)
+    }
+  }
+
+  for (const project of projects) {
+    if (
+      !(project.scalingInfo || project.daBridge || project.privacyInfo) ||
+      !project.contracts
+    )
+      continue
+
+    for (const [, contracts] of Object.entries(project.contracts.addresses)) {
+      for (const contract of contracts) {
+        addUsage(contract.address, project.id)
+        for (const impl of contract.upgradeability?.implementations ?? []) {
+          addUsage(impl, project.id)
+        }
+      }
+    }
+  }
+  return usageMap
+}

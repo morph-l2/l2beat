@@ -1,22 +1,20 @@
-import { assert } from '@l2beat/backend-tools'
-import { ContractValue } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
-import { providers, utils } from 'ethers'
-import { z } from 'zod'
+import { assert, type ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
+import { type providers, utils } from 'ethers'
+import type { ContractValue } from '../../output/types'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
 import { toContractValue } from '../utils/toContractValue'
 import { toEventFragment } from '../utils/toEventFragment'
 import { ConstructorArgsHandler } from './ConstructorArgsHandler'
 
-export type LayerZeroMultisigHandlerDefinition = z.infer<
+export type LayerZeroMultisigHandlerDefinition = v.infer<
   typeof LayerZeroMultisigHandlerDefinition
 >
 
-export const LayerZeroMultisigHandlerDefinition = z.strictObject({
-  type: z.literal('layerZeroMultisig'),
+export const LayerZeroMultisigHandlerDefinition = v.strictObject({
+  type: v.literal('layerZeroMultisig'),
 })
 
 const UPDATE_SIGNER_EVENT_FRAGMENT = toEventFragment(
@@ -43,7 +41,6 @@ export class LayerZeroMultisigHandler implements Handler {
   constructor(
     readonly field: string,
     abi: string[],
-    readonly logger: DiscoveryLogger,
   ) {
     this.constructorArgsHandler = new ConstructorArgsHandler(
       'constructorArgs',
@@ -52,25 +49,17 @@ export class LayerZeroMultisigHandler implements Handler {
         nameArgs: true,
       },
       abi,
-      logger,
     )
   }
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
     const constructorArgs = await this.constructorArgsHandler.execute(
       provider,
       address,
     )
-
-    this.logger.logExecution(this.field, [
-      'Querying ',
-      UPDATE_SIGNER_EVENT_FRAGMENT.name,
-      ' and ',
-      UPDATE_QUORUM_EVENT_FRAGMENT.name,
-    ])
 
     async function getLogs(topic: string): Promise<providers.Log[]> {
       return await provider.getLogs(address, [ABI.getEventTopic(topic)])
@@ -85,7 +74,7 @@ export class LayerZeroMultisigHandler implements Handler {
     assert(
       typeof ctorValue === 'object' &&
         !Array.isArray(ctorValue) &&
-        isNotEthereumAddress(ctorValue),
+        isNotChainSpecificAddress(ctorValue),
       'constructorArgs.value is not an object',
     )
     assert(Array.isArray(ctorValue._signers), 'signers is not an array')
@@ -120,8 +109,8 @@ export class LayerZeroMultisigHandler implements Handler {
   }
 }
 
-function isNotEthereumAddress<T extends object>(
-  value: T | EthereumAddress,
+function isNotChainSpecificAddress<T extends object>(
+  value: T | ChainSpecificAddress,
 ): value is T {
   return typeof value !== 'string'
 }

@@ -1,0 +1,1372 @@
+Generated with discovered.json: 0xe618877022a4368013c036f3d80de84a240c6658
+
+# Diff at Mon, 07 Sep 2026 08:37:52 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@25578f132c6c06c4de07ab98ad602d8239829c04 block: 1761895563
+- current timestamp: 1761895563
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1761895563 (main branch discovery), not current.
+
+```diff
+    external contract AgglayerManager (eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"upgrade","from":"eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B","role":"admin"}]
+    }
+```
+
+```diff
+    external contract (eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"upgrade","from":"eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3","role":"admin"},{"permission":"upgrade","from":"eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe","role":"admin"},{"permission":"upgrade","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","role":"admin"},{"permission":"upgrade","from":"eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb","role":"admin"}]
+    }
+```
+
+```diff
+    external contract (eth:0x20A53dCb196cD2bcc14Ece01F358f1C849aA51dE) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","description":"Permissioned to post new state roots and global exit roots accompanied by ZK proofs.","role":".trustedAggregatorAC"}]
+    }
+```
+
+```diff
+    external contract (eth:0x242daE44F5d8fb54B198D03a94dA45B5a4413e21) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3","description":"add new routes from proof selector to verifier / pessimisticVkey for pessimistic proofs.","role":".addPpRouteAC","via":[{"address":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"condition":"(no delay if in emergency state)"}]},{"permission":"interact","from":"eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3","description":"add or update default aggchain verification keys (aggchainVkey) for any given selectors.","role":".aggchainDefaultVKeyAC"},{"permission":"interact","from":"eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3","description":"change the aggchainSigners and threshold (a multisig used for permissioned state transitions).","role":".alMultisigAC"},{"permission":"interact","from":"eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3","description":"freeze routes from proof selector to verifier / pessimisticVkey for pessimistic proofs.","role":".freezePpRouteAC"},{"permission":"interact","from":"eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe","description":"upgrade the implementation of wrapped tokens deployed by the bridge.","role":".proxiedTokensManager","via":[{"address":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"condition":"(no delay if in emergency state)"}]},{"permission":"interact","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","description":"deploy new projects that use predefined rollup types (implementations) and connect them or other Agglayer chains to the PolygonRollupManager.","role":".createRollupAC"},{"permission":"interact","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","description":"manage all access control roles, add new rollup types (which are implementation contracts that can then be upgraded to by connected projects), update any connected projects to new rollup types, migrate to pessimistic proofs and rollback batches, connect existing rollups to the PolygonRollupManager.","role":".defaultAdminAC","via":[{"address":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"condition":"(no delay if in emergency state)"}]},{"permission":"interact","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","description":"manage parameters like fees for all connected projects, set the trusted aggregator, stop the emergency state, update projects and obsolete rollup types.","role":".tweakParametersAC"},{"permission":"interact","from":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"description":"propose, cancel and execute transactions in the timelock, manage all access control roles and change the minimum delay.","role":".timelockAdminAC","condition":"(no delay if in emergency state)","via":[{"address":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"condition":"(no delay if in emergency state)"}]},{"permission":"interact","from":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"description":"propose, cancel and execute transactions in the timelock, manage all access control roles and change the minimum delay.","role":".timelockAdminAC","condition":"(no delay if in emergency state)"},{"permission":"upgrade","from":"eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3","role":"admin","via":[{"address":"eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A"},{"address":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"condition":"(no delay if in emergency state)"}]},{"permission":"upgrade","from":"eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe","role":"admin","via":[{"address":"eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A"},{"address":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"condition":"(no delay if in emergency state)"}]},{"permission":"upgrade","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","role":"admin","via":[{"address":"eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A"},{"address":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"condition":"(no delay if in emergency state)"}]},{"permission":"upgrade","from":"eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb","role":"admin","via":[{"address":"eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A"},{"address":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"condition":"(no delay if in emergency state)"}]}]
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"role":".timelockAdminAC","condition":"(no delay if in emergency state)"}]
+    }
+```
+
+```diff
+    external contract (eth:0x37c58Dfa7BF0A165C5AAEdDf3e2EdB475ac6Dcb6) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","description":"activate the emergency state in the PolygonRollupManager and in the shared bridge immediately, effectively pausing all projects connected to them and making system contracts instantly upgradable.","role":".emergencyCouncilAdminAC"}]
+    }
+```
+
+```diff
+    external contract (eth:0xC74eFc7fdb3BeC9c6930E91FFDF761b160dF79dB) {
+    +++ description: None
+      receivedPermissions:
++        [{"permission":"interact","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","description":"deploy new projects that use predefined rollup types (implementations) and connect them or other Agglayer chains to the PolygonRollupManager.","role":".createRollupAC"}]
+    }
+```
+
+```diff
+    external contract (eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF) {
+    +++ description: None
+      directlyReceivedPermissions:
++        [{"permission":"act","from":"eth:0x0F99738B2Fc14D77308337f3e2596b63aE7BCC4A","role":".owner"},{"permission":"act","from":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"role":".timelockAdminAC","condition":"(no delay if in emergency state)"},{"permission":"interact","from":"eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3","description":"add new routes from proof selector to verifier / pessimisticVkey for pessimistic proofs.","role":".addPpRouteAC"},{"permission":"interact","from":"eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe","description":"upgrade the implementation of wrapped tokens deployed by the bridge.","role":".proxiedTokensManager"},{"permission":"interact","from":"eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2","description":"manage all access control roles, add new rollup types (which are implementation contracts that can then be upgraded to by connected projects), update any connected projects to new rollup types, migrate to pessimistic proofs and rollback batches, connect existing rollups to the PolygonRollupManager.","role":".defaultAdminAC"},{"permission":"interact","from":"eth:0xEf1462451C30Ea7aD8555386226059Fe837CA4EF","delay":259200,"description":"propose, cancel and execute transactions in the timelock, manage all access control roles and change the minimum delay.","role":".timelockAdminAC","condition":"(no delay if in emergency state)"}]
+    }
+```
+
+Generated with discovered.json: 0xec216b35e4f52dddb156ae202ccd46b532d509cc
+
+# Diff at Tue, 05 May 2026 10:22:23 GMT:
+
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@b6437082b3ea8fb0d97f4474b1c3452a1ce271b0 block: 1761895563
+- current timestamp: 1761895563
+
+## Description
+
+Include deployer address
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1761895563 (main branch discovery), not current.
+
+```diff
+    contract AggchainECDSAMultisig (eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: System contract defining the prism Aggchain logic. It only enforces bridge accounting (pessimistic) proofs to protect the shared bridge while the Aggchain state transitions are not proven. They must instead be signed by 1 aggchainSigner(s).
+      deployerAddress:
++        "eth:0xEad77b01ea770839F7f576Cd1516Ff6A298d9dB2"
+    }
+```
+
+Generated with discovered.json: 0x55202438f19786ade68ae74674f52e3ff3889b1f
+
+# Diff at Tue, 09 Dec 2025 11:33:10 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@ed25b2aa28d6ab9faa5f06bc943948919be9627d block: 1761895563
+- current timestamp: 1761895563
+
+## Description
+
+config: add aggchain_type description and severity.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1761895563 (main branch discovery), not current.
+
+```diff
+    contract AggchainECDSAMultisig (eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: System contract defining the prism Aggchain logic. It only enforces bridge accounting (pessimistic) proofs to protect the shared bridge while the Aggchain state transitions are not proven. They must instead be signed by 1 aggchainSigner(s).
+      fieldMeta.AGGCHAIN_TYPE:
++        {"severity":"HIGH","description":"0: ECDSA sig verification, 1: limited to vkeys in AggchainGateway with 1 as second byte"}
+    }
+```
+
+Generated with discovered.json: 0x768338199bc0a7cc70230a0da7b8e36c6bd93403
+
+# Diff at Fri, 31 Oct 2025 13:56:02 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@68eb98b0468d176aa44713dcaed98f67b2a200a0 block: 1759756767
+- current timestamp: 1761895563
+
+## Description
+
+Upgrade of the main Lumia contract: https://disco.l2beat.com/diff/eth:0x18C45DD422f6587357a6d3b23307E75D42b2bc5B/eth:0x0D49fD0d79723e4D24AaC83f604ED2D3d5fC0f21
+- rename
+- move to CONSENSUS_TYPE (no change in permissions nor state validation) ref: https://app.excalidraw.com/s/1Pobo8fNXle/oDCa0vpJ3X?element=x9PfT775QIukDuV3P-sUz
+
+## Watched changes
+
+```diff
+    EOA  (eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F) {
+    +++ description: None
+      receivedPermissions.0.role:
+-        ".trustedSequencer"
++        ".aggchainSigners"
+      receivedPermissions.0.description:
+-        "must provide a signature for each pessimistic proof, attesting to a valid state transition."
++        "sign state transitions (replaces state validation for this aggchain)."
+    }
+```
+
+```diff
+    contract AggchainECDSAMultisig (eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: System contract defining the prism Aggchain logic. It only enforces bridge accounting (pessimistic) proofs to protect the shared bridge while the Aggchain state transitions are not proven. They must instead be signed by 1 aggchainSigner(s).
+      name:
+-        "PolygonPessimisticConsensus"
++        "AggchainECDSAMultisig"
+      template:
+-        "polygon-cdk/PolygonPessimisticConsensus"
++        "polygon-cdk/AggchainECDSAMultisig"
+      sourceHashes.1:
+-        "0x555aef5e938f2211fc99363d15a2fcb7a9dc24ee5154f0d6be32a136d7dfbdf7"
++        "0xa58b59f574674919f2c3fb755a6e3e369c0d5f734d8fcca6fe2664629ad8b25e"
+      description:
+-        "System contract defining the prism logic. It only enforces bridge accounting (pessimistic) proofs and is otherwise kept minimal as the layer 2 state transitions are not proven."
++        "System contract defining the prism Aggchain logic. It only enforces bridge accounting (pessimistic) proofs to protect the shared bridge while the Aggchain state transitions are not proven. They must instead be signed by 1 aggchainSigner(s)."
+      values.$implementation:
+-        "eth:0x18C45DD422f6587357a6d3b23307E75D42b2bc5B"
++        "eth:0x0D49fD0d79723e4D24AaC83f604ED2D3d5fC0f21"
+      values.$pastUpgrades.3:
++        ["2025-10-29T14:11:11.000Z","0x7be3301b763f904f5076e22914b0ea13e101ed3cff6480b23a7757e7b9875939",["eth:0x0D49fD0d79723e4D24AaC83f604ED2D3d5fC0f21"]]
+      values.$upgradeCount:
+-        3
++        4
++++ description: 0 - ECDSA sig verification, 1 - aggchainVkey verification (read by the pessimistic program)
++++ severity: HIGH
+      values.CONSENSUS_TYPE:
+-        0
++        1
+      values.getConsensusHash:
+-        "0x2740986d6807b549ead363c0f4a6bb7b2d8b0a1c7bff3c1adac5274fb4efc14d"
+      values._legacypendingVKeyManager:
++        "eth:0x0000000000000000000000000000000000000000"
+      values._legacyvKeyManager:
++        "eth:0x0000000000000000000000000000000000000000"
+      values.AGGCHAIN_ECDSA_MULTISIG_VERSION:
++        "v1.0.0"
+      values.AGGCHAIN_TYPE:
++        "0x0000"
+      values.aggchainManager:
++        "eth:0x258862dec9a77db57b398c441390783293E2a7A1"
+      values.aggchainMetadataManager:
++        "eth:0x0000000000000000000000000000000000000000"
++++ severity: HIGH
+      values.aggchainMultisigHash:
++        "0x56d8bc2e1eecaf68ad03aa2d252136284a839aac7cd6971d9f421cc0f415f93b"
+      values.aggchainSigners:
++        ["eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F"]
+      values.aggLayerGateway:
++        "eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3"
+      values.getAggchainMultisigHash:
++        "0x56d8bc2e1eecaf68ad03aa2d252136284a839aac7cd6971d9f421cc0f415f93b"
+      values.getAggchainSignerInfos:
++        [{"addr":"eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F","url":"https://prism-sequencer.eu-north-2.gateway.fm/"}]
+      values.getAggchainSigners:
++        ["eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F"]
+      values.getAggchainSignersCount:
++        1
+      values.getThreshold:
++        1
+      values.MAX_AGGCHAIN_SIGNERS:
++        255
+      values.pendingAggchainManager:
++        "eth:0x0000000000000000000000000000000000000000"
+      values.threshold:
++        1
++++ severity: HIGH
+      values.useDefaultSigners:
++        false
++++ severity: HIGH
+      values.useDefaultVkeys:
++        false
+      values.version:
++        "v1.0.0"
+      fieldMeta.CONSENSUS_TYPE.severity:
++        "HIGH"
+      fieldMeta.aggchainMultisigHash:
++        {"severity":"HIGH"}
+      fieldMeta.useDefaultSigners:
++        {"severity":"HIGH"}
+      fieldMeta.useDefaultVkeys:
++        {"severity":"HIGH"}
+      implementationNames.eth:0x18C45DD422f6587357a6d3b23307E75D42b2bc5B:
+-        "PolygonPessimisticConsensus"
+      implementationNames.eth:0x0D49fD0d79723e4D24AaC83f604ED2D3d5fC0f21:
++        "AggchainECDSAMultisig"
+    }
+```
+
+```diff
++   Status: CREATED
+    reference AgglayerGateway (eth:0x046Bb8bb98Db4ceCbB2929542686B74b516274b3)
+    +++ description: None
+```
+
+## Source code changes
+
+```diff
+.../AggchainECDSAMultisig.sol                      | 2242 ++++++++++++++++++++
+ .../PolygonTransparentProxy.p.sol                  |    0
+ .../PolygonPessimisticConsensus.sol => /dev/null   |  845 --------
+ 3 files changed, 2242 insertions(+), 845 deletions(-)
+```
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1759756767 (main branch discovery), not current.
+
+```diff
+    reference AgglayerBridge (eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe) {
+    +++ description: None
+      name:
+-        "PolygonSharedBridge"
++        "AgglayerBridge"
+    }
+```
+
+```diff
+    reference AgglayerManager (eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2) {
+    +++ description: None
+      name:
+-        "PolygonRollupManager"
++        "AgglayerManager"
+    }
+```
+
+```diff
+    reference AgglayerGER (eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb) {
+    +++ description: None
+      name:
+-        "PolygonGlobalExitRootV2"
++        "AgglayerGER"
+    }
+```
+
+```diff
+    contract PolygonPessimisticConsensus (eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: System contract defining the prism logic. It only enforces bridge accounting (pessimistic) proofs and is otherwise kept minimal as the layer 2 state transitions are not proven.
+      name:
+-        "Validium"
++        "PolygonPessimisticConsensus"
+    }
+```
+
+Generated with discovered.json: 0xdf0a6975baa5a9b16816931d5ad3529a5dbd2f96
+
+# Diff at Mon, 13 Oct 2025 06:48:37 GMT:
+
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@fe3c735ad76bcc6ebcc73f187993a692bfbc0eba block: 1759756767
+- current timestamp: 1759756767
+
+## Description
+
+Removed zkProver verifier from Lumia disco to clean up zk catalog entry.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1759756767 (main branch discovery), not current.
+
+```diff
+-   Status: DELETED
+    contract Verifier (eth:0x9B9671dB83CfcB4508bF361942488C5cA2b1286D)
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+```
+
+Generated with discovered.json: 0x97721b53fcc0be160f72335781f4f61e9d5e4897
+
+# Diff at Mon, 06 Oct 2025 13:20:35 GMT:
+
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@e58bd9f0913161b35e2a2c65f233464591d4f28b block: 1753192367
+- current timestamp: 1759756767
+
+## Description
+
+Lumia switches to pessimistic consensus, moving to OTHERS for now (same programVKey as XLayer).
+
+## Watched changes
+
+```diff
+    EOA  (eth:0x258862dec9a77db57b398c441390783293E2a7A1) {
+    +++ description: None
+      receivedPermissions.0:
+-        {"permission":"interact","from":"eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8","description":"manage the members of the data availability committee and the threshold for valid commitments.","role":".owner"}
+      receivedPermissions.1.description:
+-        "set core system parameters like the trusted sequencer and manage forced transactions/batches."
++        "set the trusted sequencer address."
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract PolygonDataCommittee (eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8)
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+```
+
+```diff
+    EOA  (eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F) {
+    +++ description: None
+      receivedPermissions.0.description:
++        "must provide a signature for each pessimistic proof, attesting to a valid state transition."
+      receivedPermissions.0.permission:
+-        "sequence"
++        "interact"
+    }
+```
+
+```diff
+    contract Validium (eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: System contract defining the prism logic. It only enforces bridge accounting (pessimistic) proofs and is otherwise kept minimal as the layer 2 state transitions are not proven.
+      template:
+-        "polygon-cdk/PolygonZkEVM"
++        "polygon-cdk/PolygonPessimisticConsensus"
+      sourceHashes.1:
+-        "0x78d1eb2b96633fb1f594ef672a3791fa85a077fe0cf415ef79d93bc9a2aebd9c"
++        "0x555aef5e938f2211fc99363d15a2fcb7a9dc24ee5154f0d6be32a136d7dfbdf7"
+      description:
+-        "The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches."
++        "System contract defining the prism logic. It only enforces bridge accounting (pessimistic) proofs and is otherwise kept minimal as the layer 2 state transitions are not proven."
+      values.$implementation:
+-        "eth:0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F"
++        "eth:0x18C45DD422f6587357a6d3b23307E75D42b2bc5B"
+      values.$pastUpgrades.2:
++        ["2025-10-02T11:35:35.000Z","0x4a9633f61bf7eacf4cfffefccc1e8a561fdaacfbed6470573463e28304b3906d",["eth:0x18C45DD422f6587357a6d3b23307E75D42b2bc5B"]]
+      values.$upgradeCount:
+-        2
++        3
+      values.calculatePolPerForceBatch:
+-        0
+      values.dataAvailabilityProtocol:
+-        "eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
+      values.GLOBAL_EXIT_ROOT_MANAGER_L2:
+-        "eth:0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA"
+      values.INITIALIZE_TX_BRIDGE_LIST_LEN_LEN:
+-        249
+      values.INITIALIZE_TX_BRIDGE_PARAMS:
+-        "0x80808401c9c38094"
+      values.INITIALIZE_TX_BRIDGE_PARAMS_AFTER_BRIDGE_ADDRESS:
+-        "0x80b9"
+      values.INITIALIZE_TX_BRIDGE_PARAMS_AFTER_BRIDGE_ADDRESS_EMPTY_METADATA:
+-        "0x80b8"
+      values.INITIALIZE_TX_CONSTANT_BYTES:
+-        32
+      values.INITIALIZE_TX_CONSTANT_BYTES_EMPTY_METADATA:
+-        31
+      values.INITIALIZE_TX_DATA_LEN_EMPTY_METADATA:
+-        228
+      values.INITIALIZE_TX_EFFECTIVE_PERCENTAGE:
+-        "0xff"
+      values.isSequenceWithDataAvailabilityAllowed:
+-        false
+      values.SIGNATURE_INITIALIZE_TX_R:
+-        "0x00000000000000000000000000000000000000000000000000000005ca1ab1e0"
+      values.SIGNATURE_INITIALIZE_TX_S:
+-        "0x000000000000000000000000000000000000000000000000000000005ca1ab1e"
+      values.SIGNATURE_INITIALIZE_TX_V:
+-        27
+      values.TIMESTAMP_RANGE:
+-        36
++++ description: 0 - ECDSA sig verification, 1 - aggchainVkey verification (read by the pessimistic program)
+      values.CONSENSUS_TYPE:
++        0
+      values.getConsensusHash:
++        "0x2740986d6807b549ead363c0f4a6bb7b2d8b0a1c7bff3c1adac5274fb4efc14d"
+      fieldMeta.CONSENSUS_TYPE:
++        {"description":"0 - ECDSA sig verification, 1 - aggchainVkey verification (read by the pessimistic program)"}
+      implementationNames.eth:0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F:
+-        "PolygonValidiumEtrog"
+      implementationNames.eth:0x18C45DD422f6587357a6d3b23307E75D42b2bc5B:
++        "PolygonPessimisticConsensus"
+    }
+```
+
+```diff
+-   Status: DELETED
+    contract ProxyAdmin (eth:0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a)
+    +++ description: None
+```
+
+## Source code changes
+
+```diff
+.../PolygonDataCommittee.sol => /dev/null          | 1254 ------------
+ .../TransparentUpgradeableProxy.p.sol => /dev/null |  695 -------
+ .../.flat@1753192367/ProxyAdmin.sol => /dev/null   |  147 --
+ .../.flat/Validium/PolygonPessimisticConsensus.sol |  845 +++++++++
+ .../Validium/PolygonValidiumEtrog.sol => /dev/null | 1996 --------------------
+ 5 files changed, 845 insertions(+), 4092 deletions(-)
+```
+
+Generated with discovered.json: 0x037af9c3e105150d47af2235a297d621e98c8dee
+
+# Diff at Wed, 03 Sep 2025 15:51:53 GMT:
+
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@fbfe8da4086c70042fea30347d68132d3f574015 block: 1753192367
+- current timestamp: 1753192367
+
+## Description
+
+Rerun to add References to entrypoints of shared modules
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 1753192367 (main branch discovery), not current.
+
+```diff
++   Status: CREATED
+    reference PolygonSharedBridge (eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    reference PolygonRollupManager (eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    reference PolygonGlobalExitRootV2 (eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb)
+    +++ description: None
+```
+
+Generated with discovered.json: 0x87d2ab05ffa2c31623a7c6f2d397847a964c4041
+
+# Diff at Mon, 01 Sep 2025 10:01:10 GMT:
+
+Merge mark
+
+Generated with discovered.json: 0x8b7a1c5119fe4a4cdf2879833068e8e6fcb8091d
+
+# Diff at Tue, 22 Jul 2025 13:53:10 GMT:
+
+- chain: ethereum
+- author: Sergey Shemyakov (<sergey.shemyakov@l2beat.com>)
+- comparing to: main@713d113ee2954529e09a88c55545a95e9ba43ca7 block: 21981677
+- current block number: 22975137
+
+## Description
+
+Updated Fflonk verifier in the initial addresses to the correct one.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+-   Status: DELETED
+    contract Verifier (0x0775e11309d75aA6b0967917fB0213C5673eDf81)
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+```
+
+```diff
++   Status: CREATED
+    contract Verifier (0x9B9671dB83CfcB4508bF361942488C5cA2b1286D)
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+```
+
+Generated with discovered.json: 0x64f03cddcc01172c4d5cc6d2655b2e487708a527
+
+# Diff at Mon, 14 Jul 2025 12:45:20 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@9f4300dad2f3d080cd56fa311d4a848556c74e72 block: 21981677
+- current block number: 21981677
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+    contract Verifier (0x0775e11309d75aA6b0967917fB0213C5673eDf81) {
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+      address:
+-        "0x0775e11309d75aA6b0967917fB0213C5673eDf81"
++        "eth:0x0775e11309d75aA6b0967917fB0213C5673eDf81"
+      implementationNames.0x0775e11309d75aA6b0967917fB0213C5673eDf81:
+-        "FflonkVerifier"
+      implementationNames.eth:0x0775e11309d75aA6b0967917fB0213C5673eDf81:
++        "FflonkVerifier"
+    }
+```
+
+```diff
+    EOA  (0x258862dec9a77db57b398c441390783293E2a7A1) {
+    +++ description: None
+      address:
+-        "0x258862dec9a77db57b398c441390783293E2a7A1"
++        "eth:0x258862dec9a77db57b398c441390783293E2a7A1"
+    }
+```
+
+```diff
+    contract PolygonDataCommittee (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8) {
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+      address:
+-        "0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
++        "eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
+      values.$admin:
+-        "0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"
++        "eth:0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"
+      values.$implementation:
+-        "0x2Db26DD090aDf2CC23C3506cB2F0646c517C93fB"
++        "eth:0x2Db26DD090aDf2CC23C3506cB2F0646c517C93fB"
+      values.$pastUpgrades.0.2.0:
+-        "0x2Db26DD090aDf2CC23C3506cB2F0646c517C93fB"
++        "eth:0x2Db26DD090aDf2CC23C3506cB2F0646c517C93fB"
+      values.members.0.addr:
+-        "0xf1cACD549400824D54c8794e63C5368C296FDA00"
++        "eth:0xf1cACD549400824D54c8794e63C5368C296FDA00"
+      values.members.1.addr:
+-        "0xF2cF1EEe5A4B71CEc8cFA16791f72b03bFD00e18"
++        "eth:0xF2cF1EEe5A4B71CEc8cFA16791f72b03bFD00e18"
+      values.owner:
+-        "0x258862dec9a77db57b398c441390783293E2a7A1"
++        "eth:0x258862dec9a77db57b398c441390783293E2a7A1"
+      implementationNames.0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8:
+-        "TransparentUpgradeableProxy"
+      implementationNames.0x2Db26DD090aDf2CC23C3506cB2F0646c517C93fB:
+-        "PolygonDataCommittee"
+      implementationNames.eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8:
++        "TransparentUpgradeableProxy"
+      implementationNames.eth:0x2Db26DD090aDf2CC23C3506cB2F0646c517C93fB:
++        "PolygonDataCommittee"
+    }
+```
+
+```diff
+    EOA  (0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F) {
+    +++ description: None
+      address:
+-        "0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F"
++        "eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F"
+    }
+```
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      address:
+-        "0x92726F7dE49300DBdb60930066bc1d0803c0740B"
++        "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B"
+      values.$admin:
+-        "0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"
++        "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"
+      values.$implementation:
+-        "0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F"
++        "eth:0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F"
+      values.$pastUpgrades.0.2.0:
+-        "0x10D296e8aDd0535be71639E5D1d1c30ae1C6bD4C"
++        "eth:0x10D296e8aDd0535be71639E5D1d1c30ae1C6bD4C"
+      values.$pastUpgrades.1.2.0:
+-        "0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F"
++        "eth:0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F"
+      values.admin:
+-        "0x258862dec9a77db57b398c441390783293E2a7A1"
++        "eth:0x258862dec9a77db57b398c441390783293E2a7A1"
+      values.bridgeAddress:
+-        "0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe"
++        "eth:0x2a3DD3EB832aF982ec71669E178424b10Dca2EDe"
+      values.dataAvailabilityProtocol:
+-        "0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
++        "eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
++++ description: If this changes to the ZERO address, an update to the risk rosette is probably needed, since forcing batches is open to everyone.
++++ severity: HIGH
+      values.forceBatchAddress:
+-        "0x258862dec9a77db57b398c441390783293E2a7A1"
++        "eth:0x258862dec9a77db57b398c441390783293E2a7A1"
+      values.gasTokenAddress:
+-        "0xD9343a049D5DBd89CD19DC6BcA8c48fB3a0a42a7"
++        "eth:0xD9343a049D5DBd89CD19DC6BcA8c48fB3a0a42a7"
+      values.GLOBAL_EXIT_ROOT_MANAGER_L2:
+-        "0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA"
++        "eth:0xa40D5f56745a118D0906a34E69aeC8C0Db1cB8fA"
+      values.globalExitRootManager:
+-        "0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb"
++        "eth:0x580bda1e7A0CFAe92Fa7F6c20A3794F169CE3CFb"
+      values.pendingAdmin:
+-        "0x0000000000000000000000000000000000000000"
++        "eth:0x0000000000000000000000000000000000000000"
+      values.pol:
+-        "0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6"
++        "eth:0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6"
+      values.rollupManager:
+-        "0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"
++        "eth:0x5132A183E9F3CB7C848b0AAC5Ae0c4f0491B7aB2"
+      values.trustedSequencer:
+-        "0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F"
++        "eth:0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F"
+      implementationNames.0x92726F7dE49300DBdb60930066bc1d0803c0740B:
+-        "PolygonTransparentProxy"
+      implementationNames.0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F:
+-        "PolygonValidiumEtrog"
+      implementationNames.eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B:
++        "PolygonTransparentProxy"
+      implementationNames.eth:0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F:
++        "PolygonValidiumEtrog"
+    }
+```
+
+```diff
+    contract ProxyAdmin (0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a) {
+    +++ description: None
+      address:
+-        "0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"
++        "eth:0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"
+      values.owner:
+-        "0xb8605297399baEb6628C9E8F5D3E52A056492cfe"
++        "eth:0xb8605297399baEb6628C9E8F5D3E52A056492cfe"
+      implementationNames.0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a:
+-        "ProxyAdmin"
+      implementationNames.eth:0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a:
++        "ProxyAdmin"
+    }
+```
+
+```diff
+    EOA  (0xb8605297399baEb6628C9E8F5D3E52A056492cfe) {
+    +++ description: None
+      address:
+-        "0xb8605297399baEb6628C9E8F5D3E52A056492cfe"
++        "eth:0xb8605297399baEb6628C9E8F5D3E52A056492cfe"
+    }
+```
+
+```diff
+    EOA  (0xf1cACD549400824D54c8794e63C5368C296FDA00) {
+    +++ description: None
+      address:
+-        "0xf1cACD549400824D54c8794e63C5368C296FDA00"
++        "eth:0xf1cACD549400824D54c8794e63C5368C296FDA00"
+    }
+```
+
+```diff
+    EOA  (0xF2cF1EEe5A4B71CEc8cFA16791f72b03bFD00e18) {
+    +++ description: None
+      address:
+-        "0xF2cF1EEe5A4B71CEc8cFA16791f72b03bFD00e18"
++        "eth:0xF2cF1EEe5A4B71CEc8cFA16791f72b03bFD00e18"
+    }
+```
+
+```diff
++   Status: CREATED
+    contract Verifier (0x0775e11309d75aA6b0967917fB0213C5673eDf81)
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+```
+
+```diff
++   Status: CREATED
+    contract PolygonDataCommittee (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8)
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+```
+
+```diff
++   Status: CREATED
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B)
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+```
+
+```diff
++   Status: CREATED
+    contract ProxyAdmin (0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a)
+    +++ description: None
+```
+
+Generated with discovered.json: 0xa9b263aeca382d86b922d316ea880b3bf927e996
+
+# Diff at Fri, 04 Jul 2025 12:19:08 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@1f56dc47fe915564d4555300304da4d3bcbc087f block: 21981677
+- current block number: 21981677
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+    EOA  (0x258862dec9a77db57b398c441390783293E2a7A1) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "ethereum:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
++        "eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
+      receivedPermissions.1.from:
+-        "ethereum:0x92726F7dE49300DBdb60930066bc1d0803c0740B"
++        "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B"
+      receivedPermissions.2.from:
+-        "ethereum:0x92726F7dE49300DBdb60930066bc1d0803c0740B"
++        "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B"
+    }
+```
+
+```diff
+    EOA  (0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F) {
+    +++ description: None
+      receivedPermissions.0.from:
+-        "ethereum:0x92726F7dE49300DBdb60930066bc1d0803c0740B"
++        "eth:0x92726F7dE49300DBdb60930066bc1d0803c0740B"
+    }
+```
+
+```diff
+    contract ProxyAdmin (0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a) {
+    +++ description: None
+      directlyReceivedPermissions.0.from:
+-        "ethereum:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
++        "eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
+    }
+```
+
+```diff
+    EOA  (0xb8605297399baEb6628C9E8F5D3E52A056492cfe) {
+    +++ description: None
+      receivedPermissions.0.via.0.address:
+-        "ethereum:0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"
++        "eth:0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"
+      receivedPermissions.0.from:
+-        "ethereum:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
++        "eth:0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8"
+      directlyReceivedPermissions.0.from:
+-        "ethereum:0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"
++        "eth:0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"
+    }
+```
+
+Generated with discovered.json: 0xf82ecb630c98e0d21524af39ae8b6045ec8090ef
+
+# Diff at Fri, 23 May 2025 09:40:59 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@69cd181abbc3c830a6caf2f4429b37cae72ffdb8 block: 21981677
+- current block number: 21981677
+
+## Description
+
+Introduced .role field on each permission, defaulting to field name on which it was defined (with '.' prefix)
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+    EOA  (0x258862dec9a77db57b398c441390783293E2a7A1) {
+    +++ description: None
+      receivedPermissions.2.role:
++        ".admin"
+      receivedPermissions.1.role:
++        ".owner"
+      receivedPermissions.0.role:
++        ".forceBatchAddress"
+    }
+```
+
+```diff
+    EOA  (0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F) {
+    +++ description: None
+      receivedPermissions.0.role:
++        ".trustedSequencer"
+    }
+```
+
+```diff
+    contract ProxyAdmin (0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a) {
+    +++ description: None
+      directlyReceivedPermissions.0.role:
++        "admin"
+    }
+```
+
+```diff
+    EOA  (0xb8605297399baEb6628C9E8F5D3E52A056492cfe) {
+    +++ description: None
+      receivedPermissions.0.role:
++        "admin"
+      directlyReceivedPermissions.0.role:
++        ".owner"
+    }
+```
+
+Generated with discovered.json: 0x0fd297051c1fbdef0bfca248227eef5ba51c8394
+
+# Diff at Tue, 06 May 2025 10:56:52 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@3a394513711f46aa66871603365b6afb40a79057 block: 21981677
+- current block number: 21981677
+
+## Description
+
+Marking EOAs if they control the highest number of upgrade permissions in the project.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+    EOA  (0xb8605297399baEb6628C9E8F5D3E52A056492cfe) {
+    +++ description: None
+      controlsMajorityOfUpgradePermissions:
++        true
+    }
+```
+
+Generated with discovered.json: 0x050e09fb8bd8b381be22676403f3eb8e9c0a8b3a
+
+# Diff at Tue, 29 Apr 2025 08:19:06 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@ef7477af00fe0b57a2f7cacf7e958c12494af662 block: 21981677
+- current block number: 21981677
+
+## Description
+
+Field .issuedPermissions is removed from the output as no longer needed. Added 'permissionsConfigHash' due to refactoring of the modelling process (into a separate command).
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+    contract PolygonDataCommittee (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8) {
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+      issuedPermissions:
+-        [{"permission":"interact","to":"0x258862dec9a77db57b398c441390783293E2a7A1","description":"manage the members of the data availability committee and the threshold for valid commitments.","via":[]},{"permission":"upgrade","to":"0xb8605297399baEb6628C9E8F5D3E52A056492cfe","via":[{"address":"0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"}]}]
+    }
+```
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      issuedPermissions:
+-        [{"permission":"interact","to":"0x258862dec9a77db57b398c441390783293E2a7A1","description":"set core system parameters like the trusted sequencer and manage forced transactions/batches.","via":[]},{"permission":"interact","to":"0x258862dec9a77db57b398c441390783293E2a7A1","description":"sole address that can force batches.","via":[]},{"permission":"sequence","to":"0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F","via":[]}]
+    }
+```
+
+Generated with discovered.json: 0xc84e03c6da834aa3bbe391b4aa5da3c0f1b546b5
+
+# Diff at Thu, 24 Apr 2025 10:30:18 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@564f772ef796772c9952d7432df8286347a08d9e block: 21981677
+- current block number: 21981677
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+    contract PolygonDataCommittee (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8) {
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+      values.members.1:
+-        ["https://prism-da-2.eu-north-2.gateway.fm/","0xf1cACD549400824D54c8794e63C5368C296FDA00"]
++        {"url":"https://prism-da-1.eu-north-2.gateway.fm/","addr":"0xF2cF1EEe5A4B71CEc8cFA16791f72b03bFD00e18"}
+      values.members.0:
+-        ["https://prism-da-1.eu-north-2.gateway.fm/","0xF2cF1EEe5A4B71CEc8cFA16791f72b03bFD00e18"]
++        {"url":"https://prism-da-2.eu-north-2.gateway.fm/","addr":"0xf1cACD549400824D54c8794e63C5368C296FDA00"}
+    }
+```
+
+Generated with discovered.json: 0x77d780f19ae4c3edad1919d89cef8d0eb6d38e2e
+
+# Diff at Thu, 10 Apr 2025 14:42:41 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@f38a3c9bf359344e4c4cd3006f58271cb8f78d15 block: 21981677
+- current block number: 21981677
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      displayName:
+-        "PolygonZkEVM"
+    }
+```
+
+Generated with discovered.json: 0x191025c95e4a39d36993863ed810d49fb6130559
+
+# Diff at Wed, 19 Mar 2025 13:04:58 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@e950b6e93c84855ee2ec1740913b7b4c994b9ae2 block: 21981677
+- current block number: 21981677
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21981677 (main branch discovery), not current.
+
+```diff
+    contract undefined (0x258862dec9a77db57b398c441390783293E2a7A1) {
+    +++ description: None
+      severity:
+-        "HIGH"
+    }
+```
+
+Generated with discovered.json: 0x23c88fa4ca2634d75f5cd153d42ffa8f96e5388b
+
+# Diff at Thu, 06 Mar 2025 15:18:49 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@64eed24a033030dd2d128180f3ee3f87c3c39f7c block: 21764836
+- current block number: 21981677
+
+## Description
+
+config: updates timelock templates, added starknet proghashes to global config.
+
+## Watched changes
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      sourceHashes.1:
+-        "0x7c56bc9e6cae8422520d318420d3b180551e366e0e265bc846875479cfabdef7"
++        "0x78d1eb2b96633fb1f594ef672a3791fa85a077fe0cf415ef79d93bc9a2aebd9c"
+      values.$implementation:
+-        "0x10D296e8aDd0535be71639E5D1d1c30ae1C6bD4C"
++        "0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F"
+      values.$pastUpgrades.1:
++        ["2025-03-05T12:12:47.000Z","0xc376c3725fb986eead241c5b7663e6e081f66b92984bc4b3f0c08d23a0101a35",["0x427113ae6F319BfFb4459bfF96eb8B6BDe1A127F"]]
+      values.$upgradeCount:
+-        1
++        2
+      derivedName:
+-        "PolygonValidiumStorageMigration"
++        "PolygonValidiumEtrog"
+    }
+```
+
+## Source code changes
+
+```diff
+.../Validium/PolygonValidiumEtrog.sol}             | 203 +++++++++++----------
+ 1 file changed, 111 insertions(+), 92 deletions(-)
+```
+
+Generated with discovered.json: 0xd002180745803850fbaa75f1c68b02af67455bd6
+
+# Diff at Tue, 04 Mar 2025 10:39:22 GMT:
+
+- chain: ethereum
+- author: Mateusz Radomski (<radomski.main@protonmail.com>)
+- comparing to: main@98d260b45fe0d2195ce5e629bd7b200c8706e8ba block: 21764836
+- current block number: 21764836
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21764836 (main branch discovery), not current.
+
+```diff
+    contract Verifier (0x0775e11309d75aA6b0967917fB0213C5673eDf81) {
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+      sinceBlock:
++        19505052
+    }
+```
+
+```diff
+    contract PolygonDataCommittee (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8) {
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+      sinceBlock:
++        20234353
+    }
+```
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      sinceBlock:
++        20183666
+    }
+```
+
+```diff
+    contract ProxyAdmin (0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a) {
+    +++ description: None
+      sinceBlock:
++        20234352
+    }
+```
+
+Generated with discovered.json: 0x84b25f7e83bd6b9bf49ae097b00c9cab20148727
+
+# Diff at Thu, 27 Feb 2025 11:45:57 GMT:
+
+- chain: ethereum
+- author: Michał Podsiadły (<michal.podsiadly@l2beat.com>)
+- comparing to: main@a4b50e45bb44f8ceeea29f9236088d26a843c885 block: 21764836
+- current block number: 21764836
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21764836 (main branch discovery), not current.
+
+```diff
+    contract Verifier (0x0775e11309d75aA6b0967917fB0213C5673eDf81) {
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+      name:
+-        "FflonkVerifier"
++        "Verifier"
+      displayName:
+-        "Verifier"
+    }
+```
+
+Generated with discovered.json: 0x9281631086bea2c2187c57b993e756484782f94d
+
+# Diff at Wed, 26 Feb 2025 10:32:53 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@18513668f913fbe57a197f43655b19111df0e627 block: 21764836
+- current block number: 21764836
+
+## Description
+
+config related: added categories for all opstack, op stack and polygoncdk stack templates.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21764836 (main branch discovery), not current.
+
+```diff
+    contract FflonkVerifier (0x0775e11309d75aA6b0967917fB0213C5673eDf81) {
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract PolygonDataCommittee (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8) {
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      category:
++        {"name":"Local Infrastructure","priority":5}
+    }
+```
+
+Generated with discovered.json: 0x3b97f93a3bd06060e37b48d338dea3ab8adf93ce
+
+# Diff at Mon, 10 Feb 2025 19:04:12 GMT:
+
+- chain: ethereum
+- author: Michał Podsiadły (<michal.podsiadly@l2beat.com>)
+- comparing to: main@3756adff7c1ac86d8af3374a90a75c1999aae2b3 block: 21764836
+- current block number: 21764836
+
+## Description
+
+Discovery rerun on the same block number with only config-related changes.
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21764836 (main branch discovery), not current.
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      unverified:
+-        true
+      sourceHashes:
++        ["0xa25e4c87882527d75fa2198c374939dd0c3b3fd509be89ee51c9b206bc62bdc4","0x7c56bc9e6cae8422520d318420d3b180551e366e0e265bc846875479cfabdef7"]
+    }
+```
+
+Generated with discovered.json: 0xb1bc4c159db77c4c914dc9753bc98947bbd8d353
+
+# Diff at Tue, 04 Feb 2025 12:31:40 GMT:
+
+- chain: ethereum
+- author: Adrian Adamiak (<adrian@adamiak.net>)
+- comparing to: main@145553eed7ba44636411ecb25e4099728acd02f9 block: 21764836
+- current block number: 21764836
+
+## Description
+
+Rename 'configure' permission to 'interact'
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21764836 (main branch discovery), not current.
+
+```diff
+    contract PolygonDataCommittee (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8) {
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+      issuedPermissions.0.permission:
+-        "configure"
++        "interact"
+    }
+```
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      issuedPermissions.1.permission:
+-        "configure"
++        "interact"
+      issuedPermissions.0.permission:
+-        "configure"
++        "interact"
+    }
+```
+
+Generated with discovered.json: 0xe3bb100bb57af825e84bb319822dc5d1bb5e612e
+
+# Diff at Mon, 03 Feb 2025 09:09:40 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- comparing to: main@a86862ef704cb8a38295607226918095f937c05b block: 21738270
+- current block number: 21764836
+
+## Description
+
+discodrive polygoncdk chains!
+
+## Config/verification related changes
+
+Following changes come from updates made to the config file,
+or/and contracts becoming verified, not from differences found during
+discovery. Values are for block 21738270 (main branch discovery), not current.
+
+```diff
+    contract FflonkVerifier (0x0775e11309d75aA6b0967917fB0213C5673eDf81) {
+    +++ description: Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager.
+      name:
+-        "Verifier"
++        "FflonkVerifier"
+      template:
++        "polygon-cdk/Verifier"
+      displayName:
++        "Verifier"
+      description:
++        "Verifies ZK proofs for state roots of this Layer 2 via the PolygonRollupManager."
+    }
+```
+
+```diff
+    contract PolygonDataCommittee (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8) {
+    +++ description: Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1).
+      name:
+-        "LumiaDAC"
++        "PolygonDataCommittee"
+      issuedPermissions.1:
++        {"permission":"upgrade","to":"0xb8605297399baEb6628C9E8F5D3E52A056492cfe","via":[{"address":"0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"}]}
+      issuedPermissions.0.permission:
+-        "upgrade"
++        "configure"
+      issuedPermissions.0.to:
+-        "0xb8605297399baEb6628C9E8F5D3E52A056492cfe"
++        "0x258862dec9a77db57b398c441390783293E2a7A1"
+      issuedPermissions.0.via.0:
+-        {"address":"0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a"}
+      issuedPermissions.0.description:
++        "manage the members of the data availability committee and the threshold for valid commitments."
+      template:
++        "polygon-cdk/PolygonDataCommittee"
+      description:
++        "Manages the members of the data availability committee (DAC) and the threshold for accepting commitments from them (Currently 2/1)."
+    }
+```
+
+```diff
+    contract Validium (0x92726F7dE49300DBdb60930066bc1d0803c0740B) {
+    +++ description: The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches.
+      name:
+-        "LumiaValidium"
++        "Validium"
+      template:
++        "polygon-cdk/PolygonZkEVM"
+      displayName:
++        "PolygonZkEVM"
+      description:
++        "The main system contract defining the prism Layer 2 logic. Entry point for sequencing batches."
+      issuedPermissions:
++        [{"permission":"configure","to":"0x258862dec9a77db57b398c441390783293E2a7A1","description":"set core system parameters like the trusted sequencer and manage forced transactions/batches.","via":[]},{"permission":"configure","to":"0x258862dec9a77db57b398c441390783293E2a7A1","description":"sole address that can force batches.","via":[]},{"permission":"sequence","to":"0x8F2D2Da3044B0A1ea54Ee26F7fe376cD9ec4393F","via":[]}]
+      fieldMeta:
++        {"forceBatchAddress":{"severity":"HIGH","description":"If this changes to the ZERO address, an update to the risk rosette is probably needed, since forcing batches is open to everyone."}}
+    }
+```
+
+```diff
+    contract ProxyAdmin (0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a) {
+    +++ description: None
+      name:
+-        "DACProxyAdmin"
++        "ProxyAdmin"
+      displayName:
+-        "ProxyAdmin"
+    }
+```
+
+Generated with discovered.json: 0xce8e32942820a66922c47e088dc4fb412ee0c1a7
+
+# Diff at Thu, 30 Jan 2025 15:33:37 GMT:
+
+- chain: ethereum
+- author: sekuba (<29250140+sekuba@users.noreply.github.com>)
+- current block number: 21738270
+
+## Description
+
+Initial discovery: PolygonCDK type 4 validium (DAC) with custom gastoken LUMIA.
+
+## Initial discovery
+
+```diff
++   Status: CREATED
+    contract Verifier (0x0775e11309d75aA6b0967917fB0213C5673eDf81)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract LumiaDAC (0x25ba7858b4592b777A2fF3f7da79cB080aAb15c8)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract LumiaValidium (0x92726F7dE49300DBdb60930066bc1d0803c0740B)
+    +++ description: None
+```
+
+```diff
++   Status: CREATED
+    contract DACProxyAdmin (0xb3F294dAEd917b33FFcC687DFfB8Cd77565FF54a)
+    +++ description: None
+```
+

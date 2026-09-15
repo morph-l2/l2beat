@@ -1,14 +1,14 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { ChainSpecificAddress } from '@l2beat/shared-pure'
 import { expect } from 'earl'
 
 import { getRelativesWithSuggestedTemplates } from './getRelativesWithSuggestedTemplates'
 
 describe(getRelativesWithSuggestedTemplates.name, () => {
-  const ADDRESS_A = EthereumAddress.random()
-  const ADDRESS_B = EthereumAddress.random()
-  const ADDRESS_C = EthereumAddress.random()
-  const ADDRESS_D = EthereumAddress.random()
-  const ADDRESS_E = EthereumAddress.random()
+  const ADDRESS_A = ChainSpecificAddress.random()
+  const ADDRESS_B = ChainSpecificAddress.random()
+  const ADDRESS_C = ChainSpecificAddress.random()
+  const ADDRESS_D = ChainSpecificAddress.random()
+  const ADDRESS_E = ChainSpecificAddress.random()
 
   it('returns addresses found in values', () => {
     const relatives = getRelativesWithSuggestedTemplates([
@@ -53,6 +53,19 @@ describe(getRelativesWithSuggestedTemplates.name, () => {
       [ADDRESS_A.toString()]: new Set(),
       [ADDRESS_C.toString()]: new Set(),
     })
+  })
+
+  it('ignores every field when ignoreFields is true', () => {
+    const relatives = getRelativesWithSuggestedTemplates(
+      [
+        { field: 'a', value: ADDRESS_A.toString() },
+        { field: 'b', value: ADDRESS_B.toString() },
+        { field: 'c', value: ADDRESS_C.toString() },
+      ],
+      true,
+    )
+
+    expect(relatives).toEqual({})
   })
 
   it('ignores fields in the ignoreFields array', () => {
@@ -102,10 +115,10 @@ describe(getRelativesWithSuggestedTemplates.name, () => {
       undefined,
       undefined,
       {
-        a: { target: { template: 'template1' } },
-        b: { target: { template: 'template2' } },
-        c: { target: { template: 'template4' } },
-        d: { target: { template: 'template3' } },
+        a: { template: 'template1' },
+        b: { template: 'template2' },
+        c: { template: 'template4' },
+        d: { template: 'template3' },
       },
     )
 
@@ -130,9 +143,9 @@ describe(getRelativesWithSuggestedTemplates.name, () => {
       ['second'],
       [ADDRESS_C],
       {
-        first: { target: { template: 'template1' } },
-        second: { target: { template: 'template2' } },
-        third: { target: { template: 'template2' } },
+        first: { template: 'template1' },
+        second: { template: 'template2' },
+        third: { template: 'template2' },
       },
     )
 

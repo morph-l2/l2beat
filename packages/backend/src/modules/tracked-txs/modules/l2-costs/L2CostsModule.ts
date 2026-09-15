@@ -1,38 +1,26 @@
-import { Logger } from '@l2beat/backend-tools'
-
-import { Config } from '../../../../config'
-import { Peripherals } from '../../../../peripherals/Peripherals'
-import { IndexerService } from '../../../../tools/uif/IndexerService'
-import { ApplicationModuleWithUpdater } from '../../../ApplicationModule'
+import { assert } from '@l2beat/shared-pure'
+import type { ApplicationModule, ModuleDependencies } from '../../../types'
 import { L2CostsUpdater } from './L2CostsUpdater'
-import { L2CostsController } from './api/L2CostsController'
-import { createL2CostsRouter } from './api/L2CostsRouter'
 
-export function createL2CostsModule(
-  config: Config,
-  logger: Logger,
-  peripherals: Peripherals,
-): ApplicationModuleWithUpdater<L2CostsUpdater> | undefined {
+export function createL2CostsModule({
+  config,
+  logger,
+  db,
+  providers,
+}: ModuleDependencies):
+  | (ApplicationModule & { updater: L2CostsUpdater })
+  | undefined {
   if (!config.trackedTxsConfig || !config.trackedTxsConfig.uses.l2costs) {
     logger.info('L2Costs module disabled')
     return
   }
 
-  const indexerService = new IndexerService(peripherals.database)
+  logger = logger.tag({ feature: 'costs', module: 'costs' })
 
-  const l2CostsController = new L2CostsController({
-    indexerService,
-    db: peripherals.database,
-    projects: config.projects,
-    logger,
-  })
-
-  const l2CostsRouter = createL2CostsRouter(l2CostsController)
-
-  const l2CostsUpdater = new L2CostsUpdater(peripherals.database, logger)
+  assert(providers.blobPrice, 'Blob price provider is required')
+  const l2CostsUpdater = new L2CostsUpdater(db, logger, providers.blobPrice)
 
   return {
-    routers: [l2CostsRouter],
     updater: l2CostsUpdater,
   }
 }

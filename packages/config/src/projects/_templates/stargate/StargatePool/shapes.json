@@ -1,0 +1,12 @@
+{
+  "StargatePoolMetis": {
+    "hash": "0x06f33fa601634a3f9189c63dc7b8b6f0525c9ea1f488fa98344567a90b1deca0",
+    "address": "eth:0xcDafB1b2dB43f366E48e6F614b8DCCBFeeFEEcD3",
+    "blockNumber": 23274564
+  },
+  "StargatePoolMeth": {
+    "hash": "0x4c90d512cf724dd08c7c73b8912092172f698b3b9e7a27245e87510d10245af8",
+    "address": "eth:0x783129E4d7bA0Af0C896c239E57C06DF379aAE8c",
+    "blockNumber": 23274564
+  }
+}

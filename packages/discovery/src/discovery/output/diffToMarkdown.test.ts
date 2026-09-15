@@ -1,20 +1,21 @@
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { ChainSpecificAddress } from '@l2beat/shared-pure'
 import { expect } from 'earl'
-import { DiscoveryDiff } from './diffDiscovery'
+import type { DiscoveryDiff } from './diffDiscovery'
 import {
   contractDiffToMarkdown,
   discoveryDiffToMarkdown,
   fieldDiffToMarkdown,
 } from './diffToMarkdown'
 
-const ADDRESS = EthereumAddress.random()
+const ADDRESS = ChainSpecificAddress.random()
 
 describe(discoveryDiffToMarkdown.name, () => {
-  const SECOND_ADDRESS = EthereumAddress.random()
+  const SECOND_ADDRESS = ChainSpecificAddress.random()
 
   const FOO_CONTRACT_DIFF: DiscoveryDiff = {
     name: 'foo',
     address: ADDRESS,
+    addressType: 'Contract',
     diff: [
       {
         key: 'values.baz',
@@ -28,6 +29,7 @@ describe(discoveryDiffToMarkdown.name, () => {
   const BAR_CONTRACT_DIFF: DiscoveryDiff = {
     name: 'bar',
     address: SECOND_ADDRESS,
+    addressType: 'Contract',
     description: 'The contract getting deleted',
     type: 'deleted',
   }
@@ -41,7 +43,7 @@ describe(discoveryDiffToMarkdown.name, () => {
     expect(result).toEqual(
       [
         '```diff',
-        `    contract foo (${ADDRESS.toString()}) {`,
+        `    contract foo (${ADDRESS.toString()}) [N/A] {`,
         '    +++ description: None',
         '+++ description: The foo value',
         '+++ severity: LOW',
@@ -53,7 +55,7 @@ describe(discoveryDiffToMarkdown.name, () => {
         '',
         '```diff',
         '-   Status: DELETED',
-        `    contract bar (${SECOND_ADDRESS.toString()})`,
+        `    contract bar (${SECOND_ADDRESS.toString()}) [N/A]`,
         '    +++ description: The contract getting deleted',
         '```',
       ].join('\n'),
@@ -71,9 +73,8 @@ describe(discoveryDiffToMarkdown.name, () => {
     expect(result).toEqual(
       [
         '```diff',
-        `    contract foo (${ADDRESS.toString()}) {`,
-        '    +++ description: None',
-        '++... (message too long)',
+        `    contract foo (${ADDRESS.toString()}) [N/A] {`,
+        '    +++ descriptio... (message too long)',
         '```',
       ].join('\n'),
     )
@@ -105,7 +106,7 @@ describe(discoveryDiffToMarkdown.name, () => {
     expect(result).toEqual(
       [
         '```diff',
-        `    contract foo (${ADDRESS.toString()}) {`,
+        `    contract foo (${ADDRESS.toString()}) [N/A] {`,
         '    +++ description: None',
         '      values.baz:',
         '-        quax',
@@ -115,7 +116,7 @@ describe(discoveryDiffToMarkdown.name, () => {
         '',
         '```diff',
         '-   Status: DELETED',
-        `    contract bar (${SECOND_ADDRESS.toString()})`,
+        `    contract bar (${SECOND_ADDRESS.toString()}) [N/A]`,
         '    +++ description: None',
         '```',
       ].join('\n'),
@@ -137,7 +138,7 @@ describe(discoveryDiffToMarkdown.name, () => {
     expect(result).toEqual(
       [
         '```diff',
-        `    contract foo (${ADDRESS.toString()}) {`,
+        `    contract foo (${ADDRESS.toString()}) [N/A] {`,
         '    +++ description: None',
         '      values.baz:',
         '-        quax',
@@ -160,6 +161,7 @@ describe(contractDiffToMarkdown.name, () => {
       {
         name: 'foo',
         address: ADDRESS,
+        addressType: 'Contract',
         type: 'created',
       },
       undefined,
@@ -169,7 +171,52 @@ describe(contractDiffToMarkdown.name, () => {
       [
         '```diff',
         '+   Status: CREATED',
-        `    contract foo (${ADDRESS.toString()})`,
+        `    contract foo (${ADDRESS.toString()}) [N/A]`,
+        '    +++ description: None',
+        '```',
+      ].join('\n'),
+    )
+  })
+
+  it('contract creation with template renders template in header', () => {
+    const result = contractDiffToMarkdown(
+      {
+        name: 'foo',
+        address: ADDRESS,
+        addressType: 'Contract',
+        template: 'global/ProxyAdmin',
+        type: 'created',
+      },
+      undefined,
+    )
+
+    expect(result).toEqual(
+      [
+        '```diff',
+        '+   Status: CREATED',
+        `    contract foo (${ADDRESS.toString()}) [global/ProxyAdmin]`,
+        '    +++ description: None',
+        '```',
+      ].join('\n'),
+    )
+  })
+
+  it('EOA does not render template marker', () => {
+    const result = contractDiffToMarkdown(
+      {
+        name: 'foo',
+        address: ADDRESS,
+        addressType: 'EOA',
+        type: 'created',
+      },
+      undefined,
+    )
+
+    expect(result).toEqual(
+      [
+        '```diff',
+        '+   Status: CREATED',
+        `    EOA foo (${ADDRESS.toString()})`,
         '    +++ description: None',
         '```',
       ].join('\n'),
@@ -181,6 +228,7 @@ describe(contractDiffToMarkdown.name, () => {
       {
         name: 'foo',
         address: ADDRESS,
+        addressType: 'Contract',
         type: 'deleted',
       },
       undefined,
@@ -190,7 +238,7 @@ describe(contractDiffToMarkdown.name, () => {
       [
         '```diff',
         '-   Status: DELETED',
-        `    contract foo (${ADDRESS.toString()})`,
+        `    contract foo (${ADDRESS.toString()}) [N/A]`,
         '    +++ description: None',
         '```',
       ].join('\n'),
@@ -202,6 +250,7 @@ describe(contractDiffToMarkdown.name, () => {
       {
         name: 'foo',
         address: ADDRESS,
+        addressType: 'Contract',
         diff: [
           { key: 'values.bar', before: 'oldValue', after: 'newValue' },
           { key: 'values.baz', before: 'bad', after: 'good' },
@@ -213,7 +262,7 @@ describe(contractDiffToMarkdown.name, () => {
     expect(result).toEqual(
       [
         '```diff',
-        `    contract foo (${ADDRESS.toString()}) {`,
+        `    contract foo (${ADDRESS.toString()}) [N/A] {`,
         '    +++ description: None',
         '      values.bar:',
         '-        oldValue',
@@ -227,12 +276,13 @@ describe(contractDiffToMarkdown.name, () => {
     )
   })
 
-  it('trucating, no meta', () => {
+  it('truncating, no meta', () => {
     const maxLength = 48
     const result = contractDiffToMarkdown(
       {
         name: 'foo',
         address: ADDRESS,
+        addressType: 'Contract',
         diff: [
           { key: 'values.bar', before: 'oldValue', after: 'newValue' },
           { key: 'values.baz', before: 'bad', after: 'good' },
@@ -243,7 +293,7 @@ describe(contractDiffToMarkdown.name, () => {
 
     expect(result.length).toBeLessThanOrEqual(maxLength)
     expect(result).toEqual(
-      ['```diff', `    contract f... (message too long)`, '```'].join('\n'),
+      ['```diff', '    contract f... (message too long)', '```'].join('\n'),
     )
   })
 
@@ -251,6 +301,7 @@ describe(contractDiffToMarkdown.name, () => {
     const result = contractDiffToMarkdown({
       name: 'foo',
       address: ADDRESS,
+      addressType: 'Contract',
       description: 'The foo contract',
       diff: [
         { key: 'values.bar', before: 'oldValue', after: 'newValue' },
@@ -267,7 +318,7 @@ describe(contractDiffToMarkdown.name, () => {
     expect(result).toEqual(
       [
         '```diff',
-        `    contract foo (${ADDRESS.toString()}) {`,
+        `    contract foo (${ADDRESS.toString()}) [N/A] {`,
         '    +++ description: The foo contract',
         '      values.bar:',
         '-        oldValue',

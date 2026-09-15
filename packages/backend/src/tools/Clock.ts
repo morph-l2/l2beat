@@ -1,18 +1,15 @@
 import { UnixTime } from '@l2beat/shared-pure'
-import { alignTimestamp } from '../modules/tvl/utils/alignTimestamp'
 
 export class Clock {
   constructor(
     private readonly minTimestamp: UnixTime,
     private readonly delayInSeconds: number,
-    readonly hourlyCutoffDays = 7,
-    readonly sixHourlyCutoffDays = 90,
     private readonly refreshIntervalMs = 1000,
   ) {}
 
   getFirstHour(): UnixTime {
-    const result = this.minTimestamp.toEndOf('hour')
-    if (result.gt(this.getLastHour())) {
+    const result = UnixTime.toEndOf(this.minTimestamp, 'hour')
+    if (result > this.getLastHour()) {
       throw new Error('minTimestamp must be in the past')
     }
     return result
@@ -21,10 +18,10 @@ export class Clock {
   getFirstDay(): UnixTime {
     let result = this.minTimestamp
 
-    if (!result.isFull('day')) {
-      result = result.toNext('day')
+    if (!UnixTime.isFull(result, 'day')) {
+      result = UnixTime.toNext(result, 'day')
     }
-    if (result.gt(this.getLastDay())) {
+    if (result > this.getLastDay()) {
       throw new Error('minTimestamp must be in the past')
     }
 
@@ -32,90 +29,19 @@ export class Clock {
   }
 
   getLastHour(): UnixTime {
-    return UnixTime.now().add(-this.delayInSeconds, 'seconds').toStartOf('hour')
+    return UnixTime.toStartOf(UnixTime.now() - this.delayInSeconds, 'hour')
   }
 
   getLastDay(): UnixTime {
-    return UnixTime.now().add(-this.delayInSeconds, 'seconds').toStartOf('day')
-  }
-
-  shouldTimestampBeIncluded(targetTimestamp: UnixTime, timestamp: UnixTime) {
-    return timestamp.equals(
-      this.getTimestampForApi(targetTimestamp, timestamp.toNumber()),
-    )
-  }
-
-  getAllTimestampsForApi(
-    targetTimestamp: UnixTime,
-    options?: {
-      minTimestampOverride: UnixTime
-    },
-  ): UnixTime[] {
-    const from = options?.minTimestampOverride.gt(this.getFirstDay())
-      ? this.getTimestampForApi(
-          targetTimestamp,
-          options.minTimestampOverride.toNumber(),
-        )
-      : this.getFirstDay()
-
-    let current = this.getTimestampForApi(targetTimestamp, from.toNumber())
-
-    const timestamps: UnixTime[] = []
-    while (current.lte(targetTimestamp)) {
-      timestamps.push(current)
-      current = this.getTimestampForApi(targetTimestamp, current.toNumber() + 1)
-    }
-
-    return timestamps
-  }
-
-  private getTimestampForApi(
-    targetTimestamp: UnixTime,
-    _timestamp: number,
-  ): UnixTime {
-    const timestamp = new UnixTime(_timestamp)
-    const hourlyCutOff = this.getHourlyCutoff(targetTimestamp)
-    const sixHourlyCutOff = this.getSixHourlyCutoff(targetTimestamp)
-
-    return alignTimestamp(timestamp, hourlyCutOff, sixHourlyCutOff)
-  }
-
-  getSixHourlyCutoff(
-    targetTimestamp: UnixTime,
-    options?: {
-      minTimestampOverride: UnixTime
-    },
-  ): UnixTime {
-    const cutoff = targetTimestamp
-      .add(-this.sixHourlyCutoffDays, 'days')
-      .toEndOf('six hours')
-
-    return options?.minTimestampOverride.gt(cutoff)
-      ? options.minTimestampOverride.toEndOf('six hours')
-      : cutoff
-  }
-
-  getHourlyCutoff(
-    targetTimestamp: UnixTime,
-    options?: {
-      minTimestampOverride: UnixTime
-    },
-  ): UnixTime {
-    const cutoff = targetTimestamp
-      .add(-this.hourlyCutoffDays, 'days')
-      .toEndOf('hour')
-
-    return options?.minTimestampOverride.gt(cutoff)
-      ? options.minTimestampOverride.toEndOf('hour')
-      : cutoff
+    return UnixTime.toStartOf(UnixTime.now() - this.delayInSeconds, 'day')
   }
 
   onNewHour(callback: (timestamp: UnixTime) => void) {
     let current = this.getLastHour()
     const onNewTimestamps = () => {
       const last = this.getLastHour()
-      while (current.lt(last)) {
-        current = current.add(1, 'hours')
+      while (current < last) {
+        current = current + 1 * UnixTime.HOUR
         callback(current)
       }
     }
@@ -129,8 +55,8 @@ export class Clock {
     let current = this.getLastDay()
     const onNewTimestamps = () => {
       const last = this.getLastDay()
-      while (current.lt(last)) {
-        current = current.add(1, 'days')
+      while (current < last) {
+        current = current + 1 * UnixTime.DAY
         callback(current)
       }
     }

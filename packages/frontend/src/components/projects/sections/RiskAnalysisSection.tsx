@@ -1,0 +1,70 @@
+import type { ProjectRedWarning } from '@l2beat/config'
+import { ShieldIcon } from '~/icons/Shield'
+import type { UnverifiedContractEntry } from '~/utils/project/contracts-and-permissions/getUnverifiedContractEntries'
+import { BigPizzaRosette } from '../../rosette/pizza/BigPizzaRosette'
+import type { RosetteValue } from '../../rosette/types'
+import { WarningBar } from '../../WarningBar'
+import { RiskBanner } from '../RiskBanner'
+import { ProjectSection } from './ProjectSection'
+import type { ProjectSectionProps } from './types'
+import { UnverifiedContractsWarning } from './UnverifiedContractsWarning'
+
+export interface RiskAnalysisSectionProps extends ProjectSectionProps {
+  rosetteValues: RosetteValue[]
+  warning: string | undefined
+  redWarning: ProjectRedWarning | undefined
+  shouldHideRosette?: boolean | undefined
+  unverifiedContracts: UnverifiedContractEntry[]
+}
+
+export function RiskAnalysisSection({
+  rosetteValues,
+  warning,
+  redWarning,
+  shouldHideRosette,
+  unverifiedContracts,
+  ...sectionProps
+}: RiskAnalysisSectionProps) {
+  const isUnderReview =
+    !!sectionProps.isUnderReview ||
+    Object.values(rosetteValues).some(
+      ({ sentiment }) => sentiment === 'UnderReview',
+    )
+  return (
+    <ProjectSection {...sectionProps} isUnderReview={isUnderReview}>
+      {unverifiedContracts.length > 0 && (
+        <UnverifiedContractsWarning
+          entries={unverifiedContracts}
+          className="mt-4 text-paragraph-15 md:text-paragraph-16"
+        />
+      )}
+      {redWarning && (
+        <WarningBar
+          text={redWarning.text}
+          color="red"
+          className="mt-4 text-paragraph-15 md:text-paragraph-16"
+          icon={ShieldIcon}
+        />
+      )}
+      {warning && (
+        <WarningBar
+          text={warning}
+          color="yellow"
+          isCritical={false}
+          className="mt-4 text-paragraph-15 md:text-paragraph-16"
+        />
+      )}
+
+      {!shouldHideRosette && (
+        <div className="flex justify-center">
+          <BigPizzaRosette values={rosetteValues} className="mx-auto my-6" />
+        </div>
+      )}
+      <div className="space-y-6">
+        {Object.values(rosetteValues).map((value) => (
+          <RiskBanner key={value.name} {...value} size="large" />
+        ))}
+      </div>
+    </ProjectSection>
+  )
+}

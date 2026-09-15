@@ -1,0 +1,17 @@
+{
+  "EigenDACertVerifier.sol": {
+    "hash": "0xdd2a64b937040e5d01e5a02cd2483d912df075a701f57bd580bd010f683e23d8",
+    "address": "eth:0x61692e93b6B045c444e942A91EcD1527F23A3FB7",
+    "blockNumber": 23640579
+  },
+  "EigenDACertVerifier2.sol": {
+    "hash": "0x44d0d26833c653bbf6f5d9304cb111e6bb07e35b899f0e2085a564a67a9738e3",
+    "address": "eth:0x46766C6426eF4D3092f73F72660A8b7B510E6846",
+    "blockNumber": 23839591
+  },
+  "EigenDACertVerifier_v3.sol": {
+    "hash": "0xea2c1984b5e295622dc9ac6b7a3cd6f47faf6554fe916ecd14513f73f22be476",
+    "address": "eth:0xa4F38615e6a1846ccD7ff08E8179CBdAC8F5ff3B",
+    "blockNumber": 24404410
+  }
+}

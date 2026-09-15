@@ -1,19 +1,17 @@
-import { assert } from '@l2beat/backend-tools'
-import { ContractValue } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { assert, Bytes, type ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
 import { ethers } from 'ethers'
-import { z } from 'zod'
+import type { ContractValue } from '../../output/types'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
 
-export type ConstructorArgsDefinition = z.infer<
+export type ConstructorArgsDefinition = v.infer<
   typeof ConstructorArgsDefinition
 >
-export const ConstructorArgsDefinition = z.strictObject({
-  type: z.literal('constructorArgs'),
-  nameArgs: z.boolean().optional(),
+export const ConstructorArgsDefinition = v.strictObject({
+  type: v.literal('constructorArgs'),
+  nameArgs: v.boolean().optional(),
 })
 
 export class ConstructorArgsHandler implements Handler {
@@ -24,7 +22,6 @@ export class ConstructorArgsHandler implements Handler {
     readonly field: string,
     private readonly definition: ConstructorArgsDefinition,
     abi: string[],
-    readonly logger: DiscoveryLogger,
   ) {
     assert(
       field === 'constructorArgs',
@@ -40,7 +37,7 @@ export class ConstructorArgsHandler implements Handler {
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
     const result = await this.getSerializedConstructorArgs(provider, address)
 
@@ -51,22 +48,15 @@ export class ConstructorArgsHandler implements Handler {
       }
     }
 
-    const namedArgs = Object.fromEntries(
-      this.constructorFragment.inputs.map((input, index) => [
-        input.name,
-        result[index],
-      ]),
-    )
-
     return {
       field: 'constructorArgs',
-      value: namedArgs,
+      value: nameWithFragments(result, this.constructorFragment.inputs),
     }
   }
 
   async getSerializedConstructorArgs(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<ContractValue> {
     try {
       const decodedConstructorArguments =
@@ -74,9 +64,6 @@ export class ConstructorArgsHandler implements Handler {
 
       return serializeResult(decodedConstructorArguments)
     } catch {
-      this.logger.log(
-        'Could not get constructor arguments with heuristic approach. Trying with block explorer.',
-      )
       const decodedConstructorArguments = await this.getWithBlockExplorer(
         provider,
         address,
@@ -87,7 +74,7 @@ export class ConstructorArgsHandler implements Handler {
 
   async getWithDeploymentTransaction(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<ethers.utils.Result> {
     const deployment = await provider.getDeployment(address)
     if (deployment === undefined) {
@@ -115,7 +102,7 @@ export class ConstructorArgsHandler implements Handler {
 
   async getWithBlockExplorer(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<ethers.utils.Result> {
     const { constructorArguments } = await provider.getSource(address)
 
@@ -178,12 +165,14 @@ export function decodeConstructorArgs(
 
   let longestDecodedArgs: ethers.utils.Result | undefined = undefined
   const offset = 64
-  for (let i = txData.length - offset; i >= 0; i -= offset) {
-    const slice = txData.slice(i)
+  const bytecode = popLeadingZeros(txData)
+  for (let i = bytecode.length - offset; i >= 0; i -= offset) {
+    const slice = bytecode.slice(i)
 
     try {
-      const offsetEncoded = ((i - 2) / 2).toString(16)
-      if (!txData.includes(offsetEncoded)) {
+      const offset = ((i - 2) / 2).toString(16)
+      const offsetEncoded = offset.length % 2 === 0 ? offset : `0${offset}`
+      if (!bytecode.includes(offsetEncoded)) {
         continue
       }
 
@@ -200,4 +189,30 @@ export function decodeConstructorArgs(
     throw new Error('Could not decode constructor args')
   }
   return longestDecodedArgs
+}
+
+function nameWithFragments(
+  values: ContractValue[],
+  inputs: ethers.utils.ParamType[],
+): Record<string, ContractValue> {
+  const result: Record<string, ContractValue> = {}
+  for (const [i, input] of inputs.entries()) {
+    let value = values[i] ?? 0
+    if (input.components && Array.isArray(value)) {
+      value = nameWithFragments(value, input.components)
+    }
+    result[input.name] = value
+  }
+  return result
+}
+
+function popLeadingZeros(data: string): string {
+  const bytes = Bytes.fromHex(data)
+
+  let index = 0
+  while (bytes.get(index) === 0) {
+    index += 1
+  }
+
+  return bytes.slice(index, bytes.length).toString()
 }

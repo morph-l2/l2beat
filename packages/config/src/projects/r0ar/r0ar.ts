@@ -1,0 +1,54 @@
+import { UnixTime } from '@l2beat/shared-pure'
+import { REASON_FOR_BEING_OTHER } from '../../common'
+import { BADGES } from '../../common/badges'
+import { ProjectDiscovery } from '../../discovery/ProjectDiscovery'
+import type { ScalingProject } from '../../internalTypes'
+import { getOpStackDaTracking, opStackL2 } from '../../templates/opStack'
+
+const discovery = new ProjectDiscovery('r0ar')
+const genesisTimestamp = UnixTime(1728285623)
+
+export const r0ar: ScalingProject = opStackL2({
+  capability: 'universal',
+  addedAt: UnixTime(1739282637), // 2025-02-11T14:03:57Z
+  additionalBadges: [BADGES.RaaS.Zeeve],
+  reasonsForBeingOther: [REASON_FOR_BEING_OTHER.NO_PROOFS],
+  display: {
+    name: 'R0ar',
+    aliases: ['Roar'],
+    slug: 'r0ar',
+    description:
+      'R0ar is an Optimistic Rollup utilizing the OP Stack focusing on DeFi.',
+    stacks: ['OP Stack'],
+    links: {
+      websites: ['https://r0ar.io/'],
+      bridges: ['https://r0arbridge.io/'],
+      documentation: [],
+      explorers: ['https://r0arscan.io/'],
+      repositories: ['https://github.com/R0AR-Foundation'],
+      socialMedia: [
+        'https://x.com/th3r0ar',
+        'https://t.me/r0ar_community',
+        'https://discord.gg/K7bVMsbEJN',
+        'https://instagram.com/r0ars0ciety',
+        'https://facebook.com/groups/th3r0ar',
+        'https://youtube.com/@th3r0ar',
+        'https://tiktok.com/@r0arsociety',
+      ],
+    },
+  },
+  chainConfig: {
+    name: 'r0ar',
+    chainId: 193939,
+    apis: [{ type: 'rpc', url: 'https://rpc-r0ar.io/', callsPerMinute: 2500 }],
+  },
+  activityConfig: {
+    type: 'block',
+    startBlock: 1,
+    adjustCount: { type: 'SubtractOne' },
+  },
+  discovery,
+  daTracking: [getOpStackDaTracking(discovery, { sinceBlock: 20912148 })],
+  genesisTimestamp,
+  isNodeAvailable: 'UnderReview',
+})

@@ -1,0 +1,57 @@
+{
+  "$schema": "../../../../discovery/schemas/config.v2.schema.json",
+  "name": "soon",
+  "import": ["../globalConfig.jsonc"],
+  "initialAddresses": ["eth:0x5A0702C7EbbEC83802b35DB737FCcDc5fc6c5E07"],
+  "names": {
+    "eth:0x1E69C2522Dc139c9fC74E6ecb89373d435E70Dd8": "SystemConfig",
+    "eth:0xD686D498a67Bb96FAa4afA3b2b1Cf182f5c3A701": "SoonMultisig",
+    "eth:0x455218fa82e96A6adCcf182EE8A90A93BE7a6Bc6": "RiscZeroVerifier",
+    "eth:0xAa17a7021054a984199a5bC40538f3DD6d04d36e": "FaultDisputeGame",
+    "eth:0x57d53F9715A0A8bEBDFf74b72eCE85950CcfD087": "PermissionedDisputeGame"
+  },
+  "overrides": {
+    "eth:0x1E69C2522Dc139c9fC74E6ecb89373d435E70Dd8": {
+      "description": "Contains configuration parameters such as the Sequencer address, gas limit on this chain and the unsafe block signer address.",
+      "fields": {
+        "batcherHash": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "Allowed to commit transactions from the current layer to the host chain."
+            }
+          ],
+          "handler": {
+            "type": "call",
+            "method": "function batcherHash() view returns (address)",
+            "args": []
+          }
+        },
+        "sequencerInbox": {
+          "handler": {
+            "type": "opStackSequencerInbox",
+            "sequencerAddress": "{{ batcherHash }}"
+          }
+        },
+        "gasLimit": {
+          "description": "Gas limit for blocks on L2.",
+          "severity": "LOW"
+        },
+        "owner": {
+          "permissions": [
+            {
+              "type": "interact",
+              "description": "it can update the preconfer address, the batch submitter (Sequencer) address and the gas configuration of the system."
+            }
+          ]
+        }
+      },
+      "ignoreInWatchMode": ["scalar", "overhead", "getSequencerPubkeyInfos"],
+      "ignoreRelatives": [
+        "gasPayingToken",
+        "disputeGameFactory",
+        "optimismMintableERC20Factory"
+      ]
+    }
+  }
+}

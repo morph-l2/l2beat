@@ -1,96 +1,131 @@
-import { QueryParamTypes } from '@google-cloud/bigquery/build/src/bigquery'
-import { EthereumAddress, UnixTime } from '@l2beat/shared-pure'
+import { assert, type EthereumAddress, UnixTime } from '@l2beat/shared-pure'
+import { SELECTOR_BYTES } from '../const'
 
-import { BigQueryClientQuery } from '../../../../peripherals/bigquery/BigQueryClient'
+interface FunctionCallQueryConfig {
+  address: EthereumAddress
+  selector: string
+  inputBytes: number | 'full'
+}
 
 export function getFunctionCallQuery(
-  configs: {
-    address: EthereumAddress
-    selector: string
-    getFullInput: boolean
-  }[],
+  configs: readonly FunctionCallQueryConfig[],
   from: UnixTime,
   to: UnixTime,
-): BigQueryClientQuery {
-  const fullInputAddresses = configs
-    .filter((c) => c.getFullInput)
-    .map((c) => c.address.toLowerCase())
-  const params = [
-    fullInputAddresses,
-    from.toDate().toISOString(),
-    to.toDate().toISOString(),
-    ...configs.flatMap((c) => [
-      c.address.toLowerCase(),
-      c.selector.toLowerCase() + '%',
-    ]),
-    from.toDate().toISOString(),
-    to.toDate().toISOString(),
-  ]
+): string {
+  const calls = mergeCalls(configs)
+  const fromDate = UnixTime.toDate(from).toISOString()
+  const toDate = UnixTime.toDate(to).toISOString()
 
-  const query = `
-    CREATE TEMP FUNCTION CalculateCalldataGasUsed(hexString STRING)
-    RETURNS INT64
-    LANGUAGE js AS """
-      var nonZeroBytes = 0;
-      var zeroBytes = 0;
-
-      for (var i = 2; i < hexString.length; i += 2) {
-        if(hexString.substr(i, 2)==='00') {
-          zeroBytes++;
-        } else {
-          nonZeroBytes++;
-        }
-      }
-
-      return 16 * nonZeroBytes + 4 * zeroBytes;
-    """;
+  // To calculate the non-zero bytes we are grouping bytes by adding 'x' sign between each byte
+  // and then removing all '00x' sequences. Next step is to divide length of result by 3 as this is length of '00x' sequence.
+  return `
+    WITH
+      params AS (
+        SELECT
+          from_iso8601_timestamp('${fromDate}') AS t_start,
+          from_iso8601_timestamp('${toDate}') AS t_end
+      ),
+      allowed_calls(to_addr, selector, input_bytes) AS (
+        VALUES
+          ${
+            calls.length > 0
+              ? calls
+                  .map(
+                    (call) =>
+                      `(${call.address.toLowerCase()}, ${call.selector}, ${call.inputBytes === 'full' ? 'CAST(NULL AS bigint)' : call.inputBytes})`,
+                  )
+                  .join(',')
+              : '(CAST(NULL AS varbinary), CAST(NULL AS varbinary), CAST(NULL AS bigint))'
+          }
+      ),
+      traces_filtered AS (
+        SELECT
+          tr.tx_hash,
+          tr.to,
+          tr.block_time,
+          tr.input,
+          substr(tr.input, 1, ${SELECTOR_BYTES}) AS selector
+        FROM ethereum.traces tr
+        CROSS JOIN params p
+        WHERE tr.call_type = 'call'
+          AND tr.success = true
+          AND tr.block_time >= p.t_start
+          AND tr.block_time <=  p.t_end
+      ),
+      traces_allowed AS (
+        SELECT tr.*, ac.input_bytes
+        FROM traces_filtered tr
+        JOIN allowed_calls ac
+          ON tr.to = ac.to_addr
+        AND tr.selector = ac.selector
+      ),
+      txs_filtered AS (
+        SELECT
+          tx.hash,
+          tx.block_number,
+          tx.block_time,
+          tx.gas_used,
+          tx.gas_price,
+          tx.blob_versioned_hashes,
+          tx.data
+        FROM ethereum.transactions tx
+        CROSS JOIN params p
+        WHERE tx.block_time >= p.t_start
+          AND tx.block_time <=  p.t_end
+      )
 
     SELECT DISTINCT
-      txs.hash,
-      traces.to_address,
-      txs.block_number,
-      txs.block_timestamp,
-      txs.receipt_gas_used,
-      txs.gas_price,
-      txs.receipt_blob_gas_used,
-      txs.receipt_blob_gas_price,
-      CalculateCalldataGasUsed(txs.input) AS calldata_gas_used,
-      (LENGTH(SUBSTR(txs.input, 3)) / 2) AS data_length,
+      tx.hash,
+      tr.to,
+      tx.block_number,
+      tx.block_time,
+      tx.gas_used,
+      tx.gas_price,
+      tx.blob_versioned_hashes,
+      length(tx.data) AS data_length,
+      length(replace(regexp_replace(to_hex(tx.data), '([0-9A-Fa-f]{2})', '$1x'), '00x', '')) / 3 AS non_zero_bytes,
       CASE
-        WHEN traces.to_address IN UNNEST(?) THEN traces.input
-      ELSE
-      LEFT(traces.input, 10)
-    END
-      AS input,
-    FROM
-      bigquery-public-data.crypto_ethereum.transactions AS txs
-    JOIN
-      bigquery-public-data.crypto_ethereum.traces AS traces
-    ON
-      txs.hash = traces.transaction_hash
-      AND traces.call_type = 'call'
-      AND traces.status = 1
-      AND traces.block_timestamp >= TIMESTAMP(?)
-      AND traces.block_timestamp <= TIMESTAMP(?)
-      AND (
-        ${configs
-          .map(() => `(traces.to_address = ? AND traces.input LIKE ?)`)
-          .join(' OR ')}
-      )
-    WHERE
-      txs.block_timestamp >= TIMESTAMP(?)
-      AND txs.block_timestamp <= TIMESTAMP(?)
+        WHEN tr.input_bytes IS NULL THEN tr.input
+        ELSE substr(tr.input, 1, tr.input_bytes)
+      END AS input
+    FROM txs_filtered tx
+    JOIN traces_allowed tr
+      ON tx.hash = tr.tx_hash;
   `
+}
 
-  // @ts-expect-error BigQuery types are wrong
-  const types: QueryParamTypes = [
-    ['STRING'],
-    'STRING',
-    'STRING',
-    ...configs.flatMap(() => ['STRING', 'STRING']),
-    'STRING',
-    `STRING`,
-  ]
+function mergeCalls(configs: readonly FunctionCallQueryConfig[]) {
+  const calls = new Map<string, FunctionCallQueryConfig>()
 
-  return { query, params, types, limitInGb: 22 }
+  for (const config of configs) {
+    assert(
+      config.inputBytes === 'full' ||
+        (Number.isInteger(config.inputBytes) &&
+          config.inputBytes >= SELECTOR_BYTES),
+      'inputBytes must cover at least the selector',
+    )
+
+    const address = config.address.toLowerCase()
+    const selector = config.selector.toLowerCase()
+    const key = `${address}-${selector}`
+    const previous = calls.get(key)
+
+    calls.set(key, {
+      address: config.address,
+      selector,
+      inputBytes:
+        previous === undefined
+          ? config.inputBytes
+          : widestInput(previous.inputBytes, config.inputBytes),
+    })
+  }
+
+  return [...calls.values()]
+}
+
+function widestInput(
+  left: number | 'full',
+  right: number | 'full',
+): number | 'full' {
+  return left === 'full' || right === 'full' ? 'full' : Math.max(left, right)
 }

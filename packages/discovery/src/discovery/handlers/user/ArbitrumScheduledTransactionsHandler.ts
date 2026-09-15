@@ -1,31 +1,43 @@
-import { ContractValue } from '@l2beat/discovery-types'
-import { EthereumAddress } from '@l2beat/shared-pure'
+import { Bytes, ChainSpecificAddress } from '@l2beat/shared-pure'
+import { v } from '@l2beat/validate'
 import { ethers, utils } from 'ethers'
-import * as z from 'zod'
+import type { ContractValue } from '../../output/types'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
-import { Handler, HandlerResult } from '../Handler'
+import type { IProvider } from '../../provider/IProvider'
+import type { Handler, HandlerResult } from '../Handler'
 import { toContractValue } from '../utils/toContractValue'
 
-export type ArbitrumScheduledTransactionsHandlerDefinition = z.infer<
+export type ArbitrumScheduledTransactionsHandlerDefinition = v.infer<
   typeof ArbitrumScheduledTransactionsHandlerDefinition
 >
-export const ArbitrumScheduledTransactionsHandlerDefinition = z.strictObject({
-  type: z.literal('arbitrumScheduledTransactions'),
+export const ArbitrumScheduledTransactionsHandlerDefinition = v.strictObject({
+  type: v.literal('arbitrumScheduledTransactions'),
 })
 
+const executeFn = 'execute(address upgrade, bytes upgradeCallData) payable'
+const executeCallFn =
+  'executeCall(address upgrade, bytes upgradeCallData) payable'
 const ExecutorInterface = new utils.Interface([
-  'function execute(address upgrade, bytes upgradeCallData) payable',
+  `function ${executeFn}`,
+  `function ${executeCallFn}`,
 ])
+
+const unsafeCreateRetryableTicketFn =
+  'unsafeCreateRetryableTicket(address to, uint256 l2CallValue, uint256 maxSubmissionCost, address excessFeeRefundAddress, address callValueRefundAddress, uint256 gasLimit, uint256 maxFeePerGas, bytes data) payable returns (uint256)'
+const InboxInterface = new utils.Interface([
+  `function ${unsafeCreateRetryableTicketFn}`,
+])
+const unsafeCreateRetryableTicketFnSighash = InboxInterface.getSighash(
+  unsafeCreateRetryableTicketFn,
+)
 
 // Inboxes are contracts on Ethereum used to send messages to
 // L2 to execute transactions there. We can't easily
 // read them from discovery and we need to keep historical
 // ones for ever, so we hardcode them here.
 const L2Inboxes: Record<string, string | undefined> = {
-  '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f': 'arbitrum',
-  '0xc4448b71118c9071Bcb9734A0EAc55D18A153949': 'nova',
+  'eth:0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f': 'arbitrum',
+  'eth:0xc4448b71118c9071Bcb9734A0EAc55D18A153949': 'nova',
 }
 
 export class ArbitrumScheduledTransactionsHandler implements Handler {
@@ -35,14 +47,13 @@ export class ArbitrumScheduledTransactionsHandler implements Handler {
   constructor(
     readonly field: string,
     readonly abi: string[],
-    readonly logger: DiscoveryLogger,
   ) {
     this.timelockInterface = new utils.Interface(abi)
   }
 
   async execute(
     provider: IProvider,
-    address: EthereumAddress,
+    address: ChainSpecificAddress,
   ): Promise<HandlerResult> {
     const retryableTicketMagic = await this.getRetryableTicketMagic(
       provider,
@@ -54,12 +65,29 @@ export class ArbitrumScheduledTransactionsHandler implements Handler {
     const result: ContractValue[] = []
     for (const log of logs) {
       const parsed = this.timelockInterface.parseLog(log)
-      const decoded = await this.decodeLog(
-        parsed,
-        retryableTicketMagic,
-        provider,
-      )
-      result.push(decoded)
+      try {
+        result.push(
+          await this.decodeLog(parsed, retryableTicketMagic, provider),
+        )
+      } catch {
+        // A single scheduled tx we can't decode (a call that isn't an
+        // execute() wrapper, an unexpected call shape, an unknown inbox, a
+        // failed source fetch, etc.) must not fail the whole
+        // scheduledTransactions field. Keep the raw entry and mark it, so the
+        // degradation is visible in the diff instead of silent. The marker is
+        // a static flag on purpose - error messages don't belong in committed
+        // output (see neuterErrors).
+        result.push({
+          id: toContractValue(parsed.args.id),
+          decodingFailed: true,
+          raw: {
+            target: toContractValue(parsed.args.target),
+            value: toContractValue(parsed.args.value),
+            data: toContractValue(parsed.args.data),
+            delay: toContractValue(parsed.args.delay),
+          },
+        })
+      }
     }
     return {
       field: this.field,
@@ -70,23 +98,26 @@ export class ArbitrumScheduledTransactionsHandler implements Handler {
 
   async getRetryableTicketMagic(
     provider: IProvider,
-    address: EthereumAddress,
-  ): Promise<EthereumAddress> {
+    address: ChainSpecificAddress,
+  ): Promise<ChainSpecificAddress> {
     // TODO: (sz-piotr) reverts?
     const res = await provider.callMethod(
       address,
       this.timelockInterface.getFunction('RETRYABLE_TICKET_MAGIC'),
       [],
     )
-    return EthereumAddress(res as string)
+    return ChainSpecificAddress.fromLong(provider.chain, res as string)
   }
 
   async decodeLog(
     log: utils.LogDescription,
-    retryableTicketMagic: EthereumAddress,
+    retryableTicketMagic: ChainSpecificAddress,
     provider: IProvider,
   ): Promise<ContractValue> {
-    const target = EthereumAddress(log.args.target as string)
+    const target = ChainSpecificAddress.fromLong(
+      provider.chain,
+      log.args.target as string,
+    )
     // Scheduled transaction is either a call to an Executor contract on Ethereum
     // or to an Executor contract on L2 (Arbitrum or Nova chain)
     //
@@ -94,15 +125,18 @@ export class ArbitrumScheduledTransactionsHandler implements Handler {
     //   then the transaction will be called via Executor contract on L2
     //   (going via Inbox contract on Ethereum first)
     // * otherwise the target is the Executor address on Ethereum
+
     const decoded =
       target.toString() === retryableTicketMagic.toString()
-        ? await this.decodeL2Call(log, provider)
-        : await this.decodeExecuteCall(
-            'ethereum',
-            target,
-            log.args.data as string,
-            provider,
-          )
+        ? await this.decodeL2CallPreBoLD(log, provider)
+        : getSighash(log.args.data) === unsafeCreateRetryableTicketFnSighash
+          ? await this.decodeL2CallPostBoLD(target, log.args.data, provider)
+          : await this.decodeExecuteCall(
+              'ethereum',
+              target,
+              log.args.data as string,
+              provider,
+            )
 
     return {
       id: toContractValue(log.args.id),
@@ -118,12 +152,22 @@ export class ArbitrumScheduledTransactionsHandler implements Handler {
 
   async decodeExecuteCall(
     chain: string,
-    executorAddress: EthereumAddress,
+    executorAddress: ChainSpecificAddress,
     executeCalldata: string,
     provider: IProvider | undefined,
   ): Promise<Record<string, ContractValue | undefined>> {
+    if (executeCalldata === '0x') {
+      return {
+        chain,
+        executor: executorAddress.toString(),
+      }
+    }
+
     const parsed = ExecutorInterface.parseTransaction({ data: executeCalldata })
-    const addrToCall = EthereumAddress(parsed.args.upgrade as string)
+    const addrToCall = ChainSpecificAddress.fromLong(
+      provider?.chain ?? 'ethereum',
+      parsed.args.upgrade as string,
+    )
     const calldata = parsed.args.upgradeCallData as string
     let decoded
     if (provider !== undefined) {
@@ -152,19 +196,37 @@ export class ArbitrumScheduledTransactionsHandler implements Handler {
     function: string
     inputs: { name: ContractValue; value: ContractValue }[]
   } {
-    const r = iface.parseTransaction({
-      data: calldata,
-    })
-    return {
-      function: r.functionFragment.name,
-      inputs: r.functionFragment.inputs.map((i) => ({
-        name: toContractValue(i.name),
-        value: toContractValue(r.args[i.name]),
-      })),
+    try {
+      const r = iface.parseTransaction({
+        data: calldata,
+      })
+      return {
+        function: r.functionFragment.name,
+        inputs: r.functionFragment.inputs.map((i) => ({
+          name: toContractValue(i.name),
+          value: toContractValue(r.args[i.name]),
+        })),
+      }
+    } catch {
+      // Selector not in the target ABI (e.g. a proxy upgraded after scheduling,
+      // or a newly-added function). Keep the raw calldata instead of throwing,
+      // which would fail the whole scheduledTransactions field.
+      return {
+        function: calldata.slice(0, 10),
+        inputs: [{ name: 'calldata', value: calldata }],
+      }
     }
   }
 
-  async decodeL2Call(
+  // NOTE(radomski): It appears that BoLD changed the way that L2 calls are
+  // scheduled. Instead of having RETRYABLE_TICKET_MAGIC it directly references
+  // the address of the inbox that it will pass the L2 call to. We split the
+  // decoding into decoding pre-BoLD and post-BoLD.
+  //
+  // Although I'm still not 100% certain that this is actually correct because
+  // we only have a single case to explore. If you're reading this and something
+  // else has taken place feel free to disregard this comment and correct it.
+  async decodeL2CallPreBoLD(
     log: utils.LogDescription,
     provider: IProvider,
   ): Promise<ContractValue> {
@@ -182,18 +244,24 @@ export class ArbitrumScheduledTransactionsHandler implements Handler {
       ],
       log.args.data as string,
     )
-    const targetInbox = EthereumAddress(res.targetInbox as string)
+    const targetInbox = ChainSpecificAddress.fromLong(
+      provider.chain,
+      res.targetInbox as string,
+    )
     const chain = L2Inboxes[targetInbox.toString()]
     if (chain === undefined) {
       throw new Error(
         `Unknown inbox address ${targetInbox.toString()} for L2 call`,
       )
     }
-    const l2Executor = EthereumAddress(res.l2Target as string)
+    const l2Executor = ChainSpecificAddress.fromLong(
+      provider.chain,
+      res.l2Target as string,
+    )
     const l2Calldata = res.l2Calldata as string
     const providerForChain =
       // Nova arbiscan doesn't provide API so we're out of luck
-      chain === 'nova' ? undefined : provider.switchChain(chain, 0)
+      chain === 'nova' ? undefined : await provider.switchChain(chain)
     const decoded = await this.decodeExecuteCall(
       chain,
       l2Executor,
@@ -205,4 +273,45 @@ export class ArbitrumScheduledTransactionsHandler implements Handler {
       inboxOnEthereum: targetInbox.toString(),
     }
   }
+
+  async decodeL2CallPostBoLD(
+    targetInbox: ChainSpecificAddress,
+    inboxCalldata: string,
+    provider: IProvider,
+  ): Promise<ContractValue> {
+    // A call to an Executor on L2 starts as a call to an Inbox contract on
+    // Ethereum. The call data has the following structure:
+    // (can be found in L1ArbitrumTimelock.sol)
+
+    const chain = L2Inboxes[targetInbox.toString()]
+    if (chain === undefined) {
+      throw new Error(
+        `Unknown inbox address ${targetInbox.toString()} for L2 call`,
+      )
+    }
+    const parsed = InboxInterface.parseTransaction({ data: inboxCalldata })
+
+    const l2Executor = ChainSpecificAddress.fromLong(
+      provider.chain,
+      parsed.args.to as string,
+    )
+    const l2Calldata = parsed.args.data as string
+    const providerForChain =
+      // Nova arbiscan doesn't provide API so we're out of luck
+      chain === 'nova' ? undefined : await provider.switchChain(chain)
+    const decoded = await this.decodeExecuteCall(
+      chain,
+      l2Executor,
+      l2Calldata,
+      providerForChain,
+    )
+    return {
+      ...decoded,
+      inboxOnEthereum: targetInbox.toString(),
+    }
+  }
+}
+
+function getSighash(data: string): string {
+  return Bytes.fromHex(data).toString().slice(0, 10)
 }

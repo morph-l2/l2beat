@@ -1,15 +1,14 @@
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
+import { Bytes, ChainSpecificAddress } from '@l2beat/shared-pure'
 import { expect, mockObject } from 'earl'
 import { utils } from 'ethers'
 
-import { DiscoveryLogger } from '../../DiscoveryLogger'
-import { IProvider } from '../../provider/IProvider'
+import type { IProvider } from '../../provider/IProvider'
 import { StarkWareNamedStorageHandler } from './StarkWareNamedStorageHandler'
 
 describe(StarkWareNamedStorageHandler.name, () => {
   describe('return types', () => {
     it('can returns storage as bytes', async () => {
-      const address = EthereumAddress.random()
+      const address = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
         async getStorage(passedAddress, slot) {
           expect(passedAddress).toEqual(address)
@@ -22,14 +21,10 @@ describe(StarkWareNamedStorageHandler.name, () => {
         },
       })
 
-      const handler = new StarkWareNamedStorageHandler(
-        'someName',
-        {
-          type: 'starkWareNamedStorage',
-          tag: 'foo',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StarkWareNamedStorageHandler('someName', {
+        type: 'starkWareNamedStorage',
+        tag: 'foo',
+      })
       expect(handler.field).toEqual('someName')
 
       const result = await handler.execute(provider, address)
@@ -42,7 +37,7 @@ describe(StarkWareNamedStorageHandler.name, () => {
     })
 
     it('can returns storage as number', async () => {
-      const address = EthereumAddress.random()
+      const address = ChainSpecificAddress.random()
       const provider = mockObject<IProvider>({
         async getStorage() {
           return Bytes.fromHex(
@@ -51,15 +46,11 @@ describe(StarkWareNamedStorageHandler.name, () => {
         },
       })
 
-      const handler = new StarkWareNamedStorageHandler(
-        'someName',
-        {
-          type: 'starkWareNamedStorage',
-          tag: 'foo',
-          returnType: 'number',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StarkWareNamedStorageHandler('someName', {
+        type: 'starkWareNamedStorage',
+        tag: 'foo',
+        returnType: 'number',
+      })
       expect(handler.field).toEqual('someName')
 
       const result = await handler.execute(provider, address)
@@ -71,53 +62,48 @@ describe(StarkWareNamedStorageHandler.name, () => {
     })
 
     it('can returns storage as address', async () => {
-      const address = EthereumAddress.random()
-      const resultAddress = EthereumAddress.random()
+      const address = ChainSpecificAddress.random()
+      const resultAddress = ChainSpecificAddress.random()
 
       const provider = mockObject<IProvider>({
         async getStorage() {
           return Bytes.fromHex(
-            '0x000000000000000000000000' + resultAddress.slice(2).toLowerCase(),
+            '0x000000000000000000000000' +
+              ChainSpecificAddress.address(resultAddress)
+                .slice(2)
+                .toLowerCase(),
           )
         },
       })
 
-      const handler = new StarkWareNamedStorageHandler(
-        'someName',
-        {
-          type: 'starkWareNamedStorage',
-          tag: 'foo',
-          returnType: 'address',
-        },
-        DiscoveryLogger.SILENT,
-      )
+      const handler = new StarkWareNamedStorageHandler('someName', {
+        type: 'starkWareNamedStorage',
+        tag: 'foo',
+        returnType: 'address',
+      })
       expect(handler.field).toEqual('someName')
 
       const result = await handler.execute(provider, address)
       expect(result).toEqual({
         field: 'someName',
-        value: resultAddress.toString(),
+        value: ChainSpecificAddress.address(resultAddress).toString(),
         ignoreRelative: undefined,
       })
     })
   })
 
   it('handles provider errors', async () => {
-    const handler = new StarkWareNamedStorageHandler(
-      'someName',
-      {
-        type: 'starkWareNamedStorage',
-        tag: 'foo',
-      },
-      DiscoveryLogger.SILENT,
-    )
+    const handler = new StarkWareNamedStorageHandler('someName', {
+      type: 'starkWareNamedStorage',
+      tag: 'foo',
+    })
 
     const provider = mockObject<IProvider>({
       async getStorage() {
         throw new Error('foo bar')
       },
     })
-    const address = EthereumAddress.random()
+    const address = ChainSpecificAddress.random()
     const result = await handler.execute(provider, address)
     expect(result).toEqual({
       field: 'someName',
@@ -126,15 +112,11 @@ describe(StarkWareNamedStorageHandler.name, () => {
   })
 
   it('passes ignoreRelative', async () => {
-    const handler = new StarkWareNamedStorageHandler(
-      'someName',
-      {
-        type: 'starkWareNamedStorage',
-        tag: 'foo',
-        ignoreRelative: true,
-      },
-      DiscoveryLogger.SILENT,
-    )
+    const handler = new StarkWareNamedStorageHandler('someName', {
+      type: 'starkWareNamedStorage',
+      tag: 'foo',
+      ignoreRelative: true,
+    })
 
     const provider = mockObject<IProvider>({
       async getStorage() {
@@ -144,7 +126,7 @@ describe(StarkWareNamedStorageHandler.name, () => {
       },
     })
 
-    const address = EthereumAddress.random()
+    const address = ChainSpecificAddress.random()
     const result = await handler.execute(provider, address)
     expect(result).toEqual({
       field: 'someName',

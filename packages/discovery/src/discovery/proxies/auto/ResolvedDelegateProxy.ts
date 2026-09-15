@@ -1,3 +1,11 @@
+import {
+  assert,
+  Bytes,
+  ChainSpecificAddress,
+  type EthereumAddress,
+} from '@l2beat/shared-pure'
+import { utils } from 'ethers'
+import type { Indexed, LogDescription } from 'ethers/lib/utils'
 /*
 Custom proxy introduced originally by Optimism team
 It stores (immutable) libAddressManager and implementation name
@@ -8,21 +16,22 @@ Implementation address is resolved by calling the libAddressManager.getAddress(i
 It does not have an owner
 
 */
-import { assert } from '@l2beat/backend-tools'
-import { ProxyDetails } from '@l2beat/discovery-types'
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
-import { utils } from 'ethers'
-
-import { IProvider } from '../../provider/IProvider'
+import type { ContractValue } from '../../output/types'
+import type { IProvider } from '../../provider/IProvider'
+import { getPastUpgradesSingleEvent } from '../pastUpgrades'
+import type { ProxyDetails } from '../types'
 
 async function getAddressManager(
   provider: IProvider,
-  address: EthereumAddress,
-): Promise<EthereumAddress> {
+  address: ChainSpecificAddress,
+): Promise<ChainSpecificAddress> {
   // addressManager is stored in libAddressManager[address(this)] (slot 1)
   const slot = Bytes.fromHex(
     utils.keccak256(
-      new utils.AbiCoder().encode(['address', 'uint'], [address, 1]),
+      new utils.AbiCoder().encode(
+        ['address', 'uint'],
+        [ChainSpecificAddress.address(address), 1],
+      ),
     ),
   )
   return await provider.getStorageAsAddress(address, slot)
@@ -30,16 +39,19 @@ async function getAddressManager(
 
 async function getImplementationName(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<string> {
   // implementationName is stored in implementationName[address(this)] (slot 0)
   const slot = Bytes.fromHex(
     utils.keccak256(
-      new utils.AbiCoder().encode(['address', 'uint'], [address, 0]),
+      new utils.AbiCoder().encode(
+        ['address', 'uint'],
+        [ChainSpecificAddress.address(address), 0],
+      ),
     ),
   )
   const nameEncoded = (await provider.getStorage(address, slot)).toString()
-  const length = parseInt(nameEncoded.slice(-2), 16) / 2
+  const length = Number.parseInt(nameEncoded.slice(-2), 16) / 2
   if (length > 31) {
     throw new Error(
       'Unsupported long string. Please add more code to handle this case',
@@ -50,9 +62,9 @@ async function getImplementationName(
 
 async function getImplementation(
   provider: IProvider,
-  addressManager: EthereumAddress,
+  addressManager: ChainSpecificAddress,
   implementationName: string,
-): Promise<EthereumAddress> {
+): Promise<ChainSpecificAddress> {
   const implementation = await provider.callMethod<EthereumAddress>(
     addressManager,
     'function getAddress(string implementationName) view returns(address)',
@@ -60,15 +72,28 @@ async function getImplementation(
   )
   // TODO: This should be handled more gracefully, it's just a heuristic!
   assert(implementation, 'missing implementation')
-  return implementation
+  return ChainSpecificAddress.fromLong(provider.chain, implementation)
+}
+
+async function getOwner(
+  provider: IProvider,
+  addressManager: ChainSpecificAddress,
+): Promise<ChainSpecificAddress> {
+  const owner = await provider.callMethod<EthereumAddress>(
+    addressManager,
+    'function owner() view returns(address)',
+    [],
+  )
+  assert(owner, 'missing owner')
+  return ChainSpecificAddress.fromLong(provider.chain, owner)
 }
 
 export async function detectResolvedDelegateProxy(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<ProxyDetails | undefined> {
   const addressManager = await getAddressManager(provider, address)
-  if (addressManager === EthereumAddress.ZERO) {
+  if (addressManager === ChainSpecificAddress.ZERO(provider.chain)) {
     return
   }
   const implementationName = await getImplementationName(provider, address)
@@ -80,12 +105,33 @@ export async function detectResolvedDelegateProxy(
     addressManager,
     implementationName,
   )
+
+  const admin = await getOwner(provider, addressManager)
+
+  const pastUpgrades = await getPastUpgradesSingleEvent(
+    provider,
+    addressManager,
+    'event AddressSet(string indexed name, address implementation, address oldAddress)',
+    (log: LogDescription) => {
+      let name: Indexed | undefined
+      log.eventFragment.inputs.forEach((input, index) => {
+        if (input.name === 'name') {
+          name = log.args[index] as Indexed
+        }
+      })
+      return name?.hash === utils.id(implementationName)
+    },
+  )
+
   return {
     type: 'resolved delegate proxy',
     values: {
       $immutable: false,
-      $implementation: implementation,
-      ResolvedDelegateProxy_addressManager: addressManager,
+      $implementation: implementation.toString(),
+      $admin: admin.toString(),
+      $pastUpgrades: pastUpgrades as ContractValue,
+      $upgradeCount: pastUpgrades.length,
+      ResolvedDelegateProxy_addressManager: addressManager.toString(),
       ResolvedDelegateProxy_implementationName: implementationName,
     },
   }

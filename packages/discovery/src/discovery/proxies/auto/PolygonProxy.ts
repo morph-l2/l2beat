@@ -1,7 +1,8 @@
-import { ProxyDetails } from '@l2beat/discovery-types'
-import { Bytes, EthereumAddress } from '@l2beat/shared-pure'
-
-import { IProvider } from '../../provider/IProvider'
+import { Bytes, ChainSpecificAddress } from '@l2beat/shared-pure'
+import type { ContractValue } from '../../output/types'
+import type { IProvider } from '../../provider/IProvider'
+import { getPastUpgradesSingleEvent } from '../pastUpgrades'
+import type { ProxyDetails } from '../types'
 
 // keccak256("matic.network.proxy.implementation")
 const IMPLEMENTATION_SLOT = Bytes.fromHex(
@@ -15,21 +16,28 @@ const ADMIN_SLOT = Bytes.fromHex(
 
 export async function detectPolygonProxy(
   provider: IProvider,
-  address: EthereumAddress,
+  address: ChainSpecificAddress,
 ): Promise<ProxyDetails | undefined> {
   const implementation = await provider.getStorageAsAddress(
     address,
     IMPLEMENTATION_SLOT,
   )
-  if (implementation === EthereumAddress.ZERO) {
+  if (implementation === ChainSpecificAddress.ZERO(provider.chain)) {
     return
   }
   const admin = await provider.getStorageAsAddress(address, ADMIN_SLOT)
+  const pastUpgrades = await getPastUpgradesSingleEvent(
+    provider,
+    address,
+    'event ProxyUpdated(address indexed implementation, address indexed _old)',
+  )
   return {
     type: 'Polygon proxy',
     values: {
-      $admin: admin,
-      $implementation: implementation,
+      $admin: admin.toString(),
+      $implementation: implementation.toString(),
+      $pastUpgrades: pastUpgrades as ContractValue,
+      $upgradeCount: pastUpgrades.length,
     },
   }
 }

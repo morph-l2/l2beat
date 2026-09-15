@@ -1,0 +1,12 @@
+{
+  "DealManager.sol": {
+    "hash": "0xb304956b1872ca70ac158d0501697b2ca2d41c3695e89ab5119d1122428dfcda",
+    "address": "zksync:0x14E6025079A15f03bb67A0dEA11621Dbb9237a47",
+    "blockNumber": 62911550
+  },
+  "DeaManagerOld.sol": {
+    "hash": "0xa170a0ba4f0cd69ac575d9a0333a0c56af660ba9f2d6bcff6ace3aae2467ab00",
+    "address": "zksync:0x39F1EdFf3F79821e7253673374226e2f07F82BDe",
+    "blockNumber": 49035878
+  }
+}

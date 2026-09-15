@@ -1,0 +1,63 @@
+{
+  "$schema": "../../../../../../discovery/schemas/contract.v2.schema.json",
+  "description": "Core rollup contract that manages the state of the rollup and its ZK fault proof system.",
+  "ignoreMethods": [
+    "getProposal",
+    "gameOver",
+    "isResolvable",
+    "latestProposals",
+    "needsDefense",
+    "l1BlockHashes",
+    "proposalIsCanonical",
+    "getAnchorRoot"
+  ],
+  "ignoreInWatchMode": [
+    "getProposalsLength",
+    "anchorL2BlockNumber",
+    "anchorProposalId",
+    "anchorRoot"
+  ],
+  "fields": {
+    "sequencerInbox": {
+      "handler": {
+        "type": "hardcoded",
+        "value": "eth:0x00000000000000000000000000000000000face7"
+      }
+    },
+    "renouncedOwner": {
+      "handler": {
+        "type": "hardcoded",
+        "value": "eth:0xdeaddeaddeaddeaddeaddeaddeaddeaddead0001"
+      }
+    },
+    "owner": {
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "can set the whitelisted proposers."
+        }
+      ]
+    },
+    "whitelistedProposers": {
+      "handler": {
+        "type": "event",
+        "select": "proposer",
+        "add": {
+          "event": "ProposerPermissionUpdated",
+          "where": ["=", "#allowed", true]
+        },
+        "remove": {
+          "event": "ProposerPermissionUpdated",
+          "where": ["=", "#allowed", false]
+        }
+      },
+      "permissions": [
+        {
+          "type": "interact",
+          "description": "Can propose state roots optimistically without a ZK proof. Note that anyone can propose with a ZK proof, and anyone can propose optimistically after the fallback timeout."
+        }
+      ]
+    }
+  },
+  "category": "core"
+}

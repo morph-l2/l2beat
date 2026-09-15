@@ -1,82 +1,105 @@
 import { Logger } from '@l2beat/backend-tools'
-import {
-  ConfigReader,
-  DISCOVERY_LOGIC_VERSION,
-  HttpClient as DiscoveryHttpClient,
-  DiscoveryLogger,
-} from '@l2beat/discovery'
-import { ChainConverter } from '@l2beat/shared-pure'
-
-import { Config } from '../../config'
-import { Peripherals } from '../../peripherals/Peripherals'
-import { DiscordClient } from '../../peripherals/discord/DiscordClient'
-import { Clock } from '../../tools/Clock'
-import { ApplicationModule } from '../ApplicationModule'
-import { UpdateMonitor } from './UpdateMonitor'
-import { UpdateNotifier } from './UpdateNotifier'
+import { ProjectService } from '@l2beat/config'
+import { DiscordClient, HttpClient } from '@l2beat/shared'
+import type { ApplicationModule, ModuleDependencies } from '../types'
 import { UpdateMonitorController } from './api/UpdateMonitorController'
 import { createUpdateMonitorRouter } from './api/UpdateMonitorRouter'
 import { createDiscoveryRunner } from './createDiscoveryRunner'
+import { createWorkerPool } from './createWorkers'
+import { DiscoveryOutputCache } from './DiscoveryOutputCache'
+import { UpdateDiffer } from './UpdateDiffer'
+import { UpdateMessagesService } from './UpdateMessagesService'
+import { UpdateMonitor } from './UpdateMonitor'
+import { UpdateNotifier } from './UpdateNotifier'
 
-export function createUpdateMonitorModule(
-  config: Config,
-  logger: Logger,
-  peripherals: Peripherals,
-  clock: Clock,
-): ApplicationModule | undefined {
+export function createUpdateMonitorModule({
+  config,
+  logger,
+  db,
+  clock,
+  providers,
+}: ModuleDependencies): ApplicationModule | undefined {
   if (!config.updateMonitor) {
     logger.info('UpdateMonitor module disabled')
     return
   }
 
-  const configReader = new ConfigReader()
+  logger = logger.tag({ feature: 'update_monitor', module: 'update_monitor' })
 
-  const discordClient = config.updateMonitor.discord
-    ? peripherals.getClient(DiscordClient, config.updateMonitor.discord)
+  const paths = config.updateMonitor.paths
+  const configReader = config.updateMonitor.configReader
+
+  const updateMessagesService = new UpdateMessagesService(
+    db,
+    config.updateMonitor.updateMessagesRetentionPeriodDays,
+  )
+
+  const discoveryOutputCache = new DiscoveryOutputCache()
+  const projectService = new ProjectService()
+  const updateMonitorWebhookUrl =
+    config.notifications && config.notifications.updateMonitor
+      ? config.notifications.updateMonitor.discordWebhookUrl
+      : undefined
+
+  const discordClient = updateMonitorWebhookUrl
+    ? new DiscordClient(updateMonitorWebhookUrl)
     : undefined
 
-  const chainConverter = new ChainConverter(config.chains)
   const updateNotifier = new UpdateNotifier(
-    peripherals.database,
+    db,
     discordClient,
-    chainConverter,
     logger,
+    updateMessagesService,
+    projectService,
   )
+  const updateDiffer = config.updateMonitor.updateDifferEnabled
+    ? new UpdateDiffer(configReader, db, discoveryOutputCache, logger)
+    : undefined
 
   // TODO: get rid of that once we achieve full library separation
-  const discoveryHttpClient = new DiscoveryHttpClient()
+  const http = new HttpClient()
 
-  const { chains, enableCache } = config.updateMonitor
-  const runners = chains.map((chainConfig) =>
-    createDiscoveryRunner(
-      discoveryHttpClient,
-      configReader,
-      peripherals,
-      DiscoveryLogger.SILENT,
-      chains,
-      chainConfig.name,
-      !!enableCache,
-    ),
+  const { chains, cacheEnabled, cacheUri } = config.updateMonitor
+  const runner = createDiscoveryRunner(
+    paths,
+    http,
+    db,
+    Logger.SILENT,
+    chains,
+    !!cacheEnabled,
+    cacheUri,
+    providers.clients.rpcMetricsAggregator,
   )
 
+  const workerPool = createWorkerPool({
+    workerCount: config.updateMonitor.workerPool.workerCount,
+    timeoutPerTaskMs: config.updateMonitor.workerPool.timeoutPerTaskMs,
+    timeoutPerRunMs: config.updateMonitor.workerPool.timeoutPerRunMs,
+    logger: logger.for('UpdateMonitor'),
+  })
+
   const updateMonitor = new UpdateMonitor(
-    runners,
+    runner,
     updateNotifier,
+    updateDiffer,
     configReader,
-    peripherals.database,
+    db,
     clock,
-    chainConverter,
+    discoveryOutputCache,
     logger,
     !!config.updateMonitor.runOnStart,
-    DISCOVERY_LOGIC_VERSION,
+    workerPool,
+    config.updateMonitor.disabledProjects,
   )
 
   const updateMonitorController = new UpdateMonitorController(
-    peripherals.database,
-    config.projects,
-    chains,
+    db,
     configReader,
-    chainConverter,
+    projectService,
+    {
+      commitSha: config.health.commitSha || undefined,
+      startedAt: config.health.startedAt,
+    },
   )
   const updateMonitorRouter = createUpdateMonitorRouter(updateMonitorController)
 

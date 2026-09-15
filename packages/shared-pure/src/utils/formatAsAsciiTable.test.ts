@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import { expect } from 'earl'
 
-import { formatAsAsciiTable } from './formatAsAsciiTable'
+import { formatAsAsciiTable } from './formatAsAsciiTable.js'
 
 describe(formatAsAsciiTable.name, () => {
   it('should print a table', () => {
@@ -45,7 +45,7 @@ describe(formatAsAsciiTable.name, () => {
   it('should print a table where rows are the widest columns', () => {
     const headers = ['H', 'M', 'L']
     const rows = [
-      ['Very true', 'flase', 'true'],
+      ['Very true', 'false', 'true'],
       ['false', 'Very false', 'true'],
       ['true', 'false', 'true - false'],
     ]
@@ -55,7 +55,7 @@ describe(formatAsAsciiTable.name, () => {
       [
         '|         H |          M |            L |',
         '|-----------|------------|--------------|',
-        '| Very true |      flase |         true |',
+        '| Very true |      false |         true |',
         '|     false | Very false |         true |',
         '|      true |      false | true - false |',
       ].join('\n'),
